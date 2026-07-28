@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "474413163033",
+    "project_id": "rdopro-5f38f",
+    "storage_bucket": "rdopro-5f38f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:474413163033:android:ea8e9384a8b8d21dc60088",
+        "android_client_info": {
+          "package_name": "com.asaoperacoes.rdopro"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAlG0IqH80PqITmaiiiDKuYir2tCEndAT8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
