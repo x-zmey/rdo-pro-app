@@ -1,10 +1,8 @@
 import '/backend/sqlite/sqlite_manager.dart';
 import '/componentes/forms/mao_obra_compact_dropdown.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import 'package:easy_debounce/easy_debounce.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 /// Alinhado ao frontend Vue (`motivosAusencia` em `relatorios/edit/[token].vue`).
 const List<String> kMotivosAusencia = [
@@ -19,7 +17,16 @@ const List<String> kMotivosAusencia = [
   'Outro',
 ];
 
-/// Botões Presente / Ausente e dropdown de motivo quando ausente.
+/// Como o controle de presença se apresenta.
+enum MaoObraPresencaModo {
+  /// Par de ícones Presente / Ausente, para o cabeçalho da linha.
+  acoes,
+
+  /// Seletor do motivo da ausência, exibido só quando o status é `ausente`.
+  motivo,
+}
+
+/// Presença do trabalhador no RDO: ícones de Presente / Ausente e o motivo.
 /// Persiste em [relatorio_mao_obra_presenca] via [SQLiteManager.updateMaoObraRelatorio].
 class MaoObraPresencaControlsWidget extends StatefulWidget {
   const MaoObraPresencaControlsWidget({
@@ -28,12 +35,14 @@ class MaoObraPresencaControlsWidget extends StatefulWidget {
     required this.statusPresenca,
     required this.motivoAusencia,
     required this.onSaved,
+    this.modo = MaoObraPresencaModo.acoes,
   });
 
   final String uuid;
   final String statusPresenca;
   final String? motivoAusencia;
   final VoidCallback onSaved;
+  final MaoObraPresencaModo modo;
 
   @override
   State<MaoObraPresencaControlsWidget> createState() =>
@@ -142,97 +151,79 @@ class _MaoObraPresencaControlsWidgetState
     );
   }
 
+  Widget _botaoPresenca({
+    required IconData icone,
+    required String tooltip,
+    required bool ativo,
+    required Color cor,
+    required VoidCallback onPressed,
+  }) {
+    final theme = FlutterFlowTheme.of(context);
+
+    return IconButton(
+      onPressed: onPressed,
+      tooltip: tooltip,
+      padding: EdgeInsets.zero,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+      style: IconButton.styleFrom(
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        backgroundColor: ativo ? cor.withValues(alpha: 0.14) : Colors.transparent,
+        foregroundColor:
+            ativo ? cor : theme.secondaryText.withValues(alpha: 0.65),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      icon: Icon(icone, size: 18),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isPresente = widget.statusPresenca == 'presente';
     final isAusente = widget.statusPresenca == 'ausente';
     final theme = FlutterFlowTheme.of(context);
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            FFButtonWidget(
-              onPressed: () async {
-                await _onPresente();
-              },
-              text: 'Presente',
-              options: FFButtonOptions(
-                width: 70.0,
-                height: 28.0,
-                padding: const EdgeInsets.all(8.0),
-                iconPadding: EdgeInsetsDirectional.zero,
-                color: isPresente
-                    ? theme.success
-                    : theme.secondaryBackground,
-                textStyle: theme.labelSmall.override(
-                      font: GoogleFonts.inter(
-                        fontWeight: theme.labelSmall.fontWeight,
-                        fontStyle: theme.labelSmall.fontStyle,
-                      ),
-                      color: isPresente ? theme.info : theme.secondaryText,
-                      letterSpacing: 0.0,
-                      fontWeight: theme.labelSmall.fontWeight,
-                      fontStyle: theme.labelSmall.fontStyle,
-                    ),
-                elevation: 0.0,
-                borderSide: BorderSide(
-                  color: isPresente ? Colors.transparent : theme.alternate,
-                  width: 1.0,
-                ),
-                borderRadius: BorderRadius.circular(16.0),
-              ),
-            ),
-            const SizedBox(width: 8),
-            FFButtonWidget(
-              onPressed: () async {
-                await _onAusente();
-              },
-              text: 'Ausente',
-              options: FFButtonOptions(
-                width: 70.0,
-                height: 28.0,
-                padding: const EdgeInsets.all(8.0),
-                iconPadding: EdgeInsetsDirectional.zero,
-                color: isAusente ? theme.error : theme.secondaryBackground,
-                textStyle: theme.labelSmall.override(
-                      font: GoogleFonts.inter(
-                        fontWeight: theme.labelSmall.fontWeight,
-                        fontStyle: theme.labelSmall.fontStyle,
-                      ),
-                      color: isAusente ? theme.info : theme.secondaryText,
-                      letterSpacing: 0.0,
-                      fontWeight: theme.labelSmall.fontWeight,
-                      fontStyle: theme.labelSmall.fontStyle,
-                    ),
-                elevation: 0.0,
-                borderSide: BorderSide(
-                  color: isAusente ? Colors.transparent : theme.alternate,
-                  width: 1.0,
-                ),
-                borderRadius: BorderRadius.circular(16.0),
-              ),
-            ),
-          ],
-        ),
-        if (isAusente) ...[
-          const SizedBox(height: 6.0),
-          buildMaoObraCompactMotivoDropdown(
-            context: context,
-            label: 'Motivo da ausência',
-            hint: 'Selecione o motivo',
-            items: _itemsParaDropdown(),
-            value: _valorDropdownValido(),
-            onChanged: (v) {
-              setState(() => _motivoSelecionado = v);
-              _debounceMotivo();
-            },
+    if (widget.modo == MaoObraPresencaModo.acoes) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _botaoPresenca(
+            icone: isPresente
+                ? Icons.check_circle_rounded
+                : Icons.check_circle_outline_rounded,
+            tooltip: 'Marcar presente',
+            ativo: isPresente,
+            cor: theme.success,
+            onPressed: () async => _onPresente(),
+          ),
+          _botaoPresenca(
+            icone: isAusente
+                ? Icons.cancel_rounded
+                : Icons.cancel_outlined,
+            tooltip: 'Marcar ausente',
+            ativo: isAusente,
+            cor: theme.error,
+            onPressed: () async => _onAusente(),
           ),
         ],
-      ],
+      );
+    }
+
+    if (!isAusente) {
+      return const SizedBox.shrink();
+    }
+
+    return buildMaoObraCompactMotivoDropdown(
+      context: context,
+      label: 'Motivo da ausência',
+      hint: 'Selecione o motivo da ausência',
+      icone: Icons.event_busy_rounded,
+      items: _itemsParaDropdown(),
+      value: _valorDropdownValido(),
+      onChanged: (v) {
+        setState(() => _motivoSelecionado = v);
+        _debounceMotivo();
+      },
     );
   }
 }

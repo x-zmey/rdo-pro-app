@@ -1,6 +1,7 @@
 import '/backend/sqlite/sqlite_manager.dart';
 import '/componentes/forms/mao_obra_compact_dropdown.dart';
 import '/componentes/forms/mao_obra_motivo_atraso_storage.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/hh_mm_24h_input_formatter.dart';
@@ -8,7 +9,6 @@ import '/flutter_flow/relatorio_horarios_validation.dart';
 import 'package:easy_debounce/easy_debounce.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 /// Quatro campos de horário (entrada, início/fim intervalo, saída) com a mesma
 /// máscara HH:mm (00:00–23:59) e validação em cadeia do relatório.
@@ -167,39 +167,11 @@ class _MaoObraHorariosFormWidgetState extends State<MaoObraHorariosFormWidget> {
 
   /// Mesmo visual de [_buildTimeField] em `obra_add_relatorio_widget.dart` (Horários de Trabalho).
   InputDecoration _decorationHorariosRelatorioGeral(
-      BuildContext context, String label) {
-    final theme = FlutterFlowTheme.of(context);
-    return InputDecoration(
-      labelText: label,
-      labelStyle: GoogleFonts.inter(fontSize: 11),
-      filled: true,
-      fillColor: theme.secondaryBackground,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide.none,
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: theme.alternate),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: theme.primary, width: 1.5),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: theme.error),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: theme.error, width: 1.5),
-      ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      counterText: '',
-    );
-  }
+          BuildContext context, String label) =>
+      rdoCompactFieldDecoration(context, label: label);
 
-  TextStyle _textStyleHorariosRelatorioGeral() => GoogleFonts.inter(fontSize: 13);
+  TextStyle _textStyleHorariosRelatorioGeral() =>
+      rdoCompactFieldTextStyle(context);
 
   Future<void> _persistMotivoColumn(BuildContext context) async {
     final det = await SQLiteManager.instance.getMaoObraRelatorioDetalhes(
@@ -326,7 +298,7 @@ class _MaoObraHorariosFormWidgetState extends State<MaoObraHorariosFormWidget> {
                 inputFormatters: [_maskEntrada],
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Expanded(
               child: TextFormField(
                 controller: _inicio,
@@ -351,7 +323,7 @@ class _MaoObraHorariosFormWidgetState extends State<MaoObraHorariosFormWidget> {
                 inputFormatters: [_maskInicio],
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Expanded(
               child: TextFormField(
                 controller: _fim,
@@ -376,7 +348,7 @@ class _MaoObraHorariosFormWidgetState extends State<MaoObraHorariosFormWidget> {
                 inputFormatters: [_maskFim],
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Expanded(
               child: TextFormField(
                 controller: _saida,
@@ -403,12 +375,13 @@ class _MaoObraHorariosFormWidgetState extends State<MaoObraHorariosFormWidget> {
           ],
         ),
         if (showEntrada || showSaida) ...[
-          const SizedBox(height: 8.0),
+          const SizedBox(height: 6.0),
           if (showEntrada) ...[
             buildMaoObraCompactMotivoDropdown(
               context: context,
               label: 'Motivo do atraso',
-              hint: 'Selecione o motivo',
+              hint: 'Selecione o motivo do atraso',
+              icone: Icons.schedule_rounded,
               items: kMotivosAtrasoSaida,
               value: _motivoEntrada,
               onChanged: (v) {
@@ -417,12 +390,13 @@ class _MaoObraHorariosFormWidgetState extends State<MaoObraHorariosFormWidget> {
               },
             ),
           ],
-          if (showEntrada && showSaida) const SizedBox(height: 8.0),
+          if (showEntrada && showSaida) const SizedBox(height: 6.0),
           if (showSaida)
             buildMaoObraCompactMotivoDropdown(
               context: context,
               label: 'Motivo da saída antecipada',
-              hint: 'Selecione o motivo',
+              hint: 'Selecione o motivo da saída antecipada',
+              icone: Icons.logout_rounded,
               items: kMotivosAtrasoSaida,
               value: _motivoSaida,
               onChanged: (v) {

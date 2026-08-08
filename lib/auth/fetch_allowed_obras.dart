@@ -4,6 +4,7 @@ import '/auth/membership_access.dart';
 import '/backend/api_requests/api_calls.dart';
 import '/backend/sqlite/situacao_soft_delete.dart';
 import '/backend/sqlite/sqlite_manager.dart';
+import '/custom_code/actions/download_obra_foto_local.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 
 class _AllowedObraRef {
@@ -18,27 +19,42 @@ class _AllowedObraRef {
   final Map<String, dynamic>? raw;
 }
 
+/// Zera cache de obras permitidas (prefs + memória). Usar na troca de tenant.
+void clearAllowedObrasCache() {
+  FFAppState().allowedObraIds = [];
+  FFAppState().allowedObraLocalIds = [];
+  FFAppState().allowedObraUuids = [];
+  MembershipAccess.persistToPrefs();
+}
+
 /// IDs de obras vinculadas ao usuário no tenant ativo (API = IDs do servidor).
 Future<List<int>> fetchAllowedObraIdsForUser(int userId) async {
   final refs = await _fetchAllowedObraRefs(userId);
+  if (refs == null) return [];
   return refs.map((r) => r.serverId).toList();
 }
 
-Future<List<_AllowedObraRef>> _fetchAllowedObraRefs(int userId) async {
-  if (userId <= 0) return [];
+/// `null` = falha de rede/API (manter cache do **mesmo** tenant); lista (mesmo
+/// vazia) = resposta autoritativa do servidor.
+Future<List<_AllowedObraRef>?> _fetchAllowedObraRefs(int userId) async {
+  if (userId <= 0) return null;
 
   final token = FFAppState().UserToken.trim();
-  if (token.isEmpty) return [];
+  if (token.isEmpty) return null;
 
   try {
     final res = await GetUsuarioObrasVinculadasCall.call(
       usuarioId: userId,
       token: token,
     );
+    if (!res.succeeded) {
+      debugPrint('fetchAllowedObraRefs: HTTP/status falhou');
+      return null;
+    }
     return _parseObraRefsFromBody(res.jsonBody);
   } catch (e) {
     debugPrint('fetchAllowedObraRefs: $e');
-    return [];
+    return null;
   }
 }
 
@@ -187,6 +203,11 @@ Future<void> ensureAllowedObrasPresentLocally(
       debugPrint(
         'ensureAllowedObrasPresentLocally: inseriu obra $uuid (server ${ref.serverId})',
       );
+      await downloadObraFotoLocal(
+        obraUuid: uuid,
+        fotoServidor: raw['foto']?.toString(),
+        fotoUrl: raw['foto_url']?.toString(),
+      );
     } catch (e) {
       debugPrint('ensureAllowedObrasPresentLocally insert: $e');
     }
@@ -214,14 +235,23 @@ Future<List<int>> refreshAllowedObraLocalIdsCache() async {
   // Também resolve uuid → id local quando a API já trouxe o uuid.
   if (localIds.length < uuids.length) {
     final db = SQLiteManager.instance.database;
+    final owner = FFAppState().creatorUuid.trim();
     for (final uuid in uuids) {
-      final rows = await db.query(
-        'obras',
-        columns: ['id'],
-        where: 'uuid = ?',
-        whereArgs: [uuid],
-        limit: 1,
-      );
+      final rows = owner.isEmpty
+          ? await db.query(
+              'obras',
+              columns: ['id'],
+              where: 'uuid = ?',
+              whereArgs: [uuid],
+              limit: 1,
+            )
+          : await db.query(
+              'obras',
+              columns: ['id'],
+              where: 'uuid = ? AND user_uuid = ?',
+              whereArgs: [uuid, owner],
+              limit: 1,
+            );
       if (rows.isEmpty) continue;
       final id = rows.first['id'] as int?;
       if (id != null && id > 0 && !localIds.contains(id)) {
@@ -230,43 +260,71 @@ Future<List<int>> refreshAllowedObraLocalIdsCache() async {
     }
   }
 
+  // Descarta UUIDs que não pertencem ao tenant ativo (SQLite misturado).
+  final pruned = await _pruneUuidsToCurrentTenant(uuids.toList());
   FFAppState().allowedObraLocalIds = localIds;
-  FFAppState().allowedObraUuids = uuids.toList();
+  FFAppState().allowedObraUuids = pruned;
   return localIds;
+}
+
+/// Mantém só UUIDs de obras com `user_uuid` = tenant ativo.
+Future<List<String>> _pruneUuidsToCurrentTenant(List<String> uuids) async {
+  final owner = FFAppState().creatorUuid.trim();
+  if (owner.isEmpty || uuids.isEmpty) return uuids;
+  final db = SQLiteManager.instance.database;
+  final kept = <String>[];
+  for (final uuid in uuids) {
+    final u = uuid.trim();
+    if (u.isEmpty) continue;
+    final rows = await db.query(
+      'obras',
+      columns: ['id'],
+      where: 'uuid = ? AND user_uuid = ?',
+      whereArgs: [u, owner],
+      limit: 1,
+    );
+    if (rows.isNotEmpty) kept.add(u);
+  }
+  return kept;
 }
 
 /// Atualiza [FFAppState.allowedObraIds] quando obra_travada está ativa.
 Future<void> refreshAllowedObraIdsIfNeeded() async {
   if (!MembershipAccess.obraTravada) {
-    FFAppState().allowedObraIds = [];
-    FFAppState().allowedObraLocalIds = [];
-    FFAppState().allowedObraUuids = [];
-    MembershipAccess.persistToPrefs();
+    clearAllowedObrasCache();
     return;
   }
 
   final userId = FFAppState().UserID;
   if (userId <= 0) return;
 
-  final previous = List<int>.from(FFAppState().allowedObraIds);
-  final previousUuids = List<String>.from(FFAppState().allowedObraUuids);
   final refs = await _fetchAllowedObraRefs(userId);
+
+  if (refs == null) {
+    // Falha de rede: não reutilizar IDs de outro tenant — só poda o cache atual.
+    final pruned =
+        await _pruneUuidsToCurrentTenant(FFAppState().allowedObraUuids);
+    if (pruned.length != FFAppState().allowedObraUuids.length) {
+      FFAppState().allowedObraUuids = pruned;
+    }
+    MembershipAccess.persistToPrefs();
+    await refreshAllowedObraLocalIdsCache();
+    return;
+  }
 
   if (refs.isNotEmpty) {
     FFAppState().allowedObraIds = refs.map((r) => r.serverId).toList();
     final apiUuids =
         refs.map((r) => r.uuid).where((u) => u.isNotEmpty).toList();
-    if (apiUuids.isNotEmpty) {
-      FFAppState().allowedObraUuids = apiUuids;
-    }
+    FFAppState().allowedObraUuids = apiUuids.isNotEmpty
+        ? await _pruneUuidsToCurrentTenant(apiUuids)
+        : <String>[];
     await ensureAllowedObrasPresentLocally(refs);
-  } else if (previous.isNotEmpty) {
-    FFAppState().allowedObraIds = previous;
-    if (FFAppState().allowedObraUuids.isEmpty && previousUuids.isNotEmpty) {
-      FFAppState().allowedObraUuids = previousUuids;
-    }
   } else {
+    // Resposta autoritativa: usuário sem obras neste tenant.
     FFAppState().allowedObraIds = [];
+    FFAppState().allowedObraUuids = [];
+    FFAppState().allowedObraLocalIds = [];
   }
 
   MembershipAccess.persistToPrefs();
@@ -388,6 +446,8 @@ Future<void> ensureLocalUserObraLinksFromAllowedIds() async {
 
 Future<List<CarregaObrasRow>> _queryObrasByUuids(List<String> uuids) async {
   if (uuids.isEmpty) return [];
+  final owner = FFAppState().creatorUuid.trim();
+  if (owner.isEmpty) return [];
   final db = SQLiteManager.instance.database;
   final placeholders = List.filled(uuids.length, '?').join(',');
   final rows = await db.rawQuery(
@@ -395,16 +455,19 @@ Future<List<CarregaObrasRow>> _queryObrasByUuids(List<String> uuids) async {
 SELECT o.*
 FROM obras AS o
 WHERE o.uuid IN ($placeholders)
+  AND o.user_uuid = ?
   AND (o.situacao IS NULL OR CAST(o.situacao AS INTEGER) != $kSituacaoExcluidoLogico)
 ORDER BY o.nome
 ''',
-    uuids,
+    [...uuids, owner],
   );
   return rows.map(CarregaObrasRow.new).toList();
 }
 
 Future<List<CarregaObrasRow>> _queryObrasByServerIds(List<int> serverIds) async {
   if (serverIds.isEmpty) return [];
+  final owner = FFAppState().creatorUuid.trim();
+  if (owner.isEmpty) return [];
   final db = SQLiteManager.instance.database;
   final placeholders = List.filled(serverIds.length, '?').join(',');
   final rows = await db.rawQuery(
@@ -414,10 +477,11 @@ FROM obras AS o
 INNER JOIN sync_id_mapping AS m
   ON m.tabela = 'obras' AND m.uuid = o.uuid
 WHERE CAST(m.id_servidor AS INTEGER) IN ($placeholders)
+  AND o.user_uuid = ?
   AND (o.situacao IS NULL OR CAST(o.situacao AS INTEGER) != $kSituacaoExcluidoLogico)
 ORDER BY o.nome
 ''',
-    serverIds,
+    [...serverIds, owner],
   );
   return rows.map(CarregaObrasRow.new).toList();
 }

@@ -108,13 +108,21 @@ class _AddMaoObraVinculadaWidgetState extends State<AddMaoObraVinculadaWidget> {
     if (!mounted || novoUuid == null || novoUuid.trim().isEmpty) return;
 
     _reloadItensObra();
+    final selecionados = List<String>.from(_model.dropDownValue ?? const []);
+    if (!selecionados.contains(novoUuid)) {
+      selecionados.add(novoUuid);
+    }
     safeSetState(() {
-      _model.dropDownValue = novoUuid;
-      _model.funcionarioSelected = novoUuid;
-      _model.dropDownValueController?.value = novoUuid;
+      _model.dropDownValue = selecionados;
+      _model.funcionariosSelected = selecionados;
+      _model.dropDownValueController =
+          FormFieldController<List<String>?>(selecionados);
     });
 
-    final inseriu = await _inserirMaoObraNoRelatorio(novoUuid);
+    final inseriu = await _inserirMaoObraNoRelatorio(
+      novoUuid,
+      mostrarFeedback: true,
+    );
     if (!mounted) return;
     if (inseriu) {
       FFAppState().update(() {});
@@ -122,7 +130,10 @@ class _AddMaoObraVinculadaWidgetState extends State<AddMaoObraVinculadaWidget> {
     }
   }
 
-  Future<bool> _inserirMaoObraNoRelatorio(String obraItemUuid) async {
+  Future<bool> _inserirMaoObraNoRelatorio(
+    String obraItemUuid, {
+    bool mostrarFeedback = true,
+  }) async {
     if (obraItemUuid.trim().isEmpty) return false;
     _model.relatorioResult = await SQLiteManager.instance.relatorioDetalhes(
       uuid: widget.relatorioUuid!,
@@ -177,17 +188,36 @@ class _AddMaoObraVinculadaWidgetState extends State<AddMaoObraVinculadaWidget> {
     );
 
     if (!mounted) return false;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Mão de obra incluída no relatório!',
-          style: TextStyle(color: FlutterFlowTheme.of(context).primaryText),
+    if (mostrarFeedback) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Mão de obra incluída no relatório!',
+            style: TextStyle(color: FlutterFlowTheme.of(context).primaryText),
+          ),
+          duration: const Duration(milliseconds: 4000),
+          backgroundColor: FlutterFlowTheme.of(context).secondary,
         ),
-        duration: const Duration(milliseconds: 4000),
-        backgroundColor: FlutterFlowTheme.of(context).secondary,
-      ),
-    );
+      );
+    }
     return true;
+  }
+
+  Future<int> _inserirVariasMaosObra(Iterable<String> obraItemUuids) async {
+    final candidatos = obraItemUuids
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty && e != '0')
+        .toSet()
+        .toList();
+    var count = 0;
+    for (final uuid in candidatos) {
+      final ok = await _inserirMaoObraNoRelatorio(
+        uuid,
+        mostrarFeedback: false,
+      );
+      if (ok) count++;
+    }
+    return count;
   }
 
   @override
@@ -297,9 +327,10 @@ class _AddMaoObraVinculadaWidgetState extends State<AddMaoObraVinculadaWidget> {
                         final dropDownCarregaItensObraRowList = snapshot.data!;
 
                         return FlutterFlowDropDown<String>(
-                          controller: _model.dropDownValueController ??=
-                              FormFieldController<String>(
-                            _model.dropDownValue ??= '0',
+                          multiSelectController:
+                              _model.dropDownValueController ??=
+                                  FormFieldController<List<String>?>(
+                            _model.dropDownValue ??= <String>[],
                           ),
                           options: List<String>.from(
                               dropDownCarregaItensObraRowList
@@ -308,10 +339,15 @@ class _AddMaoObraVinculadaWidgetState extends State<AddMaoObraVinculadaWidget> {
                           optionLabels: dropDownCarregaItensObraRowList
                               .map(_labelMaoObraDropdown)
                               .toList(),
-                          onChanged: (val) async {
-                            safeSetState(() => _model.dropDownValue = val);
-                            _model.funcionarioSelected = _model.dropDownValue;
-                            safeSetState(() {});
+                          onMultiSelectChanged: (vals) {
+                            final lista = (vals ?? [])
+                                .map((e) => e.trim())
+                                .where((e) => e.isNotEmpty && e != '0')
+                                .toList();
+                            safeSetState(() {
+                              _model.dropDownValue = lista;
+                              _model.funcionariosSelected = lista;
+                            });
                           },
                           width: double.infinity,
                           height: 56.0,
@@ -333,7 +369,7 @@ class _AddMaoObraVinculadaWidgetState extends State<AddMaoObraVinculadaWidget> {
                                         .bodyMedium
                                         .fontStyle,
                                   ),
-                          hintText: 'Selecione o trabalhador',
+                          hintText: 'Selecione um ou mais trabalhadores',
                           fillColor:
                               FlutterFlowTheme.of(context).secondaryBackground,
                           elevation: 0.0,
@@ -342,8 +378,9 @@ class _AddMaoObraVinculadaWidgetState extends State<AddMaoObraVinculadaWidget> {
                           borderRadius: 8.0,
                           margin: EdgeInsetsDirectional.fromSTEB(
                               12.0, 0.0, 12.0, 0.0),
-                          isSearchable: false,
-                          isMultiSelect: false,
+                          isSearchable: true,
+                          searchHintText: 'Buscar mão de obra...',
+                          isMultiSelect: true,
                         );
                       },
                     ),
@@ -406,22 +443,42 @@ class _AddMaoObraVinculadaWidgetState extends State<AddMaoObraVinculadaWidget> {
                     Expanded(
                       child: FFButtonWidget(
                         onPressed: () async {
-                          final selected = _model.funcionarioSelected?.trim();
-                          if (selected == null ||
-                              selected.isEmpty ||
-                              selected == '0') {
+                          final selecionados = (_model.funcionariosSelected ??
+                                  _model.dropDownValue ??
+                                  const <String>[])
+                              .map((e) => e.trim())
+                              .where((e) => e.isNotEmpty && e != '0')
+                              .toSet()
+                              .toList();
+                          if (selecionados.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text(
-                                  'Selecione uma mão de obra ou cadastre uma nova.',
+                                  'Selecione uma ou mais mãos de obra ou cadastre uma nova.',
                                 ),
                               ),
                             );
                             return;
                           }
-                          final inseriu =
-                              await _inserirMaoObraNoRelatorio(selected);
-                          if (!mounted || !inseriu) return;
+                          final count =
+                              await _inserirVariasMaosObra(selecionados);
+                          if (!mounted || count == 0) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                count == 1
+                                    ? '1 mão de obra incluída no relatório!'
+                                    : '$count mãos de obra incluídas no relatório!',
+                                style: TextStyle(
+                                  color: FlutterFlowTheme.of(context)
+                                      .primaryText,
+                                ),
+                              ),
+                              duration: const Duration(milliseconds: 4000),
+                              backgroundColor:
+                                  FlutterFlowTheme.of(context).secondary,
+                            ),
+                          );
                           FFAppState().update(() {});
                           Navigator.pop(context);
                           safeSetState(() {});

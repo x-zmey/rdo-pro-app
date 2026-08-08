@@ -1,8 +1,10 @@
 import '/backend/api_requests/api_calls.dart';
 import '/componentes/navegacao/barra_navegacao_principal.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -21,10 +23,8 @@ class MedicoesWidget extends StatefulWidget {
   State<MedicoesWidget> createState() => _MedicoesWidgetState();
 }
 
-class _MedicoesWidgetState extends State<MedicoesWidget>
-    with SingleTickerProviderStateMixin {
+class _MedicoesWidgetState extends State<MedicoesWidget> {
   late MedicoesModel _model;
-  late AnimationController _animationController;
 
   final _scrollController = ScrollController();
 
@@ -57,21 +57,15 @@ class _MedicoesWidgetState extends State<MedicoesWidget>
   void initState() {
     super.initState();
     _model = createModel(context, () => MedicoesModel());
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
     _scrollController.addListener(_onScroll);
     _carregarObras();
     _carregarMedicoes(reset: true);
-    _animationController.forward();
   }
 
   @override
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
-    _animationController.dispose();
     _model.dispose();
     super.dispose();
   }
@@ -231,8 +225,9 @@ class _MedicoesWidgetState extends State<MedicoesWidget>
       dt = DateTime.tryParse(s.replaceFirst(' ', 'T'));
     }
     if (dt == null) {
-      if (s.length >= 10)
+      if (s.length >= 10) {
         return s.substring(0, 10).split('-').reversed.join('/');
+      }
       return s;
     }
     return dateTimeFormat('dd/MM/yyyy', dt.toLocal(), locale: 'pt_BR');
@@ -248,18 +243,18 @@ class _MedicoesWidgetState extends State<MedicoesWidget>
     return s;
   }
 
-  /// Uma linha: referência, período e data da medição (layout compacto).
   String _metaCompacta(Map<String, dynamic> m) {
     final ref = _formatMesReferencia(m['mes_referencia']).trim();
     final ini = _formatDataSimples(m['data_inicio_periodo']);
     final fim = _formatDataSimples(m['data_termino_periodo']);
     final dMed = _formatDataSimples(
-        m['data_medicao'] ?? m['data_emissao'] ?? m['created_at']);
+      m['data_medicao'] ?? m['data_emissao'] ?? m['created_at'],
+    );
     final buf = StringBuffer();
     if (ref.isNotEmpty) buf.write('Ref. $ref');
     if (ini != '—' || fim != '—') {
       if (buf.isNotEmpty) buf.write(' · ');
-      buf.write('$ini–$fim');
+      buf.write('$ini - $fim');
     }
     if (dMed != '—') {
       if (buf.isNotEmpty) buf.write(' · ');
@@ -306,13 +301,25 @@ class _MedicoesWidgetState extends State<MedicoesWidget>
     }
   }
 
+  IconData _iconeStatus(int? statusId) {
+    switch (statusId) {
+      case 2:
+        return Icons.hourglass_top_rounded;
+      case 3:
+        return Icons.check_circle_rounded;
+      case 4:
+        return Icons.cancel_rounded;
+      default:
+        return Icons.edit_note_rounded;
+    }
+  }
+
   Future<void> _enviarParaAprovacao(Map<String, dynamic> medicao) async {
     final id = _toInt(medicao['id']);
     if (id == null) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Enviar para aprovação'),
         content: Text(
           'Enviar medição #${medicao['numero'] ?? id} para a fila de assinaturas?',
@@ -325,11 +332,6 @@ class _MedicoesWidgetState extends State<MedicoesWidget>
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.green,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
             child: const Text('Enviar'),
           ),
         ],
@@ -373,11 +375,598 @@ class _MedicoesWidgetState extends State<MedicoesWidget>
         'medicaoId': serializeParam(id, ParamType.int),
       }.withoutNulls,
       extra: <String, dynamic>{
-        '__transition_info__': TransitionInfo(
+        '__transition_info__': const TransitionInfo(
           hasTransition: true,
           transitionType: PageTransitionType.rightToLeft,
         ),
       },
+    );
+  }
+
+  String _labelFiltroObra() {
+    if (_obraFiltro == null) return 'Todas';
+    for (final o in _obras) {
+      if (_toInt(o['id']) == _obraFiltro) {
+        final n = (o['nome']?.toString() ?? '').trim();
+        return n.isEmpty ? 'Obra' : n;
+      }
+    }
+    return 'Obra';
+  }
+
+  String _labelFiltroStatus() {
+    for (final e in _opcoesStatus) {
+      if (e.key == _statusFiltro) return e.value;
+    }
+    return 'Todos';
+  }
+
+  Widget _statusChip(BuildContext context, Map<String, dynamic> m) {
+    final cor = _corStatusChip(context, m);
+    final sid = _statusId(m);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: cor.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cor.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(_iconeStatus(sid), size: 11, color: cor),
+          const SizedBox(width: 4),
+          Text(
+            _labelStatus(m),
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: cor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _iconAction({
+    required IconData icon,
+    required Color color,
+    required VoidCallback? onPressed,
+    String? tooltip,
+    bool loading = false,
+  }) {
+    final btn = Material(
+      color: color.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(7),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(7),
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: loading
+              ? Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: color,
+                  ),
+                )
+              : Icon(icon, size: 15, color: color),
+        ),
+      ),
+    );
+    if (tooltip == null) return btn;
+    return Tooltip(message: tooltip, child: btn);
+  }
+
+  Widget _filtroChip({
+    required String label,
+    required String valor,
+    required IconData icon,
+    required VoidCallback onTap,
+    bool ativo = false,
+  }) {
+    final theme = FlutterFlowTheme.of(context);
+    return Material(
+      color: ativo
+          ? theme.primary.withValues(alpha: 0.08)
+          : theme.primaryBackground.withValues(alpha: 0.7),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          height: 38,
+          padding: const EdgeInsets.symmetric(horizontal: 9),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: ativo
+                  ? theme.primary.withValues(alpha: 0.4)
+                  : theme.alternate,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: ativo ? theme.primary : theme.secondaryText,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label.toUpperCase(), style: rdoColumnLabelStyle(context)),
+                    Text(
+                      valor,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: theme.primaryText,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.expand_more_rounded, size: 16, color: theme.secondaryText),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _abrirFiltroObraSafe() async {
+    final result = await showModalBottomSheet<_FiltroEscolha<int?>>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        final theme = FlutterFlowTheme.of(ctx);
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Text(
+                  'Filtrar por obra',
+                  style: GoogleFonts.interTight(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: Icon(
+                  Icons.layers_clear_rounded,
+                  color: _obraFiltro == null ? theme.primary : theme.secondaryText,
+                ),
+                title: Text(
+                  'Todas as obras',
+                  style: GoogleFonts.inter(
+                    fontWeight:
+                        _obraFiltro == null ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+                onTap: () =>
+                    Navigator.pop(ctx, const _FiltroEscolha<int?>(null)),
+              ),
+              ..._obras.map((o) {
+                final id = _toInt(o['id']);
+                final nome = (o['nome']?.toString() ?? '—').trim();
+                final selected = id != null && id == _obraFiltro;
+                return ListTile(
+                  leading: Icon(
+                    Icons.domain_rounded,
+                    color: selected ? theme.primary : theme.secondaryText,
+                  ),
+                  title: Text(
+                    nome,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontWeight:
+                          selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                  onTap: () => Navigator.pop(ctx, _FiltroEscolha(id)),
+                );
+              }),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (result == null || !mounted) return;
+    setState(() => _obraFiltro = result.value);
+    await _carregarMedicoes(reset: true);
+  }
+
+  Future<void> _abrirFiltroStatus() async {
+    final result = await showModalBottomSheet<_FiltroEscolha<String>>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        final theme = FlutterFlowTheme.of(ctx);
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Text(
+                  'Filtrar por status',
+                  style: GoogleFonts.interTight(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              ..._opcoesStatus.map((e) {
+                final selected = e.key == _statusFiltro;
+                return ListTile(
+                  leading: Icon(
+                    Icons.flag_outlined,
+                    color: selected ? theme.primary : theme.secondaryText,
+                  ),
+                  title: Text(
+                    e.value,
+                    style: GoogleFonts.inter(
+                      fontWeight:
+                          selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                  onTap: () => Navigator.pop(ctx, _FiltroEscolha(e.key)),
+                );
+              }),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (result == null || !mounted) return;
+    setState(() => _statusFiltro = result.value);
+    await _carregarMedicoes(reset: true);
+  }
+
+  Widget _barraFiltros(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      decoration: rdoCardDecoration(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _filtroChip(
+                    label: 'Obra',
+                    valor: _labelFiltroObra(),
+                    icon: Icons.domain_rounded,
+                    ativo: _obraFiltro != null,
+                    onTap: _abrirFiltroObraSafe,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _filtroChip(
+                    label: 'Status',
+                    valor: _labelFiltroStatus(),
+                    icon: Icons.flag_outlined,
+                    ativo: _statusFiltro.isNotEmpty,
+                    onTap: _abrirFiltroStatus,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
+            decoration: BoxDecoration(
+              color: FlutterFlowTheme.of(context)
+                  .primaryBackground
+                  .withValues(alpha: 0.45),
+              border: Border(
+                top: BorderSide(color: FlutterFlowTheme.of(context).alternate),
+              ),
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(kRdoRadius),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.receipt_long_outlined,
+                  size: 13,
+                  color: FlutterFlowTheme.of(context).secondaryText,
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  _loading && _items.isEmpty
+                      ? 'CARREGANDO…'
+                      : '${_items.length} MEDIÇÃO${_items.length == 1 ? '' : 'ÕES'}',
+                  style: rdoColumnLabelStyle(context),
+                ),
+                if (_totalServidor > 0) ...[
+                  const Spacer(),
+                  Text(
+                    'de $_totalServidor no total',
+                    style: GoogleFonts.inter(
+                      fontSize: 10.5,
+                      color: FlutterFlowTheme.of(context)
+                          .secondaryText
+                          .withValues(alpha: 0.85),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _medicaoCard(Map<String, dynamic> m, {required bool ultimo}) {
+    final theme = FlutterFlowTheme.of(context);
+    final numero = m['numero']?.toString() ?? '—';
+    final cor = _corStatusChip(context, m);
+    final sid = _statusId(m);
+    final enviandoEsta = _enviandoAprovacaoMedicaoId == _toInt(m['id']);
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: ultimo && !_hasMore ? 0 : 6),
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: rdoCardDecoration(context),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _abrirDetalhes(m),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(width: 3.5, color: cor),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        'Med. #$numero',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.interTight(
+                                          fontSize: 13.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: theme.primaryText,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    _statusChip(context, m),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              if (sid == 1)
+                                _iconAction(
+                                  icon: Icons.send_rounded,
+                                  color: theme.success,
+                                  tooltip: 'Enviar para aprovação',
+                                  loading: enviandoEsta,
+                                  onPressed: enviandoEsta
+                                      ? null
+                                      : () => _enviarParaAprovacao(m),
+                                ),
+                              if (sid == 1) const SizedBox(width: 4),
+                              _iconAction(
+                                icon: Icons.visibility_outlined,
+                                color: theme.primary,
+                                tooltip: 'Detalhes',
+                                onPressed: () => _abrirDetalhes(m),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _obraNome(m),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: theme.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.calendar_today_outlined,
+                                size: 12,
+                                color: theme.secondaryText,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  _metaCompacta(m),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: theme.secondaryText,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _lista(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+
+    if (_loading && _items.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 34,
+              height: 34,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                color: theme.primary,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Carregando medições…',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: theme.secondaryText,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      color: theme.primary,
+      onRefresh: () => _carregarMedicoes(reset: true),
+      child: ListView(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          10,
+          16,
+          kBarraNavegacaoPrincipalReservaScroll + bottomInset + 16,
+        ),
+        children: [
+          if (_error != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.error.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(kRdoRadius),
+                border: Border.all(color: theme.error.withValues(alpha: 0.25)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline_rounded, size: 18, color: theme.error),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _error!,
+                      style: GoogleFonts.inter(fontSize: 12.5, color: theme.error),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          RdoSectionCard(
+            title: 'Medições',
+            icon: Icons.receipt_long_outlined,
+            margin: EdgeInsets.zero,
+            trailing: _totalServidor > 0
+                ? RdoContadorChip('$_totalServidor')
+                : null,
+            contentPadding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+            child: _items.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 28,
+                      horizontal: 8,
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.receipt_long_outlined,
+                          size: 44,
+                          color: theme.secondaryText.withValues(alpha: 0.45),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Nenhuma medição encontrada',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: theme.primaryText,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Ajuste os filtros ou cadastre uma nova medição.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: theme.secondaryText,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : Column(
+                    children: [
+                      for (var i = 0; i < _items.length; i++)
+                        _medicaoCard(
+                          _items[i],
+                          ultimo: i == _items.length - 1,
+                        ),
+                      if (_loadingMore)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 14),
+                          child: Center(
+                            child: SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2.4),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -393,18 +982,75 @@ class _MedicoesWidgetState extends State<MedicoesWidget>
       },
       child: Scaffold(
         backgroundColor: theme.primaryBackground,
-        appBar: _buildAppBar(theme),
-        body: FadeTransition(
-          opacity: _animationController,
+        appBar: AppBar(
+          backgroundColor: theme.primary,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          centerTitle: false,
+          titleSpacing: 0,
+          toolbarHeight: 58,
+          iconTheme: const IconThemeData(color: Colors.white),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: () {
+              if (context.canPop()) {
+                context.safePop();
+              } else {
+                context.goNamed(InicioWidget.routeName);
+              }
+            },
+          ),
+          title: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Medições',
+                  style: GoogleFonts.interTight(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  'Medições mensais das obras',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            IconButton(
+              tooltip: 'Atualizar',
+              icon: const Icon(
+                Icons.refresh_rounded,
+                color: Colors.white,
+                size: 21,
+              ),
+              onPressed: _loading ? null : () => _carregarMedicoes(reset: true),
+            ),
+            const SizedBox(width: 4),
+          ],
+        ),
+        body: SafeArea(
+          top: true,
+          bottom: false,
           child: Stack(
-            clipBehavior: Clip.none,
             children: [
               Positioned.fill(
-                child: Padding(
-                  padding: const EdgeInsets.only(
-                    bottom: kBarraNavegacaoPrincipalReservaScroll,
-                  ),
-                  child: _buildBody(theme),
+                child: Column(
+                  children: [
+                    _barraFiltros(context),
+                    Expanded(child: _lista(context)),
+                  ],
                 ),
               ),
               const Positioned(
@@ -419,598 +1065,9 @@ class _MedicoesWidgetState extends State<MedicoesWidget>
       ),
     );
   }
+}
 
-  PreferredSizeWidget _buildAppBar(FlutterFlowTheme theme) {
-    return AppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      scrolledUnderElevation: 0,
-      surfaceTintColor: Colors.transparent,
-      centerTitle: false,
-      leading: Container(
-        margin: const EdgeInsets.only(left: 8),
-        decoration: BoxDecoration(
-          color: theme.primary.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: IconButton(
-          icon: Icon(Icons.arrow_back_rounded, color: theme.primary),
-          onPressed: () => context.safePop(),
-        ),
-      ),
-      title: Text(
-        'Medições',
-        style: GoogleFonts.inter(
-          fontSize: 20,
-          fontWeight: FontWeight.w700,
-          color: theme.primaryText,
-          letterSpacing: -0.3,
-        ),
-      ),
-      actions: [
-        Container(
-          margin: const EdgeInsets.only(right: 8),
-          decoration: BoxDecoration(
-            color: theme.primary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: IconButton(
-            icon: Icon(Icons.refresh_rounded, color: theme.primary, size: 22),
-            onPressed: () => _carregarMedicoes(reset: true),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBody(FlutterFlowTheme theme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildHeader(theme),
-        _buildFilters(theme),
-        if (_totalServidor > 0) _buildTotalInfo(theme),
-        if (_error != null) _buildErrorWidget(theme),
-        Expanded(
-          child: _buildContent(theme),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildHeader(FlutterFlowTheme theme) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: theme.primary.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 1),
-              child: Icon(Icons.receipt_long_rounded,
-                  size: 18, color: theme.primary),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Medições mensais das obras. Use Detalhes para aprovar ou reprovar quando permitido.',
-                style: GoogleFonts.inter(
-                  fontSize: 11.5,
-                  color: theme.secondaryText,
-                  height: 1.35,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilters(FlutterFlowTheme theme) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildDropdown(
-              theme,
-              value: _obraFiltro,
-              label: 'Obra',
-              hint: 'Todas as obras',
-              items: [
-                DropdownMenuItem<int?>(
-                  value: null,
-                  child: Text(
-                    'Todas as obras',
-                    style: GoogleFonts.inter(color: theme.primaryText),
-                  ),
-                ),
-                ..._obras.map((o) {
-                  final id = _toInt(o['id']);
-                  final nome = o['nome']?.toString() ?? '—';
-                  return DropdownMenuItem<int>(
-                    value: id,
-                    child: Text(
-                      nome,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(color: theme.primaryText),
-                    ),
-                  );
-                }),
-              ],
-              onChanged: (v) {
-                setState(() => _obraFiltro = v);
-                _carregarMedicoes(reset: true);
-              },
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _buildDropdown(
-              theme,
-              value: _statusFiltro,
-              label: 'Status',
-              hint: 'Todos',
-              items: _opcoesStatus
-                  .map(
-                    (e) => DropdownMenuItem<String>(
-                      value: e.key,
-                      child: Text(
-                        e.value,
-                        style: GoogleFonts.inter(color: theme.primaryText),
-                      ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) {
-                setState(() => _statusFiltro = v ?? '');
-                _carregarMedicoes(reset: true);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDropdown<T>(
-    FlutterFlowTheme theme, {
-    required T? value,
-    required String label,
-    required String hint,
-    required List<DropdownMenuItem<T>> items,
-    required void Function(T?) onChanged,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.secondaryBackground,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: DropdownButtonFormField<T>(
-        value: value,
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: GoogleFonts.inter(
-            fontSize: 12,
-            color: theme.primaryText,
-          ),
-          floatingLabelStyle: GoogleFonts.inter(
-            fontSize: 12,
-            color: theme.primaryText,
-          ),
-          filled: true,
-          fillColor: theme.secondaryBackground,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: theme.primary, width: 1),
-          ),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        ),
-        isExpanded: true,
-        hint: Text(
-          hint,
-          style: GoogleFonts.inter(
-            fontSize: 14,
-            color: theme.primaryText,
-          ),
-        ),
-        items: items,
-        onChanged: onChanged,
-        style: GoogleFonts.inter(
-          fontSize: 14,
-          color: theme.primaryText,
-        ),
-        iconEnabledColor: theme.primaryText,
-        dropdownColor: theme.secondaryBackground,
-        borderRadius: BorderRadius.circular(14),
-      ),
-    );
-  }
-
-  Widget _buildTotalInfo(FlutterFlowTheme theme) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: theme.alternate.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.info_outline, size: 14, color: theme.secondaryText),
-            const SizedBox(width: 6),
-            Text(
-              'Total: $_totalServidor medições',
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: theme.secondaryText,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildErrorWidget(FlutterFlowTheme theme) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: theme.error.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.error_outline, size: 20, color: theme.error),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                _error!,
-                style: GoogleFonts.inter(fontSize: 13, color: theme.error),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildContent(FlutterFlowTheme theme) {
-    if (_loading && _items.isEmpty) {
-      return _buildLoadingState(theme);
-    }
-
-    return RefreshIndicator(
-      onRefresh: () => _carregarMedicoes(reset: true),
-      color: theme.primary,
-      child: _items.isEmpty
-          ? _buildEmptyState(theme)
-          : ListView.builder(
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(
-                parent: BouncingScrollPhysics(),
-              ),
-              padding: const EdgeInsets.fromLTRB(12, 2, 12, 16),
-              itemCount: _items.length + (_loadingMore ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index >= _items.length) {
-                  return _buildLoadingMoreIndicator(theme);
-                }
-                return _buildMedicaoCard(theme, _items[index]);
-              },
-            ),
-    );
-  }
-
-  Widget _buildLoadingState(FlutterFlowTheme theme) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: theme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const CircularProgressIndicator(strokeWidth: 3),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Carregando medições...',
-            style: GoogleFonts.inter(fontSize: 14, color: theme.secondaryText),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(FlutterFlowTheme theme) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: theme.alternate.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(25),
-            ),
-            child: Icon(
-              Icons.receipt_long_outlined,
-              size: 40,
-              color: theme.secondaryText,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Nenhuma medição encontrada',
-            style: GoogleFonts.inter(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: theme.primaryText,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Tente ajustar os filtros ou cadastrar uma nova medição.',
-            style: GoogleFonts.inter(fontSize: 14, color: theme.secondaryText),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoadingMoreIndicator(FlutterFlowTheme theme) {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Center(
-        child: SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: theme.primary,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMedicaoCard(FlutterFlowTheme theme, Map<String, dynamic> m) {
-    final numero = m['numero']?.toString() ?? '—';
-    final cor = _corStatusChip(context, m);
-    final sid = _statusId(m);
-    final enviandoEsta = _enviandoAprovacaoMedicaoId == _toInt(m['id']);
-    final statusLabel = _labelStatus(m);
-    final borderColor = theme.primaryText.withValues(alpha: 0.06);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 5),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () => _abrirDetalhes(m),
-          child: Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: theme.secondaryBackground,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: borderColor),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 4,
-                  offset: const Offset(0, 1),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(9),
-              child: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(width: 3.5, color: cor),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(9, 5, 4, 5),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        theme.primary.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    'Med. #$numero',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      color: theme.primary,
-                                      height: 1,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                _buildStatusChipMini(
-                                  theme,
-                                  label: statusLabel,
-                                  color: cor,
-                                  statusId: sid,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              _obraNome(m),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                height: 1.15,
-                                color: theme.primaryText,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _metaCompacta(m),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.inter(
-                                fontSize: 10,
-                                height: 1.1,
-                                color: theme.secondaryText,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 4, 6, 4),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (sid == 1)
-                            _buildIconAction(
-                              theme,
-                              icon: Icons.send_rounded,
-                              tooltip: 'Enviar para aprovação',
-                              onPressed: enviandoEsta
-                                  ? null
-                                  : () => _enviarParaAprovacao(m),
-                              loading: enviandoEsta,
-                              color: Colors.green.shade700,
-                            ),
-                          if (sid == 1) const SizedBox(height: 4),
-                          _buildIconAction(
-                            theme,
-                            icon: Icons.visibility_outlined,
-                            tooltip: 'Detalhes',
-                            onPressed: () => _abrirDetalhes(m),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusChipMini(
-    FlutterFlowTheme theme, {
-    required String label,
-    required Color color,
-    required int? statusId,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (statusId == 2)
-            Icon(Icons.hourglass_top, size: 10, color: color),
-          if (statusId == 3)
-            Icon(Icons.check_circle, size: 10, color: color),
-          if (statusId == 4) Icon(Icons.cancel, size: 10, color: color),
-          if (statusId == 2 || statusId == 3 || statusId == 4)
-            const SizedBox(width: 2),
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-              color: color,
-              height: 1,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildIconAction(
-    FlutterFlowTheme theme, {
-    required IconData icon,
-    required VoidCallback? onPressed,
-    String? tooltip,
-    bool loading = false,
-    Color? color,
-  }) {
-    final fg = color ?? theme.primary;
-    final btn = Material(
-      color: theme.alternate.withValues(alpha: 0.55),
-      borderRadius: BorderRadius.circular(6),
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(6),
-        child: SizedBox(
-          width: 26,
-          height: 26,
-          child: loading
-              ? Padding(
-                  padding: const EdgeInsets.all(5),
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: fg,
-                  ),
-                )
-              : Icon(icon, size: 14, color: fg),
-        ),
-      ),
-    );
-    if (tooltip == null) return btn;
-    return Tooltip(message: tooltip, child: btn);
-  }
+class _FiltroEscolha<T> {
+  const _FiltroEscolha(this.value);
+  final T value;
 }

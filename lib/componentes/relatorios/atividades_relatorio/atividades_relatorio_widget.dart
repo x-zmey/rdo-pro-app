@@ -1,6 +1,8 @@
 import '/backend/sqlite/sqlite_manager.dart';
 import '/componentes/dialogs/cofirma_exclusao_atividade_relatorio/cofirma_exclusao_atividade_relatorio_widget.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
+import '/flutter_flow/custom_functions.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
@@ -95,21 +97,6 @@ class _AtividadesRelatorioWidgetState extends State<AtividadesRelatorioWidget> {
           final containerRelatorioDetalhesRowList = snapshot.data!;
 
           return Container(
-            decoration: BoxDecoration(
-              color: FlutterFlowTheme.of(context).secondaryBackground,
-              boxShadow: [
-                BoxShadow(
-                  blurRadius: 3.0,
-                  color: Color(0x33000000),
-                  offset: Offset(
-                    0.0,
-                    1.0,
-                  ),
-                  spreadRadius: 0.0,
-                )
-              ],
-              borderRadius: BorderRadius.circular(12.0),
-            ),
             child: Padding(
               padding: EdgeInsetsDirectional.fromSTEB(0, 0, 0, 0),
               child: Column(
@@ -134,362 +121,264 @@ class _AtividadesRelatorioWidgetState extends State<AtividadesRelatorioWidget> {
                           final listViewGetAtividadesRelatorioRowList =
                               snapshot.data!;
 
-                          return ListView.builder(
-                            padding: EdgeInsets.zero,
-                            shrinkWrap: true,
-                            scrollDirection: Axis.vertical,
-                            itemCount:
-                                listViewGetAtividadesRelatorioRowList.length,
-                            itemBuilder: (context, listViewIndex) {
-                              final listViewGetAtividadesRelatorioRow =
-                                  listViewGetAtividadesRelatorioRowList[
-                                      listViewIndex];
-                              return Padding(
-                                padding: EdgeInsetsDirectional.fromSTEB(
-                                    0.0, 4.0, 0.0, 4.0),
-                                child: Container(
-                                  width: double.infinity,
+                          final theme = FlutterFlowTheme.of(context);
+                          final linhas = listViewGetAtividadesRelatorioRowList;
+                          if (linhas.isEmpty) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 20),
+                              child: Text(
+                                'Nenhuma atividade lançada',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: theme.secondaryText,
+                                ),
+                              ),
+                            );
+                          }
+
+                          return Container(
+                            clipBehavior: Clip.antiAlias,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: theme.alternate),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Container(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(10, 7, 10, 7),
                                   decoration: BoxDecoration(
-                                    color:
-                                        FlutterFlowTheme.of(context).primaryBackground,
-                                    borderRadius: BorderRadius.circular(8.0),
-                                    border: Border.all(
-                                      color: FlutterFlowTheme.of(context)
-                                          .alternate,
-                                      width: 1.0,
+                                    color: theme.primaryBackground
+                                        .withValues(alpha: 0.6),
+                                    border: Border(
+                                      bottom:
+                                          BorderSide(color: theme.alternate),
                                     ),
                                   ),
-                                  child: Padding(
-                                    padding: EdgeInsetsDirectional.fromSTEB(
-                                        4.0, 4.0, 4.0, 4.0),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Row(
-                                          mainAxisSize: MainAxisSize.max,
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Expanded(
-                                              child: Column(
-                                                mainAxisSize: MainAxisSize.min,
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    valueOrDefault<String>(
-                                                      listViewGetAtividadesRelatorioRow
-                                                          .descricao,
-                                                      'N/A',
-                                                    ),
-                                                    style: FlutterFlowTheme.of(
-                                                            context)
-                                                        .titleMedium
-                                                        .override(
-                                                          font: GoogleFonts
-                                                              .interTight(
-                                                            fontWeight:
-                                                                FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .titleMedium
-                                                                    .fontWeight,
-                                                            fontStyle:
-                                                                FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .titleMedium
-                                                                    .fontStyle,
-                                                          ),
-                                                          letterSpacing: 0.0,
-                                                          fontWeight:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .titleMedium
-                                                                  .fontWeight,
-                                                          fontStyle:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .titleMedium
-                                                                  .fontStyle,
-                                                        ),
-                                                  ),
-                                                  Text(
-                                                    'Local: ${listViewGetAtividadesRelatorioRow.local}',
-                                                    style: FlutterFlowTheme.of(
-                                                            context)
-                                                        .labelMedium
-                                                        .override(
-                                                          font:
-                                                              GoogleFonts.inter(
-                                                            fontWeight:
-                                                                FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .labelMedium
-                                                                    .fontWeight,
-                                                            fontStyle:
-                                                                FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .labelMedium
-                                                                    .fontStyle,
-                                                          ),
-                                                          color: FlutterFlowTheme
-                                                                  .of(context)
-                                                              .primary,
-                                                          letterSpacing: 0.0,
-                                                          fontWeight:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .labelMedium
-                                                                  .fontWeight,
-                                                          fontStyle:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .labelMedium
-                                                                  .fontStyle,
-                                                        ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            Padding(
-                                              padding: EdgeInsetsDirectional
-                                                  .fromSTEB(4.0, 6.0, 4.0, 6.0),
-                                              child: Container(
-                                                decoration: BoxDecoration(
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .success,
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                          10.0),
-                                                ),
-                                                child: Padding(
-                                                  padding: EdgeInsetsDirectional
-                                                      .fromSTEB(6.0, 3.0, 6.0, 3.0),
-                                                  child: Text(
-                                                    _statusAtividadeLabel(
-                                                      listViewGetAtividadesRelatorioRow
-                                                          .situacao,
-                                                    ),
-                                                    style: FlutterFlowTheme.of(
-                                                            context)
-                                                        .labelSmall
-                                                        .override(
-                                                          font:
-                                                              GoogleFonts.inter(
-                                                            fontWeight:
-                                                                FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .labelSmall
-                                                                    .fontWeight,
-                                                            fontStyle:
-                                                                FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .labelSmall
-                                                                    .fontStyle,
-                                                          ),
-                                                          color: FlutterFlowTheme
-                                                                  .of(context)
-                                                              .info,
-                                                          letterSpacing: 0.0,
-                                                          fontSize: 10.0,
-                                                          fontWeight:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .labelSmall
-                                                                  .fontWeight,
-                                                          fontStyle:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .labelSmall
-                                                                  .fontStyle,
-                                                        ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 18,
+                                        child: Text(
+                                          '#',
+                                          style: rdoColumnLabelStyle(context),
                                         ),
-                                        Row(
-                                          mainAxisSize: MainAxisSize.max,
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text(
-                                              'Realizado: ${valueOrDefault<String>(
-                                                listViewGetAtividadesRelatorioRow
-                                                    .qtdRealizada
-                                                    ?.toString(),
-                                                '0',
-                                              )}${listViewGetAtividadesRelatorioRow.unidade}',
-                                              style:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .override(
-                                                        font: GoogleFonts.inter(
-                                                          fontWeight:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .bodyMedium
-                                                                  .fontWeight,
-                                                          fontStyle:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .bodyMedium
-                                                                  .fontStyle,
-                                                        ),
-                                                        letterSpacing: 0.0,
-                                                        fontWeight:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .bodyMedium
-                                                                .fontWeight,
-                                                        fontStyle:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .bodyMedium
-                                                                .fontStyle,
-                                                      ),
-                                            ),
-                                            Row(
-                                              mainAxisSize: MainAxisSize.max,
-                                              children: [
-                                                if (responsiveVisibility(
-                                                  context: context,
-                                                  phone: false,
-                                                  tablet: false,
-                                                  tabletLandscape: false,
-                                                  desktop: false,
-                                                ))
-                                                  FlutterFlowIconButton(
-                                                    borderColor:
-                                                        FlutterFlowTheme.of(
-                                                                context)
-                                                            .alternate,
-                                                    borderRadius: 16.0,
-                                                    borderWidth: 1.0,
-                                                    buttonSize: 32.0,
-                                                    fillColor: FlutterFlowTheme
-                                                            .of(context)
-                                                        .secondaryBackground,
-                                                    icon: Icon(
-                                                      Icons.visibility,
-                                                      color:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .primaryText,
-                                                      size: 16.0,
-                                                    ),
-                                                    onPressed: () {
-                                                      print(
-                                                          'IconButton pressed ...');
-                                                    },
-                                                  ),
-                                                FlutterFlowIconButton(
-                                                  borderColor: Colors.transparent,
-                                                  borderRadius: 14.0,
-                                                  borderWidth: 0.0,
-                                                  buttonSize: 28.0,
-                                                  fillColor: Colors.transparent,
-                                                  icon: Icon(
-                                                    Icons.edit,
-                                                    color: Colors.black,
-                                                    size: 16.0,
-                                                  ),
-                                                  onPressed: () async {
-                                                    context.pushNamed(
-                                                      AddAtividadeRelatorioWidget
-                                                          .routeName,
-                                                      queryParameters: {
-                                                        'relatorioId':
-                                                            serializeParam(
-                                                          widget!.relatorioId,
-                                                          ParamType.int,
-                                                        ),
-                                                        'obraId':
-                                                            serializeParam(
-                                                          containerRelatorioDetalhesRowList
-                                                              .firstOrNull
-                                                              ?.obraId,
-                                                          ParamType.int,
-                                                        ),
-                                                        'atividadeId':
-                                                            serializeParam(
-                                                          listViewGetAtividadesRelatorioRow
-                                                              .id,
-                                                          ParamType.int,
-                                                        ),
-                                                        'atividadeUuid':
-                                                            serializeParam(
-                                                          listViewGetAtividadesRelatorioRow
-                                                              .uuid,
-                                                          ParamType.String,
-                                                        ),
-                                                        'relatorioUuid':
-                                                            serializeParam(
-                                                          widget!.relatorioUuid,
-                                                          ParamType.String,
-                                                        ),
-                                                        'obraUuid':
-                                                            serializeParam(
-                                                          widget!.obraUuid,
-                                                          ParamType.String,
-                                                        ),
-                                                      }.withoutNulls,
-                                                    );
-                                                  },
-                                                ),
-                                                Builder(
-                                                  builder: (context) =>
-                                                      FlutterFlowIconButton(
-                                                    borderColor: Colors.transparent,
-                                                    borderRadius: 14.0,
-                                                    borderWidth: 0.0,
-                                                    buttonSize: 28.0,
-                                                    fillColor: Colors.transparent,
-                                                    icon: Icon(
-                                                      Icons.delete,
-                                                      color: Colors.red,
-                                                      size: 16.0,
-                                                    ),
-                                                    onPressed: () async {
-                                                      await showDialog(
-                                                        context: context,
-                                                        builder:
-                                                            (dialogContext) {
-                                                          return Dialog(
-                                                            elevation: 0,
-                                                            insetPadding:
-                                                                EdgeInsets.zero,
-                                                            backgroundColor:
-                                                                Colors
-                                                                    .transparent,
-                                                            alignment: AlignmentDirectional(
-                                                                    0.0, 0.0)
-                                                                .resolve(
-                                                                    Directionality.of(
-                                                                        context)),
-                                                            child:
-                                                                CofirmaExclusaoAtividadeRelatorioWidget(
-                                                              itemID:
-                                                                  listViewGetAtividadesRelatorioRow
-                                                                      .id,
-                                                            ),
-                                                          );
-                                                        },
-                                                      );
-                                                    },
-                                                  ),
-                                                ),
-                                              ].divide(SizedBox(width: 8.0)),
-                                            ),
-                                          ],
+                                      ),
+                                      Expanded(
+                                        child: Text(
+                                          'ATIVIDADE',
+                                          style: rdoColumnLabelStyle(context),
                                         ),
-                                      ].divide(SizedBox(height: 8.0)),
-                                    ),
+                                      ),
+                                      SizedBox(
+                                        width: 84,
+                                        child: Text(
+                                          'REALIZADO',
+                                          textAlign: TextAlign.end,
+                                          style: rdoColumnLabelStyle(context),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 64),
+                                    ],
                                   ),
                                 ),
-                              );
-                            },
+                                for (var i = 0; i < linhas.length; i++)
+                                  Container(
+                                    padding:
+                                        const EdgeInsets.fromLTRB(10, 6, 6, 6),
+                                    decoration: BoxDecoration(
+                                      border: i == linhas.length - 1
+                                          ? null
+                                          : Border(
+                                              bottom: BorderSide(
+                                                color: theme.alternate,
+                                              ),
+                                            ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 18,
+                                          child: Text(
+                                            '${i + 1}',
+                                            style: rdoColumnLabelStyle(context),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                valueOrDefault<String>(
+                                                  linhas[i].descricao,
+                                                  'N/A',
+                                                ),
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 13.5,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: theme.primaryText,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 3),
+                                              Row(
+                                                children: [
+                                                  Container(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: theme.success
+                                                          .withValues(
+                                                              alpha: 0.12),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              6),
+                                                    ),
+                                                    child: Text(
+                                                      _statusAtividadeLabel(
+                                                        linhas[i].situacao,
+                                                      ),
+                                                      style: GoogleFonts.inter(
+                                                        fontSize: 9.5,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        letterSpacing: 0.3,
+                                                        color: theme.success,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  if ((linhas[i].local ?? '')
+                                                      .trim()
+                                                      .isNotEmpty) ...[
+                                                    const SizedBox(width: 6),
+                                                    Flexible(
+                                                      child: Text(
+                                                        linhas[i].local!.trim(),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style:
+                                                            GoogleFonts.inter(
+                                                          fontSize: 11,
+                                                          color: theme
+                                                              .secondaryText,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        SizedBox(
+                                          width: 84,
+                                          child: Text(
+                                            '${formatQuantidadeRelatorio(linhas[i].qtdRealizada)} ${linhas[i].unidade ?? ''}'
+                                                .trim(),
+                                            textAlign: TextAlign.end,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: theme.primaryText,
+                                            ),
+                                          ),
+                                        ),
+                                        IconButton(
+                                          padding: EdgeInsets.zero,
+                                          visualDensity: VisualDensity.compact,
+                                          constraints: const BoxConstraints(
+                                            minWidth: 32,
+                                            minHeight: 32,
+                                          ),
+                                          tooltip: 'Editar',
+                                          icon: Icon(
+                                            Icons.edit_outlined,
+                                            size: 16,
+                                            color: theme.secondaryText,
+                                          ),
+                                          onPressed: () async {
+                                            context.pushNamed(
+                                              AddAtividadeRelatorioWidget
+                                                  .routeName,
+                                              queryParameters: {
+                                                'relatorioId': serializeParam(
+                                                  widget!.relatorioId,
+                                                  ParamType.int,
+                                                ),
+                                                'obraId': serializeParam(
+                                                  containerRelatorioDetalhesRowList
+                                                      .firstOrNull?.obraId,
+                                                  ParamType.int,
+                                                ),
+                                                'atividadeId': serializeParam(
+                                                  linhas[i].id,
+                                                  ParamType.int,
+                                                ),
+                                                'atividadeUuid': serializeParam(
+                                                  linhas[i].uuid,
+                                                  ParamType.String,
+                                                ),
+                                                'relatorioUuid': serializeParam(
+                                                  widget!.relatorioUuid,
+                                                  ParamType.String,
+                                                ),
+                                                'obraUuid': serializeParam(
+                                                  widget!.obraUuid,
+                                                  ParamType.String,
+                                                ),
+                                              }.withoutNulls,
+                                            );
+                                          },
+                                        ),
+                                        IconButton(
+                                          padding: EdgeInsets.zero,
+                                          visualDensity: VisualDensity.compact,
+                                          constraints: const BoxConstraints(
+                                            minWidth: 32,
+                                            minHeight: 32,
+                                          ),
+                                          tooltip: 'Excluir',
+                                          icon: Icon(
+                                            Icons.delete_outline_rounded,
+                                            size: 16,
+                                            color: theme.error,
+                                          ),
+                                          onPressed: () async {
+                                            await showDialog(
+                                              context: context,
+                                              builder: (dialogContext) {
+                                                return Dialog(
+                                                  elevation: 0,
+                                                  insetPadding: EdgeInsets.zero,
+                                                  backgroundColor:
+                                                      Colors.transparent,
+                                                  alignment:
+                                                      const AlignmentDirectional(
+                                                              0.0, 0.0)
+                                                          .resolve(
+                                                    Directionality.of(context),
+                                                  ),
+                                                  child:
+                                                      CofirmaExclusaoAtividadeRelatorioWidget(
+                                                    itemID: linhas[i].id,
+                                                  ),
+                                                );
+                                              },
+                                            );
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
                           );
                         },
                       ),

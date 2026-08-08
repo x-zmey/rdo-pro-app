@@ -31,6 +31,15 @@ class SQLiteManager {
 
   /// START READ QUERY CALLS
 
+  /// Namespace do tenant ativo (dono SaaS). Leituras/escritas usam como default.
+  String get _tenantOwnerUuid => FFAppState().creatorUuid.trim();
+
+  String _ownerOr(String? accountOwnerUuid) {
+    final explicit = (accountOwnerUuid ?? '').trim();
+    return explicit.isNotEmpty ? explicit : _tenantOwnerUuid;
+  }
+
+
   Future<List<CarregaObrasRow>> carregaObras({
     String? creatorUuid,
     String? currentUserUuid,
@@ -40,7 +49,7 @@ class SQLiteManager {
   }) =>
       performCarregaObras(
         _database,
-        creatorUuid: creatorUuid,
+        creatorUuid: _ownerOr(creatorUuid),
         currentUserUuid: currentUserUuid,
         tenantUserId: tenantUserId,
         allowedObraIds: allowedObraIds,
@@ -60,7 +69,7 @@ class SQLiteManager {
         _database,
         uuid: uuid,
         userId: userId,
-        accountOwnerUuid: accountOwnerUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future updateObra({
@@ -110,7 +119,7 @@ class SQLiteManager {
       performRelatoriosObra(
         _database,
         obraUuid: obraUuid,
-        accountOwnerUuid: accountOwnerUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
         limit: limit,
         offset: offset,
       );
@@ -125,7 +134,7 @@ class SQLiteManager {
         _database,
         limit: limit,
         offset: offset,
-        accountOwnerUuid: accountOwnerUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
         allowedObraUuids: allowedObraUuids,
       );
 
@@ -138,7 +147,7 @@ class SQLiteManager {
         _database,
         uuid: uuid,
         userUuid: userUuid,
-        accountOwnerUuid: accountOwnerUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<ModelosRelatoriosRow>> modelosRelatorios({
@@ -148,118 +157,146 @@ class SQLiteManager {
       performModelosRelatorios(
         _database,
         obraUuid: obraUuid,
-        accountOwnerUuid: accountOwnerUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<CarregaUltimoRelatorioRow>> carregaUltimoRelatorio({
     String? accountOwnerUuid,
+    String? obraUuid,
   }) =>
       performCarregaUltimoRelatorio(
         _database,
-        accountOwnerUuid: accountOwnerUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
+        obraUuid: obraUuid,
       );
 
   Future<List<ListaComentariosRelatoriosRow>> listaComentariosRelatorios({
     String? relatorioUuid,
+    String? accountOwnerUuid,
   }) =>
       performListaComentariosRelatorios(
         _database,
         relatorioUuid: relatorioUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<CarregaOcorrenciasRelatorioRow>> carregaOcorrenciasRelatorio({
     String? relatorioUuid,
+    String? accountOwnerUuid,
   }) =>
       performCarregaOcorrenciasRelatorio(
         _database,
         relatorioUuid: relatorioUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<CarregaItensObraRow>> carregaItensObra({
     String? tipo,
     int? obraId,
     String? obraUuid,
+    String? accountOwnerUuid,
   }) =>
       performCarregaItensObra(
         _database,
         tipo: tipo,
         obraId: obraId,
         obraUuid: obraUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<CarregaComentariosObraRow>> carregaComentariosObra({
     String? obraUuid,
+    String? accountOwnerUuid,
   }) =>
       performCarregaComentariosObra(
         _database,
         obraUuid: obraUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<CarregaOcorrenciasObraRow>> carregaOcorrenciasObra({
     String? obraUuid,
+    String? accountOwnerUuid,
   }) =>
       performCarregaOcorrenciasObra(
         _database,
         obraUuid: obraUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<ListaEtapasObraRow>> listaEtapasObra({
     String? obraUuid,
+    String? accountOwnerUuid,
   }) =>
       performListaEtapasObra(
         _database,
         obraUuid: obraUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<ListaTarefasEtapasObraRow>> listaTarefasEtapasObra({
     String? etapaUuid,
+    String? accountOwnerUuid,
   }) =>
       performListaTarefasEtapasObra(
         _database,
         etapaUuid: etapaUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   /// Todas as linhas da etapa (tarefa, insumo, equipamento, mão de obra) para árvore de planejamento.
   Future<List<ListaTarefasEtapasObraRow>> listaPlanejamentoEtapasObra({
     String? etapaUuid,
+    String? accountOwnerUuid,
   }) =>
       performListaPlanejamentoEtapasObra(
         _database,
         etapaUuid: etapaUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<UltimosRelatoriosObraRow>> ultimosRelatoriosObra({
     int? obraId,
     int? userId,
+    String? obraUuid,
+    String? accountOwnerUuid,
   }) =>
       performUltimosRelatoriosObra(
         _database,
         obraId: obraId,
         userId: userId,
+        obraUuid: obraUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<CarregaAnexosRelatorioRow>> carregaAnexosRelatorio({
     String? relatorioUuid,
+    String? accountOwnerUuid,
   }) =>
       performCarregaAnexosRelatorio(
         _database,
         relatorioUuid: relatorioUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<EquipamentosRecebidosObraRow>> equipamentosRecebidosObra({
     String? relatorioUuid,
+    String? accountOwnerUuid,
   }) =>
       performEquipamentosRecebidosObra(
         _database,
         relatorioUuid: relatorioUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<DetalhesMaterialRecebidoRow>> detalhesMaterialRecebido({
     String? uuid,
+    String? accountOwnerUuid,
   }) =>
       performDetalhesMaterialRecebido(
         _database,
         uuid: uuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<CarregaUltimaAtividadeRelatorioRow>>
@@ -270,75 +307,98 @@ class SQLiteManager {
 
   Future<List<GetitensdaobraRow>> getitensdaobra({
     String? relatorioUuid,
+    String? accountOwnerUuid,
   }) =>
       performGetitensdaobra(
         _database,
         relatorioUuid: relatorioUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<GetItensAtividadeRow>> getItensAtividade({
     String? atividadeUuid,
     String? tipo,
+    String? accountOwnerUuid,
   }) =>
       performGetItensAtividade(
         _database,
         atividadeUuid: atividadeUuid,
         tipo: tipo,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<CarregaFotosAtividadeRow>> carregaFotosAtividade({
     int? atividadeId,
+    String? accountOwnerUuid,
   }) =>
       performCarregaFotosAtividade(
         _database,
         atividadeId: atividadeId,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
-  Future<List<GetFotosAtividadeRow>> getFotosAtividade() =>
+  Future<List<GetFotosAtividadeRow>> getFotosAtividade({
+    String? atividadeUuid,
+    int? atividadeId,
+    String? accountOwnerUuid,
+  }) =>
       performGetFotosAtividade(
         _database,
+        atividadeUuid: atividadeUuid,
+        atividadeId: atividadeId,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<GetDadosAtividadeRow>> getDadosAtividade({
     String? uuid,
+    String? accountOwnerUuid,
   }) =>
       performGetDadosAtividade(
         _database,
         uuid: uuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<GetAtividadesRelatorioRow>> getAtividadesRelatorio({
     String? relatorioUuid,
+    String? accountOwnerUuid,
   }) =>
       performGetAtividadesRelatorio(
         _database,
         relatorioUuid: relatorioUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<GetOrdensServicoRow>> getOrdensServico({
     String? obraUuid,
     int? userId,
+    String? accountOwnerUuid,
   }) =>
       performGetOrdensServico(
         _database,
         obraUuid: obraUuid,
         userId: userId,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<GetTarefasOrdemRow>> getTarefasOrdem({
     String? ordemUuid,
+    String? accountOwnerUuid,
   }) =>
       performGetTarefasOrdem(
         _database,
         ordemUuid: ordemUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<GetDetalhesTarefaRow>> getDetalhesTarefa({
     String? uuid,
+    String? accountOwnerUuid,
   }) =>
       performGetDetalhesTarefa(
         _database,
         uuid: uuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<GetTarefasOrdemDetalhesRow>> getTarefasOrdemDetalhes({
@@ -360,7 +420,7 @@ class SQLiteManager {
   }) =>
       performGetGruposObras(
         _database,
-        userUuid: userUuid,
+        userUuid: _ownerOr(userUuid),
       );
 
   Future<List<GetClientesRow>> getClientes({
@@ -368,71 +428,87 @@ class SQLiteManager {
   }) =>
       performGetClientes(
         _database,
-        userUuid: userUuid,
+        userUuid: _ownerOr(userUuid),
       );
 
   Future<List<GetModelosChecklistRow>> getModelosChecklist({
     int? obraId,
+    String? accountOwnerUuid,
   }) =>
       performGetModelosChecklist(
         _database,
         obraId: obraId,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<GetMaoObraRelatorioRow>> getMaoObraRelatorio({
     String? relatorioUuid,
+    String? accountOwnerUuid,
   }) =>
       performGetMaoObraRelatorio(
         _database,
         relatorioUuid: relatorioUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<GetMaoObraRelatorioDetalhesRow>> getMaoObraRelatorioDetalhes({
     String? uuid,
+    String? accountOwnerUuid,
   }) =>
       performGetMaoObraRelatorioDetalhes(
         _database,
         uuid: uuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<GetOrdensServicoRelatorioRow>> getOrdensServicoRelatorio({
     String? relatorioUuid,
+    String? accountOwnerUuid,
   }) =>
       performGetOrdensServicoRelatorio(
         _database,
         relatorioUuid: relatorioUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<GetCustosOrdensRelatoriosRow>> getCustosOrdensRelatorios({
     String? ordemRelatorioUuid,
+    String? accountOwnerUuid,
   }) =>
       performGetCustosOrdensRelatorios(
         _database,
         ordemRelatorioUuid: ordemRelatorioUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<DetalhesComentarioRow>> detalhesComentario({
     int? id,
+    String? accountOwnerUuid,
   }) =>
       performDetalhesComentario(
         _database,
         id: id,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<DetalhesOcorrenciaRow>> detalhesOcorrencia({
     String? uuid,
+    String? accountOwnerUuid,
   }) =>
       performDetalhesOcorrencia(
         _database,
         uuid: uuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<GetDetalhesItemAtividadeRow>> getDetalhesItemAtividade({
     String? uuid,
+    String? accountOwnerUuid,
   }) =>
       performGetDetalhesItemAtividade(
         _database,
         uuid: uuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<GetTipoOcorrenciaDetalhesRow>> getTipoOcorrenciaDetalhes({
@@ -474,7 +550,7 @@ class SQLiteManager {
   }) =>
       performGetEquipamentos(
         _database,
-        userUuid: userUuid,
+        userUuid: _ownerOr(userUuid),
       );
 
   Future<List<GetInsumosRow>> getInsumos({
@@ -482,7 +558,7 @@ class SQLiteManager {
   }) =>
       performGetInsumos(
         _database,
-        userUuid: userUuid,
+        userUuid: _ownerOr(userUuid),
       );
 
   Future<List<GetLocaisRow>> getLocais({
@@ -490,7 +566,7 @@ class SQLiteManager {
   }) =>
       performGetLocais(
         _database,
-        userUuid: userUuid,
+        userUuid: _ownerOr(userUuid),
       );
 
   Future<List<GetFuncoesMaoObraRow>> getFuncoesMaoObra({
@@ -498,7 +574,7 @@ class SQLiteManager {
   }) =>
       performGetFuncoesMaoObra(
         _database,
-        userUuid: userUuid,
+        userUuid: _ownerOr(userUuid),
       );
 
   Future<List<GetMaoObraRow>> getMaoObra({
@@ -506,7 +582,7 @@ class SQLiteManager {
   }) =>
       performGetMaoObra(
         _database,
-        userUuid: userUuid,
+        userUuid: _ownerOr(userUuid),
       );
 
   Future<List<GetUsuariosRow>> getUsuarios({
@@ -535,17 +611,19 @@ class SQLiteManager {
   }) =>
       performGetTipoOcorrencias(
         _database,
-        userUuid: userUuid,
+        userUuid: _ownerOr(userUuid),
       );
 
   Future<List<RelatorioDetalhesCopyRow>> relatorioDetalhesCopy({
     String? uuid,
     String? userUuid,
+    String? accountOwnerUuid,
   }) =>
       performRelatorioDetalhesCopy(
         _database,
         uuid: uuid,
         userUuid: userUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid ?? userUuid),
       );
 
   Future<List<RelatoriosObraUltimosRow>> relatoriosObraUltimos({
@@ -555,15 +633,17 @@ class SQLiteManager {
       performRelatoriosObraUltimos(
         _database,
         obraUuid: obraUuid,
-        accountOwnerUuid: accountOwnerUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<ObraLocaisRow>> obraLocais({
     String? obraUuid,
+    String? accountOwnerUuid,
   }) =>
       performObraLocais(
         _database,
         obraUuid: obraUuid,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
       );
 
   Future<List<SyncHistoryRecentRow>> syncHistoryRecent({
@@ -597,6 +677,8 @@ class SQLiteManager {
     int? obraId,
     int? modeloId,
     String? dataexecutado,
+    String? dataInicio,
+    String? dataFinal,
     String? criador,
     int? numero,
     String? uuid,
@@ -611,6 +693,8 @@ class SQLiteManager {
         obraId: obraId,
         modeloId: modeloId,
         dataexecutado: dataexecutado,
+        dataInicio: dataInicio,
+        dataFinal: dataFinal,
         criador: criador,
         numero: numero,
         uuid: uuid,
@@ -723,7 +807,7 @@ class SQLiteManager {
     String? local,
     String? descricao,
     int? quantidade,
-    int? qtdRealizada,
+    num? qtdRealizada,
     String? unidade,
     String? item,
     int? tarefaId,
@@ -777,9 +861,9 @@ class SQLiteManager {
       );
 
   Future updateItemAtividade({
-    int? qtdRealizada,
+    num? qtdRealizada,
     String? uuid,
-    int? qtdUtilizada,
+    num? qtdUtilizada,
     num? qtdProduzida,
   }) =>
       performUpdateItemAtividade(
@@ -802,7 +886,7 @@ class SQLiteManager {
     required String uuid,
     String? local,
     String? descricao,
-    int? qtdRealizada,
+    num? qtdRealizada,
     String? unidade,
     int? situacao,
     int? ordemId,

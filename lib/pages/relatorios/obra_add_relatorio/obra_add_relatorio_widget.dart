@@ -19,6 +19,7 @@ import '/componentes/relatorios/ocorrencias_relatorio/ocorrencias_relatorio_widg
 import '/componentes/relatorios/ordens_custo_relatorio/ordens_custo_relatorio_widget.dart';
 import '/componentes/relatorios/includes/botao_adicionar_secao_relatorio/botao_adicionar_secao_relatorio_widget.dart';
 import '/componentes/navegacao/barra_navegacao_principal.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_animations.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/hh_mm_24h_input_formatter.dart';
@@ -377,21 +378,6 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
     super.dispose();
   }
 
-  BoxDecoration _decoBlocoAdicionar(BuildContext context) {
-    final theme = FlutterFlowTheme.of(context);
-    return BoxDecoration(
-      color: theme.secondaryBackground,
-      borderRadius: BorderRadius.circular(20),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.04),
-          blurRadius: 12,
-          offset: const Offset(0, 4),
-        ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     context.watch<FFAppState>();
@@ -455,7 +441,8 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
           child: Scaffold(
             key: scaffoldKey,
             backgroundColor: theme.primaryBackground,
-            appBar: _buildAppBar(theme, obraAddRelatorioRelatorioDetalhesRowList),
+            appBar:
+                _buildAppBar(theme, obraAddRelatorioRelatorioDetalhesRowList),
             body: FadeTransition(
               opacity: _animationController,
               child: Stack(
@@ -477,9 +464,6 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
                             _buildHeaderCard(theme,
                                 obraAddRelatorioRelatorioDetalhesRowList),
                             const SizedBox(height: 12),
-                            _buildInfoCard(theme,
-                                obraAddRelatorioRelatorioDetalhesRowList),
-                            const SizedBox(height: 12),
                             _buildHorariosCard(theme,
                                 obraAddRelatorioRelatorioDetalhesRowList),
                             const SizedBox(height: 12),
@@ -489,11 +473,11 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
                             _buildMateriaisCard(theme,
                                 obraAddRelatorioRelatorioDetalhesRowList),
                             const SizedBox(height: 12),
-                            _buildAtividadesCard(
-                                theme, obraAddRelatorioRelatorioDetalhesRowList),
+                            _buildAtividadesCard(theme,
+                                obraAddRelatorioRelatorioDetalhesRowList),
                             const SizedBox(height: 12),
-                            _buildCustosCard(
-                                theme, obraAddRelatorioRelatorioDetalhesRowList),
+                            _buildCustosCard(theme,
+                                obraAddRelatorioRelatorioDetalhesRowList),
                             const SizedBox(height: 12),
                             _buildComentariosCard(theme),
                             const SizedBox(height: 12),
@@ -525,193 +509,262 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
     FlutterFlowTheme theme,
     List<RelatorioDetalhesRow> data,
   ) {
+    final detalhes = data.firstOrNull;
+    final numero = detalhes?.numero?.toString();
+
+    final inicio = _dataExecutadoParaExibicao(detalhes?.dataInicio);
+    final fim = _dataExecutadoParaExibicao(detalhes?.dataFinal);
+    final ehPeriodo = inicio != '---' && fim != '---' && inicio != fim;
+    final dataUnica = _dataExecutadoParaExibicao(detalhes?.dataExecutado);
+
+    final identificacao = [
+      if (numero != null) 'RDO #$numero',
+      if (!ehPeriodo && dataUnica != '---') dataUnica,
+    ].join('  ·  ');
+
     return AppBar(
-      backgroundColor: Colors.transparent,
+      backgroundColor: theme.primary,
       elevation: 0,
       scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
       centerTitle: false,
-      leading: Container(
-        margin: const EdgeInsets.only(left: 8),
-        decoration: BoxDecoration(
-          color: theme.primary.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: IconButton(
-          icon: Icon(Icons.arrow_back_rounded, color: theme.primary),
-          onPressed: () => context.pop(),
-        ),
+      titleSpacing: 0,
+      toolbarHeight: ehPeriodo ? 74 : 60,
+      iconTheme: const IconThemeData(color: Colors.white),
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+        onPressed: () => context.pop(),
       ),
-      title: Text(
-        'Edição de Relatório',
-        style: GoogleFonts.inter(
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-          color: theme.primaryText,
-          letterSpacing: -0.3,
+      title: Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Edição de RDO',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                height: 1.2,
+                letterSpacing: -0.2,
+                color: Colors.white,
+              ),
+            ),
+            if (identificacao.isNotEmpty)
+              Text(
+                identificacao,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  height: 1.3,
+                  color: Colors.white.withValues(alpha: 0.78),
+                ),
+              ),
+            // Período ocupa uma linha própria e com fonte menor: em uma linha só
+            // as duas datas não cabem ao lado dos botões de ação.
+            if (ehPeriodo)
+              Text(
+                '$inicio a $fim',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  height: 1.3,
+                  color: Colors.white.withValues(alpha: 0.78),
+                ),
+              ),
+          ],
         ),
       ),
       actions: [
-        TextButton(
+        _acaoAppBar(
+          rotulo: 'Salvar',
+          tooltip: 'Salvar e voltar para a obra',
           onPressed: () => _irParaDetalhesObra(
-            obraId: data.firstOrNull?.obraId,
-            obraUuid: data.firstOrNull?.obraUuid,
-          ),
-          style: TextButton.styleFrom(
-            foregroundColor: theme.secondaryText,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            minimumSize: const Size(0, 36),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-          child: Text(
-            'Salvar',
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
+            obraId: detalhes?.obraId,
+            obraUuid: detalhes?.obraUuid,
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: FilledButton(
-            onPressed: () async {
-              await showDialog(
-                context: context,
-                builder: (dialogContext) => _rdoDialogWide(
-                  ConcluirRelatorioDialogWidget(
-                    relatorioId: widget.id!,
-                    obraId: data.firstOrNull?.obraId,
-                    relatorioUuid: widget.uuid!,
-                    obraUuid: data.firstOrNull?.obraUuid,
-                  ),
+        const SizedBox(width: 6),
+        _acaoAppBar(
+          rotulo: 'Enviar',
+          icone: Icons.send_rounded,
+          tooltip: 'Enviar para aprovação',
+          destaque: true,
+          onPressed: () async {
+            await showDialog(
+              context: context,
+              builder: (dialogContext) => _rdoDialogWide(
+                ConcluirRelatorioDialogWidget(
+                  relatorioId: widget.id!,
+                  obraId: detalhes?.obraId,
+                  relatorioUuid: widget.uuid!,
+                  obraUuid: detalhes?.obraUuid,
                 ),
-              );
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: theme.primary,
-              foregroundColor: theme.info,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              minimumSize: const Size(0, 36),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
               ),
-            ),
-            child: Text(
-              'Enviar para aprovação',
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+            );
+          },
         ),
+        const SizedBox(width: 8),
       ],
     );
   }
 
-  Widget _buildHeaderCard(
-    FlutterFlowTheme theme,
-    List<RelatorioDetalhesRow> data,
-  ) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: theme.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
+  /// Ação compacta da AppBar: contornada para a secundária, preenchida para a principal.
+  Widget _acaoAppBar({
+    required String rotulo,
+    required String tooltip,
+    required VoidCallback onPressed,
+    IconData? icone,
+    bool destaque = false,
+  }) {
+    final estilo = TextButton.styleFrom(
+      foregroundColor: Colors.white,
+      backgroundColor:
+          destaque ? Colors.white.withValues(alpha: 0.22) : Colors.transparent,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+      minimumSize: const Size(0, 26),
+      maximumSize: const Size(double.infinity, 26),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: destaque
+            ? BorderSide.none
+            : BorderSide(color: Colors.white.withValues(alpha: 0.45)),
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: theme.primary,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              'Preenchendo',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
+    );
+
+    final texto = Text(
+      rotulo,
+      style: GoogleFonts.inter(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        height: 1.1,
+      ),
+    );
+
+    // O AppBar empilha as ações num Row com CrossAxisAlignment.stretch, o que
+    // impõe altura da toolbar inteira ao botão; o Center desfaz esse esticão.
+    return Center(
+      widthFactor: 1,
+      child: Tooltip(
+        message: tooltip,
+        child: icone == null
+            ? TextButton(onPressed: onPressed, style: estilo, child: texto)
+            : TextButton.icon(
+                onPressed: onPressed,
+                style: estilo,
+                icon: Icon(icone, size: 13),
+                label: texto,
               ),
-            ),
-          ),
-          const Spacer(),
-          Text(
-            'RDO #${data.firstOrNull?.numero ?? '---'}',
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: theme.primaryText,
-            ),
-          ),
-        ],
       ),
     );
   }
 
-  Widget _buildInfoCard(
+  /// Hero no estilo do cabeçalho dos diálogos de ordem de serviço do web:
+  /// faixa na cor primária com a identificação do RDO e, abaixo, os KPIs.
+  Widget _buildHeaderCard(
     FlutterFlowTheme theme,
     List<RelatorioDetalhesRow> data,
   ) {
+    final detalhes = data.firstOrNull;
+    final entrada = (detalhes?.entradaManha ?? '').trim();
+    final saida = (detalhes?.saidaTarde ?? '').trim();
+    final jornada = entrada.isEmpty && saida.isEmpty
+        ? '--'
+        : '${entrada.isEmpty ? '--' : entrada} - ${saida.isEmpty ? '--' : saida}';
+
+    final inicio = _dataExecutadoParaExibicao(detalhes?.dataInicio);
+    final fim = _dataExecutadoParaExibicao(detalhes?.dataFinal);
+    final ehPeriodo = inicio != '---' && fim != '---' && inicio != fim;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: _decoBlocoAdicionar(context),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Row(
+      clipBehavior: Clip.antiAlias,
+      decoration: rdoCardDecoration(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
+            decoration: BoxDecoration(
+              color: theme.primaryBackground.withValues(alpha: 0.5),
+              border: Border(bottom: BorderSide(color: theme.alternate)),
+            ),
+            child: Row(
               children: [
+                Icon(Icons.apartment_rounded,
+                    size: 16, color: theme.secondaryText),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: _buildReadOnlyField(
-                    theme,
-                    label: 'Nº',
-                    value: data.firstOrNull?.numero?.toString() ?? '---',
+                  child: FutureBuilder<List<ObraDetalhesRow>>(
+                    future: SQLiteManager.instance.obraDetalhes(
+                      uuid: detalhes?.obraUuid,
+                      userId: FFAppState().creatorId,
+                      accountOwnerUuid: FFAppState().creatorUuid,
+                    ),
+                    builder: (context, snapshot) {
+                      return Text(
+                        snapshot.data?.firstOrNull?.nome ?? 'Carregando...',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: theme.primaryText,
+                        ),
+                      );
+                    },
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildReadOnlyField(
-                    theme,
-                    label: 'Data',
-                    value: _dataExecutadoParaExibicao(
-                        data.firstOrNull?.dataExecutado),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: theme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    'Preenchendo',
+                    style: GoogleFonts.inter(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: theme.primary,
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            FutureBuilder<List<ObraDetalhesRow>>(
-              future: SQLiteManager.instance.obraDetalhes(
-                uuid: data.firstOrNull?.obraUuid,
-                userId: FFAppState().creatorId,
-                accountOwnerUuid: FFAppState().creatorUuid,
+          ),
+          RdoKpiStrip(
+            itens: [
+              RdoKpiData(
+                label: 'RDO nº',
+                value: detalhes?.numero?.toString() ?? '---',
               ),
-              builder: (context, snapshot) {
-                return Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    color: theme.alternate.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    snapshot.data?.firstOrNull?.nome ?? 'Carregando...',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: theme.primaryText,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
+              // Célula estreita: no período a data final vai para a linha de apoio.
+              RdoKpiData(
+                label: ehPeriodo ? 'Período' : 'Data',
+                value: ehPeriodo
+                    ? inicio
+                    : _dataExecutadoParaExibicao(detalhes?.dataExecutado),
+                hint: ehPeriodo ? 'até $fim' : null,
+              ),
+              RdoKpiData(
+                label: 'Jornada',
+                value: jornada,
+                destaque: true,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -720,104 +773,79 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
     FlutterFlowTheme theme,
     List<RelatorioDetalhesRow> data,
   ) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: _decoBlocoAdicionar(context),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Horários de Trabalho',
-              style: GoogleFonts.inter(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: theme.primaryText,
-              ),
+    return RdoSectionCard(
+      title: 'Horários de Trabalho',
+      icon: Icons.schedule_rounded,
+      contentPadding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildTimeField(
+            controlName: 'entrada',
+            ensure: (t) =>
+                _model.textFieldNumeroTextController2 ??= TextEditingController(text: t),
+            focusNode: _model.textFieldNumeroFocusNode2,
+            label: 'Entrada',
+            value: data.firstOrNull?.entradaManha ?? '',
+            onSaved: () => _updateRelatorioDebounced(
+              context,
+              dataExecutadoSql: data.firstOrNull?.dataExecutado ?? '',
+              successMessage: 'Horário atualizado!',
             ),
-            const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildTimeField(
-                  theme,
-                  controlName: 'entrada',
-                  ensure: (t) => _model.textFieldNumeroTextController2 ??=
-                      TextEditingController(text: t),
-                  focusNode: _model.textFieldNumeroFocusNode2,
-                  label: 'Entrada',
-                  value: data.firstOrNull?.entradaManha ?? '',
-                  onSaved: () => _updateRelatorioDebounced(
-                    context,
-                    dataExecutadoSql: data.firstOrNull?.dataExecutado ?? '',
-                    successMessage: 'Horário atualizado!',
-                  ),
-                  validator: _model.textFieldNumeroTextController2Validator
-                      .asValidator(context),
-                ),
-                const SizedBox(width: 8),
-                _buildTimeField(
-                  theme,
-                  controlName: 'inicio',
-                  ensure: (t) => _model.textFieldHorasTextController1 ??=
-                      TextEditingController(text: t),
-                  focusNode: _model.textFieldHorasFocusNode1,
-                  label: 'Início int.',
-                  value: data.firstOrNull?.inicioIntervalo ?? '',
-                  onSaved: () => _updateRelatorioDebounced(
-                    context,
-                    dataExecutadoSql: data.firstOrNull?.dataExecutado ?? '',
-                    successMessage: 'Horário atualizado!',
-                  ),
-                  validator: _model.textFieldHorasTextController1Validator
-                      .asValidator(context),
-                ),
-                const SizedBox(width: 8),
-                _buildTimeField(
-                  theme,
-                  controlName: 'fim',
-                  ensure: (t) => _model.textFieldHorasTextController2 ??=
-                      TextEditingController(text: t),
-                  focusNode: _model.textFieldHorasFocusNode2,
-                  label: 'Fim int.',
-                  value: data.firstOrNull?.fimIntervalo ?? '',
-                  onSaved: () => _updateRelatorioDebounced(
-                    context,
-                    dataExecutadoSql: data.firstOrNull?.dataExecutado ?? '',
-                    successMessage: 'Horário atualizado!',
-                  ),
-                  validator: _model.textFieldHorasTextController2Validator
-                      .asValidator(context),
-                ),
-                const SizedBox(width: 8),
-                _buildTimeField(
-                  theme,
-                  controlName: 'saida',
-                  ensure: (t) => _model.textFieldHorasTextController3 ??=
-                      TextEditingController(text: t),
-                  focusNode: _model.textFieldHorasFocusNode3,
-                  label: 'Saída',
-                  value: data.firstOrNull?.saidaTarde ?? '',
-                  onSaved: () => _updateRelatorioDebounced(
-                    context,
-                    dataExecutadoSql: data.firstOrNull?.dataExecutado ?? '',
-                    successMessage: 'Horário atualizado!',
-                  ),
-                  validator: _model.textFieldHorasTextController3Validator
-                      .asValidator(context),
-                ),
-              ],
+            validator: _model.textFieldNumeroTextController2Validator.asValidator(context),
+          ),
+          const SizedBox(width: 6),
+          _buildTimeField(
+            controlName: 'inicio',
+            ensure: (t) =>
+                _model.textFieldHorasTextController1 ??= TextEditingController(text: t),
+            focusNode: _model.textFieldHorasFocusNode1,
+            label: 'Início int.',
+            value: data.firstOrNull?.inicioIntervalo ?? '',
+            onSaved: () => _updateRelatorioDebounced(
+              context,
+              dataExecutadoSql: data.firstOrNull?.dataExecutado ?? '',
+              successMessage: 'Horário atualizado!',
             ),
-          ],
-        ),
+            validator: _model.textFieldHorasTextController1Validator.asValidator(context),
+          ),
+          const SizedBox(width: 6),
+          _buildTimeField(
+            controlName: 'fim',
+            ensure: (t) =>
+                _model.textFieldHorasTextController2 ??= TextEditingController(text: t),
+            focusNode: _model.textFieldHorasFocusNode2,
+            label: 'Fim int.',
+            value: data.firstOrNull?.fimIntervalo ?? '',
+            onSaved: () => _updateRelatorioDebounced(
+              context,
+              dataExecutadoSql: data.firstOrNull?.dataExecutado ?? '',
+              successMessage: 'Horário atualizado!',
+            ),
+            validator: _model.textFieldHorasTextController2Validator.asValidator(context),
+          ),
+          const SizedBox(width: 6),
+          _buildTimeField(
+            controlName: 'saida',
+            ensure: (t) =>
+                _model.textFieldHorasTextController3 ??= TextEditingController(text: t),
+            focusNode: _model.textFieldHorasFocusNode3,
+            label: 'Saída',
+            value: data.firstOrNull?.saidaTarde ?? '',
+            onSaved: () => _updateRelatorioDebounced(
+              context,
+              dataExecutadoSql: data.firstOrNull?.dataExecutado ?? '',
+              successMessage: 'Horário atualizado!',
+            ),
+            validator: _model.textFieldHorasTextController3Validator.asValidator(context),
+          ),
+        ],
       ),
     );
   }
 
   /// [ensure] cria o controller com o texto vindo do SQLite (só na 1.ª atribuição, como no FF antigo).
-  Widget _buildTimeField(
-    FlutterFlowTheme theme, {
+  Widget _buildTimeField({
     required String controlName,
     required TextEditingController Function(String initial) ensure,
     required FocusNode? focusNode,
@@ -839,36 +867,8 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
             await onSaved();
           },
         ),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: GoogleFonts.inter(fontSize: 11),
-          filled: true,
-          fillColor: theme.secondaryBackground,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: theme.alternate),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: theme.primary, width: 1.5),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: theme.error),
-          ),
-          focusedErrorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: theme.error, width: 1.5),
-          ),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-          counterText: '',
-        ),
-        style: GoogleFonts.inter(fontSize: 13),
+        decoration: rdoCompactFieldDecoration(context, label: label),
+        style: rdoCompactFieldTextStyle(context),
         textAlign: TextAlign.center,
         maxLength: 5,
         maxLengthEnforcement: MaxLengthEnforcement.enforced,
@@ -878,38 +878,15 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
     );
   }
 
-  Widget _buildReadOnlyField(
-    FlutterFlowTheme theme, {
-    required String label,
-    required String value,
-  }) {
-    return TextFormField(
-      initialValue: value,
-      readOnly: true,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: GoogleFonts.inter(fontSize: 12),
-        filled: true,
-        fillColor: theme.alternate.withValues(alpha: 0.3),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      ),
-      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500),
-      textAlign: TextAlign.center,
-    );
-  }
-
   Widget _buildSectionCard({
     required FlutterFlowTheme theme,
     required String title,
     required Widget child,
     required VoidCallback onAdd,
+    IconData? icon,
     String addTooltip = 'Adicionar',
     bool showAdd = true,
+    Widget? headerExtra,
     String? secaoRecolherChave,
     EdgeInsetsGeometry sectionMargin =
         const EdgeInsets.symmetric(horizontal: 16),
@@ -919,76 +896,21 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
         ? true
         : (_relatorioSecaoExpandida[secaoRecolherChave] ?? false);
 
-    return Container(
+    return RdoSectionCard(
+      title: title,
+      icon: icon,
       margin: sectionMargin,
-      decoration: _decoBlocoAdicionar(context),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
-            child: Row(
+      contentPadding: contentPadding,
+      expandida: expandida,
+      onToggle: secaoRecolherChave == null
+          ? null
+          : () => _toggleRelatorioSecao(secaoRecolherChave),
+      trailing: (headerExtra == null && !showAdd)
+          ? null
+          : Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                if (secaoRecolherChave != null)
-                  IconButton(
-                    onPressed: () => _toggleRelatorioSecao(secaoRecolherChave),
-                    tooltip: expandida ? 'Recolher' : 'Expandir',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 32,
-                      minHeight: 32,
-                    ),
-                    visualDensity: VisualDensity.compact,
-                    style: IconButton.styleFrom(
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      backgroundColor: Colors.transparent,
-                      foregroundColor: theme.secondaryText,
-                    ),
-                    icon: Icon(
-                      expandida
-                          ? Icons.expand_less_rounded
-                          : Icons.expand_more_rounded,
-                      size: 22,
-                    ),
-                  )
-                else
-                  const SizedBox(width: 4),
-                Expanded(
-                  child: secaoRecolherChave != null
-                      ? InkWell(
-                          onTap: () =>
-                              _toggleRelatorioSecao(secaoRecolherChave),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 6,
-                              horizontal: 2,
-                            ),
-                            child: Text(
-                              title,
-                              style: GoogleFonts.inter(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: theme.primaryText,
-                              ),
-                            ),
-                          ),
-                        )
-                      : Padding(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 6,
-                            horizontal: 4,
-                          ),
-                          child: Text(
-                            title,
-                            style: GoogleFonts.inter(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: theme.primaryText,
-                            ),
-                          ),
-                        ),
-                ),
+                if (headerExtra != null) headerExtra,
                 if (showAdd)
                   BotaoAdicionarSecaoRelatorioWidget(
                     onPressed: onAdd,
@@ -996,27 +918,7 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
                   ),
               ],
             ),
-          ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeInOut,
-            alignment: Alignment.topCenter,
-            child: expandida
-                ? Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Divider(height: 1),
-                      Padding(
-                        padding: contentPadding,
-                        child: child,
-                      ),
-                    ],
-                  )
-                : const SizedBox.shrink(),
-          ),
-        ],
-      ),
+      child: child,
     );
   }
 
@@ -1027,6 +929,7 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
     return _buildSectionCard(
       theme: theme,
       title: 'Gestão de Mão de Obra',
+      icon: Icons.groups_rounded,
       secaoRecolherChave: _secMaoObra,
       addTooltip: 'Adicionar mão de obra',
       onAdd: () async {
@@ -1040,10 +943,8 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
                   _model.textFieldNumeroTextController2?.text,
               relatorioInicioIntervalo:
                   _model.textFieldHorasTextController1?.text,
-              relatorioFimIntervalo:
-                  _model.textFieldHorasTextController2?.text,
-              relatorioSaidaTarde:
-                  _model.textFieldHorasTextController3?.text,
+              relatorioFimIntervalo: _model.textFieldHorasTextController2?.text,
+              relatorioSaidaTarde: _model.textFieldHorasTextController3?.text,
             ),
           ),
         );
@@ -1082,83 +983,127 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
             itemBuilder: (context, index) {
               final item = list[index];
               return Container(
-                padding: const EdgeInsets.all(8),
+                clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
-                  color: theme.alternate.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(14),
+                  color: theme.secondaryBackground,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: theme.alternate),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                item.descricao ?? 'N/A',
-                                style: GoogleFonts.inter(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(10, 4, 4, 4),
+                      decoration: BoxDecoration(
+                        color: theme.primaryBackground.withValues(alpha: 0.5),
+                        border: Border(
+                          bottom: BorderSide(color: theme.alternate),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 18,
+                            child: Text(
+                              '${index + 1}',
+                              style: rdoColumnLabelStyle(context),
+                            ),
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  item.descricao ?? 'N/A',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.primaryText,
+                                  ),
                                 ),
-                              ),
-                              if ((item.cargoFuncao ?? '').trim().isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 2),
-                                  child: Text(
+                                if ((item.cargoFuncao ?? '').trim().isNotEmpty)
+                                  Text(
                                     (item.cargoFuncao ?? '').trim(),
                                     style: GoogleFonts.inter(
-                                      fontSize: 12,
+                                      fontSize: 11,
                                       fontWeight: FontWeight.w500,
                                       color: theme.secondaryText,
                                     ),
                                   ),
-                                ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                        IconButton(
-                          icon: FaIcon(FontAwesomeIcons.trashAlt,
-                              size: 14, color: theme.error),
-                          tooltip: 'Excluir',
-                          onPressed: () async {
-                            await showDialog(
-                              context: context,
-                              builder: (ctx) => _rdoDialogWide(
-                                CofirmaExclusaoMaoObraRelatorioWidget(
-                                  uuid: item.uuid!,
+                          MaoObraPresencaControlsWidget(
+                            key: Key('presenca_${item.uuid}'),
+                            uuid: item.uuid!,
+                            statusPresenca: item.statusPresenca,
+                            motivoAusencia: item.motivoAusencia,
+                            onSaved: () => safeSetState(() {}),
+                          ),
+                          Container(
+                            width: 1,
+                            height: 18,
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            color: theme.alternate,
+                          ),
+                          IconButton(
+                            icon: FaIcon(FontAwesomeIcons.trashAlt,
+                                size: 14, color: theme.error),
+                            tooltip: 'Excluir',
+                            padding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                            constraints: const BoxConstraints(
+                              minWidth: 30,
+                              minHeight: 30,
+                            ),
+                            onPressed: () async {
+                              await showDialog(
+                                context: context,
+                                builder: (ctx) => _rdoDialogWide(
+                                  CofirmaExclusaoMaoObraRelatorioWidget(
+                                    uuid: item.uuid!,
+                                  ),
                                 ),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
+                              );
+                            },
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 6),
-                    MaoObraPresencaControlsWidget(
-                      key: Key('presenca_${item.uuid}'),
-                      uuid: item.uuid!,
-                      statusPresenca: item.statusPresenca,
-                      motivoAusencia: item.motivoAusencia,
-                      onSaved: () => safeSetState(() {}),
-                    ),
-                    const SizedBox(height: 8),
-                    MaoObraHorariosFormWidget(
-                      key: Key('mao_hor_${item.id}_${item.uuid}'),
-                      uuid: item.uuid!,
-                      horaEntrada: item.horaEntrada ?? '08:00',
-                      intervaloInicio: item.intervaloInicio ?? '11:00',
-                      intervaloFim: item.intervaloFim ?? '13:00',
-                      horaSaida: item.horaSaida ?? '17:00',
-                      relatorioEntradaManha:
-                          data.firstOrNull?.entradaManha ?? '08:00',
-                      relatorioSaidaTarde:
-                          data.firstOrNull?.saidaTarde ?? '17:00',
-                      motivoAtrasoColumn: item.motivoAtraso,
-                      motivoSaidaCedo: item.motivoSaidaCedo,
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (item.statusPresenca == 'ausente') ...[
+                            MaoObraPresencaControlsWidget(
+                              key: Key('presenca_motivo_${item.uuid}'),
+                              uuid: item.uuid!,
+                              statusPresenca: item.statusPresenca,
+                              motivoAusencia: item.motivoAusencia,
+                              onSaved: () => safeSetState(() {}),
+                              modo: MaoObraPresencaModo.motivo,
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                          MaoObraHorariosFormWidget(
+                            key: Key('mao_hor_${item.id}_${item.uuid}'),
+                            uuid: item.uuid!,
+                            horaEntrada: item.horaEntrada ?? '08:00',
+                            intervaloInicio: item.intervaloInicio ?? '11:00',
+                            intervaloFim: item.intervaloFim ?? '13:00',
+                            horaSaida: item.horaSaida ?? '17:00',
+                            relatorioEntradaManha:
+                                data.firstOrNull?.entradaManha ?? '08:00',
+                            relatorioSaidaTarde:
+                                data.firstOrNull?.saidaTarde ?? '17:00',
+                            motivoAtrasoColumn: item.motivoAtraso,
+                            motivoSaidaCedo: item.motivoSaidaCedo,
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -1177,6 +1122,7 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
     return _buildSectionCard(
       theme: theme,
       title: 'Materiais Recebidos',
+      icon: Icons.inventory_2_outlined,
       secaoRecolherChave: _secMateriais,
       addTooltip: 'Adicionar material recebido',
       onAdd: () async {
@@ -1205,6 +1151,7 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
     return _buildSectionCard(
       theme: theme,
       title: 'Atividades Realizadas',
+      icon: Icons.checklist_rounded,
       secaoRecolherChave: _secAtividades,
       addTooltip: 'Adicionar atividade',
       onAdd: () async {
@@ -1248,6 +1195,7 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
     return _buildSectionCard(
       theme: theme,
       title: 'Ordens de Custo',
+      icon: Icons.receipt_long_outlined,
       secaoRecolherChave: _secCustos,
       addTooltip: 'Vincular ordem de serviço',
       onAdd: () async {
@@ -1271,11 +1219,11 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
   }
 
   Widget _buildComentariosCard(FlutterFlowTheme theme) {
-    final canCreate =
-        MembershipAccess.canPermission('create_comentarios');
+    final canCreate = MembershipAccess.canPermission('create_comentarios');
     return _buildSectionCard(
       theme: theme,
       title: 'Comentários',
+      icon: Icons.chat_bubble_outline_rounded,
       secaoRecolherChave: _secComentarios,
       addTooltip: 'Adicionar comentário',
       showAdd: canCreate,
@@ -1305,11 +1253,11 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
   }
 
   Widget _buildOcorrenciasCard(FlutterFlowTheme theme) {
-    final canCreate =
-        MembershipAccess.canPermission('create_ocorrencias');
+    final canCreate = MembershipAccess.canPermission('create_ocorrencias');
     return _buildSectionCard(
       theme: theme,
       title: 'Ocorrências',
+      icon: Icons.report_problem_outlined,
       secaoRecolherChave: _secOcorrencias,
       addTooltip: 'Adicionar ocorrência',
       showAdd: canCreate,
@@ -1342,6 +1290,7 @@ class _ObraAddRelatorioWidgetState extends State<ObraAddRelatorioWidget>
     return _buildSectionCard(
       theme: theme,
       title: 'Anexos',
+      icon: Icons.attach_file_rounded,
       secaoRecolherChave: _secAnexos,
       addTooltip: 'Adicionar anexo',
       onAdd: () async {

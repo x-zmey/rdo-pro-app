@@ -4,12 +4,16 @@ import '/auth/membership_access.dart';
 import '/backend/sqlite/empresa_multi_tenant_sqlite.dart';
 import '/backend/sqlite/sqlite_manager.dart';
 import '/componentes/navegacao/barra_navegacao_principal.dart';
+import '/componentes/ui/rdo_estilo.dart';
+import '/custom_code/actions/ensure_obras_fotos_locais.dart';
+import '/custom_code/actions/obra_foto_url.dart';
 import '/custom_code/actions/sync_push_runner.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/componentes/tenant_switcher/tenant_switcher_widget.dart';
 import '/index.dart';
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -72,12 +76,27 @@ class _InicioWidgetState extends State<InicioWidget> {
       _tenantRefreshRunning = false;
       if (mounted) _recarregarLista();
     }
+    await _garantirCapas(forcar: true);
+  }
+
+  /// Baixa as capas que faltam (obra com foto no servidor e sem arquivo local).
+  Future<void> _garantirCapas({bool forcar = false}) async {
+    try {
+      final baixadas = await ensureObrasFotosLocais(forcar: forcar);
+      if (mounted) _recarregarLista();
+      if (baixadas > 0) {
+        debugPrint('Capas de obra atualizadas: $baixadas');
+      }
+    } catch (e) {
+      debugPrint('Erro ao baixar capas das obras: $e');
+    }
   }
 
   void _onTenantContextChanged() {
     final v = FFAppState().tenantContextVersion;
     if (v == _lastTenantContextVersion) return;
     _lastTenantContextVersion = v;
+    resetObrasFotosLocaisCache();
     _recarregarLista();
     unawaited(_runSyncAndReload());
   }
@@ -97,6 +116,7 @@ class _InicioWidgetState extends State<InicioWidget> {
       await refreshAllowedObraIdsIfNeeded();
       // Atualiza lista cedo (permissões/vínculos) sem esperar o sync completo.
       if (mounted) _recarregarLista();
+      unawaited(_garantirCapas());
       await _runSyncAndReload();
     });
   }
@@ -256,57 +276,213 @@ class _InicioWidgetState extends State<InicioWidget> {
       ],
       child: Container(
         height: _filtroRowHeight,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 9),
         decoration: BoxDecoration(
-          color: t.secondaryBackground,
-          borderRadius: BorderRadius.circular(12),
+          color: hasSpecificStatus
+              ? selectedAccent.withValues(alpha: 0.07)
+              : t.primaryBackground.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: hasSpecificStatus
                 ? selectedAccent.withValues(alpha: 0.45)
-                : Theme.of(context).dividerColor.withValues(alpha: 0.3),
-            width: hasSpecificStatus ? 1.2 : 1.0,
+                : t.alternate,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 18,
-              height: 18,
-              decoration: BoxDecoration(
-                color: selectedAccent.withValues(alpha: 0.14),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.flag_rounded, size: 11, color: selectedAccent),
-            ),
+            Icon(Icons.flag_rounded, size: 13, color: selectedAccent),
             const SizedBox(width: 6),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 98),
+              constraints: const BoxConstraints(maxWidth: 92),
               child: Text(
                 _labelFiltroSituacao(situacoes),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: t.bodySmall.override(
-                  font: GoogleFonts.inter(),
-                  fontWeight: FontWeight.w700,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                   color: t.primaryText,
-                  fontSize: (t.bodySmall.fontSize ?? 14.0) * 0.93,
                 ),
               ),
             ),
-            const SizedBox(width: 2),
-            Icon(Icons.expand_more_rounded, size: 17, color: t.secondaryText),
+            const SizedBox(width: 1),
+            Icon(Icons.expand_more_rounded, size: 16, color: t.secondaryText),
           ],
         ),
       ),
     );
+  }
+
+  Widget _barraFiltros({
+    required List<SituacaoObraRow> situacoes,
+    required int exibindo,
+    required int total,
+  }) {
+    final t = FlutterFlowTheme.of(context);
+    final temBusca = _model.textControllerBusca?.text.isNotEmpty ?? false;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+      decoration: rdoCardDecoration(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              children: [
+                _statusFilterDropdown(context: context, situacoes: situacoes),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: SizedBox(
+                    height: _filtroRowHeight,
+                    child: TextField(
+                      controller: _model.textControllerBusca,
+                      focusNode: _model.textFieldBuscaFocusNode,
+                      textInputAction: TextInputAction.search,
+                      style: rdoCompactFieldTextStyle(context),
+                      decoration: rdoCompactFieldDecoration(
+                        context,
+                        hint: 'Buscar obra, cidade, contrato...',
+                      ).copyWith(
+                        prefixIcon: Icon(
+                          Icons.search_rounded,
+                          size: 18,
+                          color: t.secondaryText,
+                        ),
+                        prefixIconConstraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                        suffixIcon: temBusca
+                            ? IconButton(
+                                tooltip: 'Limpar',
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                  minWidth: 30,
+                                  minHeight: 30,
+                                ),
+                                icon: Icon(
+                                  Icons.close_rounded,
+                                  size: 16,
+                                  color: t.secondaryText,
+                                ),
+                                onPressed: () =>
+                                    _model.textControllerBusca?.clear(),
+                              )
+                            : null,
+                        suffixIconConstraints: const BoxConstraints(
+                          minWidth: 30,
+                          minHeight: 30,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 2,
+                          vertical: 10,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
+            decoration: BoxDecoration(
+              color: t.primaryBackground.withValues(alpha: 0.45),
+              border: Border(top: BorderSide(color: t.alternate)),
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(kRdoRadius),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.layers_outlined, size: 13, color: t.secondaryText),
+                const SizedBox(width: 5),
+                Text(
+                  '$exibindo OBRA${exibindo == 1 ? '' : 'S'}',
+                  style: rdoColumnLabelStyle(context),
+                ),
+                if (exibindo != total) ...[
+                  const Spacer(),
+                  Text(
+                    'de $total no total',
+                    style: GoogleFonts.inter(
+                      fontSize: 10.5,
+                      color: t.secondaryText.withValues(alpha: 0.85),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _abrirObra(CarregaObrasRow r) {
+    if (!MembershipAccess.canAccessObra(r.id)) {
+      MembershipAccess.showDenied(
+        context,
+        'Você não tem acesso a esta obra.',
+      );
+      return;
+    }
+    context.pushNamed(
+      DetalhesObraWidget.routeName,
+      queryParameters: {
+        'obraId': serializeParam(r.id, ParamType.int),
+        'obraUuid': serializeParam(r.uuid, ParamType.String),
+      }.withoutNulls,
+      extra: <String, dynamic>{
+        '__transition_info__': const TransitionInfo(
+          hasTransition: true,
+          transitionType: PageTransitionType.bottomToTop,
+        ),
+      },
+    );
+  }
+
+  /// Capa da obra: arquivo baixado no sync (`obras.foto_local`); cai para a URL
+  /// remota (path S3 absoluto ou relativo) e, no limite, para o ícone.
+  Widget _capaObra(CarregaObrasRow r, Color accent) {
+    final local = _str(r.fotoLocal);
+    final remoto = _str(r.foto);
+
+    Widget placeholder() => Container(
+          color: accent.withValues(alpha: 0.10),
+          alignment: Alignment.center,
+          child: Icon(Icons.domain_rounded, size: 24, color: accent),
+        );
+
+    if (local.isNotEmpty && !local.startsWith('http')) {
+      try {
+        final arquivo = local.startsWith('file://')
+            ? File.fromUri(Uri.parse(local))
+            : File(local);
+        if (arquivo.existsSync()) {
+          return Image.file(
+            arquivo,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => placeholder(),
+          );
+        }
+      } catch (_) {}
+    }
+
+    final url = resolveObraFotoNetworkUrl(foto: remoto) ??
+        (local.startsWith('http') ? local : '');
+    if (url.isNotEmpty) {
+      return Image.network(
+        url,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => placeholder(),
+      );
+    }
+
+    return placeholder();
   }
 
   Widget _obraCard({
@@ -327,129 +503,97 @@ class _InicioWidgetState extends State<InicioWidget> {
     } else if (di.isEmpty) {
       periodo = 'Até $df';
     } else {
-      periodo = '$di → $df';
+      periodo = '$di - $df';
     }
-
-    final obraTitleSize = (t.titleMedium.fontSize ?? 18.0) * 0.85;
-
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 5),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: () {
-            final obraId = r.id;
-            if (!MembershipAccess.canAccessObra(obraId)) {
-              MembershipAccess.showDenied(
-                context,
-                'Você não tem acesso a esta obra.',
-              );
-              return;
-            }
-            context.pushNamed(
-              DetalhesObraWidget.routeName,
-              queryParameters: {
-                'obraId': serializeParam(r.id, ParamType.int),
-                'obraUuid': serializeParam(r.uuid, ParamType.String),
-              }.withoutNulls,
-              extra: <String, dynamic>{
-                '__transition_info__': const TransitionInfo(
-                  hasTransition: true,
-                  transitionType: PageTransitionType.bottomToTop,
-                ),
-              },
-            );
-          },
-          child: Ink(
-            decoration: BoxDecoration(
-              color: t.secondaryBackground,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: Theme.of(context).dividerColor.withValues(alpha: 0.28),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: rdoCardDecoration(context),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _abrirObra(r),
             child: IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Container(
-                    width: 4,
-                    decoration: BoxDecoration(
-                      color: accent,
-                      borderRadius: const BorderRadius.horizontal(
-                        left: Radius.circular(13),
-                      ),
-                    ),
-                  ),
+                  Container(width: 3.5, color: accent),
+                  SizedBox(width: 86, child: _capaObra(r, accent)),
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+                      padding: const EdgeInsets.fromLTRB(10, 9, 6, 9),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(Icons.domain_rounded, size: 17, color: accent),
-                              const SizedBox(width: 7),
                               Expanded(
                                 child: Text(
                                   r.nome,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: t.titleMedium.override(
-                                    font: GoogleFonts.interTight(fontWeight: FontWeight.w700),
-                                    letterSpacing: 0,
+                                  style: GoogleFonts.interTight(
+                                    fontSize: 14,
                                     fontWeight: FontWeight.w700,
-                                    fontSize: obraTitleSize,
+                                    height: 1.2,
+                                    color: t.primaryText,
                                   ),
                                 ),
                               ),
                               Icon(
                                 Icons.chevron_right_rounded,
                                 color: t.secondaryText,
-                                size: 20,
+                                size: 19,
                               ),
                             ],
                           ),
                           const SizedBox(height: 3),
-                          Text(
-                            _enderecoResumido(r),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: t.bodySmall.override(
-                              font: GoogleFonts.inter(),
-                              color: t.secondaryText,
-                              letterSpacing: 0,
-                              fontSize: (t.bodySmall.fontSize ?? 14.0) * 0.92,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          Wrap(
-                            spacing: 5,
-                            runSpacing: 4,
+                          Row(
                             children: [
-                              _infoChip(
-                                context,
-                                Icons.flag_outlined,
-                                situacaoNome,
-                                accent.withValues(alpha: 0.14),
-                                accent,
+                              Icon(
+                                Icons.place_outlined,
+                                size: 12,
+                                color: t.secondaryText,
                               ),
-                              _infoChip(
-                                context,
-                                Icons.date_range_rounded,
-                                periodo,
-                                t.alternate.withValues(alpha: 0.65),
-                                t.primaryText,
+                              const SizedBox(width: 3),
+                              Expanded(
+                                child: Text(
+                                  _enderecoResumido(r),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: t.secondaryText,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: _infoChip(
+                                  context,
+                                  Icons.flag_outlined,
+                                  situacaoNome,
+                                  accent.withValues(alpha: 0.12),
+                                  accent,
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Flexible(
+                                flex: 2,
+                                child: _infoChip(
+                                  context,
+                                  Icons.date_range_rounded,
+                                  periodo,
+                                  t.primaryBackground.withValues(alpha: 0.9),
+                                  t.secondaryText,
+                                ),
                               ),
                             ],
                           ),
@@ -474,29 +618,27 @@ class _InicioWidgetState extends State<InicioWidget> {
     Color fg,
   ) {
     final t = FlutterFlowTheme.of(context);
-    final chipFontSize = (t.labelSmall.fontSize ?? 12.0) * 0.88;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: t.alternate.withValues(alpha: 0.7)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: fg.withValues(alpha: 0.9)),
+          Icon(icon, size: 11, color: fg.withValues(alpha: 0.9)),
           const SizedBox(width: 4),
           Flexible(
             child: Text(
               text,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: t.labelSmall.override(
-                font: GoogleFonts.inter(),
-                color: fg,
-                letterSpacing: 0,
+              style: GoogleFonts.inter(
+                fontSize: 10.5,
                 fontWeight: FontWeight.w600,
-                fontSize: chipFontSize,
+                color: fg,
               ),
             ),
           ),
@@ -520,47 +662,47 @@ class _InicioWidgetState extends State<InicioWidget> {
         key: scaffoldKey,
         backgroundColor: t.primaryBackground,
         appBar: AppBar(
-          backgroundColor: t.primaryBackground,
+          backgroundColor: t.primary,
           automaticallyImplyLeading: false,
           elevation: 0,
-          toolbarHeight: 72,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          toolbarHeight: 58,
           titleSpacing: 16,
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          iconTheme: const IconThemeData(color: Colors.white),
+          title: Row(
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: Text(
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
                       'Obras e projetos',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: t.headlineSmall.override(
-                        font: GoogleFonts.interTight(fontWeight: FontWeight.w800),
-                        letterSpacing: -0.2,
-                        fontWeight: FontWeight.w800,
+                      style: GoogleFonts.interTight(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  const TenantSwitcherWidget(compact: true),
-                ],
-              ),
-              const SizedBox(height: 2),
-              Text(
-                FFAppState().UserName.isNotEmpty
-                    ? 'Olá, ${FFAppState().UserName}'
-                    : 'Gerencie suas obras sincronizadas',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: t.bodySmall.override(
-                  font: GoogleFonts.inter(),
-                  color: t.secondaryText,
-                  letterSpacing: 0,
+                    Text(
+                      FFAppState().UserName.isNotEmpty
+                          ? 'Olá, ${FFAppState().UserName}'
+                          : 'Gerencie suas obras sincronizadas',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        color: Colors.white.withValues(alpha: 0.85),
+                      ),
+                    ),
+                  ],
                 ),
               ),
+              const SizedBox(width: 8),
+              const TenantSwitcherWidget(compact: true, onPrimary: true),
             ],
           ),
         ),
@@ -634,6 +776,7 @@ class _InicioWidgetState extends State<InicioWidget> {
                         color: t.primary,
                         onRefresh: () async {
                           await _runSyncAndReload();
+                          await _garantirCapas(forcar: true);
                           final f = _carregarPayload();
                           setState(() {
                             _payloadFuture = f;
@@ -646,122 +789,10 @@ class _InicioWidgetState extends State<InicioWidget> {
                           ),
                           slivers: [
                             SliverToBoxAdapter(
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    _statusFilterDropdown(
-                                      context: context,
-                                      situacoes: payload.situacoes,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: SizedBox(
-                                        height: _filtroRowHeight,
-                                        child: TextField(
-                                          controller: _model.textControllerBusca,
-                                          focusNode: _model.textFieldBuscaFocusNode,
-                                          textInputAction: TextInputAction.search,
-                                          style: t.bodySmall.override(
-                                            font: GoogleFonts.inter(),
-                                            fontSize: (t.bodySmall.fontSize ?? 14.0) * 0.93,
-                                          ),
-                                          decoration: InputDecoration(
-                                            isDense: true,
-                                            hintText: 'Buscar obra...',
-                                            hintStyle: t.bodySmall.override(
-                                              font: GoogleFonts.inter(),
-                                              color: t.secondaryText,
-                                              fontSize: (t.bodySmall.fontSize ?? 14.0) * 0.93,
-                                            ),
-                                            prefixIcon: Icon(
-                                              Icons.search_rounded,
-                                              size: 20,
-                                              color: t.secondaryText,
-                                            ),
-                                            prefixIconConstraints: const BoxConstraints(
-                                              minWidth: 36,
-                                              minHeight: 36,
-                                            ),
-                                            suffixIcon: (_model.textControllerBusca?.text.isNotEmpty ?? false)
-                                                ? IconButton(
-                                                    tooltip: 'Limpar',
-                                                    padding: EdgeInsets.zero,
-                                                    constraints: const BoxConstraints(
-                                                      minWidth: 32,
-                                                      minHeight: 32,
-                                                    ),
-                                                    icon: Icon(
-                                                      Icons.close_rounded,
-                                                      size: 18,
-                                                      color: t.secondaryText,
-                                                    ),
-                                                    onPressed: () {
-                                                      _model.textControllerBusca?.clear();
-                                                    },
-                                                  )
-                                                : null,
-                                            suffixIconConstraints: const BoxConstraints(
-                                              minWidth: 32,
-                                              minHeight: 32,
-                                            ),
-                                            filled: true,
-                                            fillColor: t.secondaryBackground,
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(12),
-                                              borderSide: BorderSide.none,
-                                            ),
-                                            enabledBorder: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(12),
-                                              borderSide: BorderSide(
-                                                color: Theme.of(context)
-                                                    .dividerColor
-                                                    .withValues(alpha: 0.3),
-                                              ),
-                                            ),
-                                            focusedBorder: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(12),
-                                              borderSide: BorderSide(
-                                                color: t.primary,
-                                                width: 1.2,
-                                              ),
-                                            ),
-                                            contentPadding: const EdgeInsets.symmetric(
-                                              horizontal: 0,
-                                              vertical: 10,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            SliverToBoxAdapter(
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                                child: Row(
-                                  children: [
-                                    Text(
-                                      '${filtradas.length} obra${filtradas.length == 1 ? '' : 's'}',
-                                      style: t.labelLarge.override(
-                                        font: GoogleFonts.inter(fontWeight: FontWeight.w600),
-                                        color: t.secondaryText,
-                                      ),
-                                    ),
-                                    if (filtradas.length != payload.obras.length) ...[
-                                      Text(
-                                        ' · ${payload.obras.length} no total',
-                                        style: t.labelMedium.override(
-                                          font: GoogleFonts.inter(),
-                                          color: t.secondaryText.withValues(alpha: 0.85),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
+                              child: _barraFiltros(
+                                situacoes: payload.situacoes,
+                                exibindo: filtradas.length,
+                                total: payload.obras.length,
                               ),
                             ),
                             if (filtradas.isEmpty)

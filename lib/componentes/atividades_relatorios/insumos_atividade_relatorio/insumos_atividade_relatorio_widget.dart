@@ -1,6 +1,7 @@
 import '/backend/sqlite/sqlite_manager.dart';
 import '/componentes/atividades_relatorios/includes/qtd_field_insumo_atividade_relatorio/qtd_field_insumo_atividade_relatorio_widget.dart';
 import '/componentes/dialogs/cofirma_exclusao_item_atividade/cofirma_exclusao_item_atividade_widget.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -113,52 +114,13 @@ class _InsumosAtividadeRelatorioWidgetState
       ),
       child: Container(
         decoration: BoxDecoration(
-          color: FlutterFlowTheme.of(context).secondaryBackground,
-          boxShadow: [
-            BoxShadow(
-              blurRadius: 3.0,
-              color: Color(0x33000000),
-              offset: Offset(
-                0.0,
-                1.0,
-              ),
-              spreadRadius: 0.0,
-            )
-          ],
-          borderRadius: BorderRadius.circular(12.0),
+          color: Colors.transparent,
         ),
         child: Padding(
-          padding: EdgeInsets.all(8.0),
+          padding: EdgeInsets.zero,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                mainAxisSize: MainAxisSize.max,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Insumos da Atividade',
-                    style: FlutterFlowTheme.of(context).headlineMedium.override(
-                          font: GoogleFonts.interTight(
-                            fontWeight: FlutterFlowTheme.of(context)
-                                .headlineMedium
-                                .fontWeight,
-                            fontStyle: FlutterFlowTheme.of(context)
-                                .headlineMedium
-                                .fontStyle,
-                          ),
-                          fontSize: 20.0,
-                          letterSpacing: 0.0,
-                          fontWeight: FlutterFlowTheme.of(context)
-                              .headlineMedium
-                              .fontWeight,
-                          fontStyle: FlutterFlowTheme.of(context)
-                              .headlineMedium
-                              .fontStyle,
-                        ),
-                  ),
-                ],
-              ),
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -179,6 +141,7 @@ class _InsumosAtividadeRelatorioWidgetState
                       return ListView.builder(
                         padding: EdgeInsets.zero,
                         shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
                         scrollDirection: Axis.vertical,
                         itemCount: listViewGetItensAtividadeRowList.length,
                         itemBuilder: (context, listViewIndex) {
@@ -190,10 +153,8 @@ class _InsumosAtividadeRelatorioWidgetState
                             listViewGetItensAtividadeRow.obraItemUnidade,
                             '',
                           );
-                          final qtdUsada = valueOrDefault<int>(
-                            listViewGetItensAtividadeRow.qtdUtilizada,
-                            0,
-                          );
+                          final qtdUsada =
+                              listViewGetItensAtividadeRow.qtdUtilizada ?? 0;
                           final unidadeSuffix =
                               unidadeObra.isNotEmpty ? ' $unidadeObra' : '';
                           final temSaldo =
@@ -204,6 +165,7 @@ class _InsumosAtividadeRelatorioWidgetState
                           final pctUso = (fracaoUso * 100).round();
 
                           return Container(
+                            margin: const EdgeInsets.only(bottom: 6.0),
                             decoration: BoxDecoration(
                               color: FlutterFlowTheme.of(context)
                                   .secondaryBackground,
@@ -215,7 +177,7 @@ class _InsumosAtividadeRelatorioWidgetState
                             ),
                             child: Padding(
                               padding: EdgeInsetsDirectional.fromSTEB(
-                                  4.0, 4.0, 4.0, 4.0),
+                                  8.0, 4.0, 4.0, 6.0),
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -224,43 +186,34 @@ class _InsumosAtividadeRelatorioWidgetState
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Text(
-                                        valueOrDefault<String>(
-                                          listViewGetItensAtividadeRow
-                                              .descricao,
-                                          'N/A',
+                                      Expanded(
+                                        child: Text(
+                                          valueOrDefault<String>(
+                                            listViewGetItensAtividadeRow
+                                                .descricao,
+                                            'N/A',
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            height: 1.2,
+                                            color: FlutterFlowTheme.of(context)
+                                                .primaryText,
+                                          ),
                                         ),
-                                        style: FlutterFlowTheme.of(context)
-                                            .bodyLarge
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight: FontWeight.w600,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyLarge
-                                                        .fontStyle,
-                                              ),
-                                              letterSpacing: 0.0,
-                                              fontWeight: FontWeight.w600,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyLarge
-                                                      .fontStyle,
-                                            ),
                                       ),
                                       Builder(
                                         builder: (context) =>
                                             FlutterFlowIconButton(
                                           borderColor: Colors.transparent,
                                           borderRadius: 16.0,
-                                          buttonSize: 32.0,
-                                          fillColor:
-                                              FlutterFlowTheme.of(context)
-                                                  .error,
+                                          buttonSize: 30.0,
+                                          fillColor: Colors.transparent,
                                           icon: Icon(
-                                            Icons.delete_outline,
-                                            color: FlutterFlowTheme.of(context)
-                                                .info,
+                                            Icons.delete_outline_rounded,
+                                            color: FlutterFlowTheme.of(context).error,
                                             size: 18.0,
                                           ),
                                           onPressed: () async {
@@ -282,37 +235,14 @@ class _InsumosAtividadeRelatorioWidgetState
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
-                                            Text(
-                                              'Quantidade Utilizada',
-                                              textAlign: TextAlign.center,
-                                              style:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelSmall
-                                                      .override(
-                                                        font: GoogleFonts.inter(
-                                                          fontWeight:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .labelSmall
-                                                                  .fontWeight,
-                                                          fontStyle:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .labelSmall
-                                                                  .fontStyle,
-                                                        ),
-                                                        letterSpacing: 0.0,
-                                                        fontWeight:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .labelSmall
-                                                                .fontWeight,
-                                                        fontStyle:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .labelSmall
-                                                                .fontStyle,
-                                                      ),
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                  bottom: 3),
+                                              child: Text(
+                                                'QTD. UTILIZADA',
+                                                style: rdoColumnLabelStyle(
+                                                    context),
+                                              ),
                                             ),
                                             wrapWithModel(
                                               model: _model
@@ -332,11 +262,9 @@ class _InsumosAtividadeRelatorioWidgetState
                                                 uuid:
                                                     listViewGetItensAtividadeRow
                                                         .uuid!,
-                                                valor: valueOrDefault<int>(
-                                                  listViewGetItensAtividadeRow
-                                                      .qtdUtilizada,
-                                                  0,
-                                                ),
+                                                valor: listViewGetItensAtividadeRow
+                                                        .qtdUtilizada ??
+                                                    0,
                                               ),
                                             ),
                                           ],
@@ -347,7 +275,7 @@ class _InsumosAtividadeRelatorioWidgetState
                                         child: Padding(
                                           padding:
                                               EdgeInsetsDirectional.fromSTEB(
-                                                  0.0, 12.0, 0.0, 0.0),
+                                                  0.0, 14.0, 0.0, 0.0),
                                           child: Column(
                                             mainAxisSize: MainAxisSize.min,
                                             crossAxisAlignment:
@@ -527,7 +455,7 @@ class _InsumosAtividadeRelatorioWidgetState
                                       ),
                                     ].divide(SizedBox(width: 8.0)),
                                   ),
-                                ].divide(SizedBox(height: 8.0)),
+                                ].divide(SizedBox(height: 2.0)),
                               ),
                             ),
                           );

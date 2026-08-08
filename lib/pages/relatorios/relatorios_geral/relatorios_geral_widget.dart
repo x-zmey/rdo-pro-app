@@ -3,10 +3,11 @@ import '/auth/membership_access.dart';
 import '/backend/sqlite/sqlite_manager.dart';
 import '/componentes/navegacao/barra_navegacao_principal.dart';
 import '/componentes/relatorios/relatorio_list_item_widget.dart';
-import '/flutter_flow/flutter_flow_icon_button.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -133,333 +134,11 @@ class _RelatoriosGeraisWidgetState extends State<RelatoriosGeraisWidget>
           _erroInicial = 'Não foi possível carregar os relatórios.';
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Erro ao carregar: $e'),
-            ),
+            SnackBar(content: Text('Erro ao carregar: $e')),
           );
         }
       });
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        FocusScope.of(context).unfocus();
-        FocusManager.instance.primaryFocus?.unfocus();
-      },
-      child: Scaffold(
-        key: _scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
-        appBar: AppBar(
-          backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
-          automaticallyImplyLeading: true,
-          leading: FlutterFlowIconButton(
-            borderColor: Colors.transparent,
-            borderRadius: 20.0,
-            borderWidth: 1.0,
-            buttonSize: 40.0,
-            icon: Icon(
-              Icons.arrow_back_rounded,
-              color: FlutterFlowTheme.of(context).primaryText,
-              size: 24.0,
-            ),
-            onPressed: () => context.pop(),
-          ),
-          title: Text(
-            'Relatórios',
-            style: FlutterFlowTheme.of(context).headlineMedium.override(
-                  font: GoogleFonts.interTight(
-                    fontWeight: FontWeight.w600,
-                    fontStyle:
-                        FlutterFlowTheme.of(context).headlineMedium.fontStyle,
-                  ),
-                  fontSize: 20.0,
-                  letterSpacing: 0.0,
-                  fontWeight: FontWeight.w600,
-                  fontStyle:
-                      FlutterFlowTheme.of(context).headlineMedium.fontStyle,
-                ),
-          ),
-          actions: const [],
-          centerTitle: false,
-          elevation: 0.0,
-        ),
-        body: SafeArea(
-          top: true,
-          bottom: false,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Positioned.fill(
-                child: Padding(
-                  padding: const EdgeInsets.only(
-                    bottom: kBarraNavegacaoPrincipalReservaScroll,
-                  ),
-                  child: _carregando && _itens.isEmpty
-                      ? ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(
-                            12.0,
-                            8.0,
-                            12.0,
-                            16.0,
-                          ),
-                          itemCount: 3,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 8.0),
-                          itemBuilder: (context, _) {
-                            final t = FlutterFlowTheme.of(context);
-                            return Container(
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: t.secondaryBackground,
-                                borderRadius: BorderRadius.circular(14.0),
-                                border: Border.all(
-                                  color:
-                                      t.primaryText.withValues(alpha: 0.06),
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color:
-                                        Colors.black.withValues(alpha: 0.03),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: Padding(
-                                padding:
-                                    const EdgeInsets.fromLTRB(12, 10, 12, 8),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        _shimmerBox(context,
-                                            width: 72, height: 12),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              _shimmerBox(context, height: 11),
-                                              const SizedBox(height: 6),
-                                              _shimmerBox(
-                                                  context,
-                                                  width: 120,
-                                                  height: 9),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        _shimmerBox(context,
-                                            width: 72, height: 18,
-                                            radius: 10),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Align(
-                                      alignment:
-                                          AlignmentDirectional.centerEnd,
-                                      child: _shimmerBox(
-                                        context,
-                                        width: 180,
-                                        height: 28,
-                                        radius: 10,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        )
-                      : _erroInicial != null && _itens.isEmpty
-                          ? Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(24.0),
-                                child: Text(
-                                  _erroInicial!,
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            )
-                          : Column(
-                              children: [
-                                Expanded(
-                                  child: _itens.isEmpty
-                                      ? Center(
-                                          child: Text(
-                                            'Nenhum relatório no dispositivo.\nSincronize o app e tente novamente.',
-                                            textAlign: TextAlign.center,
-                                            style: FlutterFlowTheme.of(context)
-                                                .bodyLarge,
-                                          ),
-                                        )
-                                      : ListView.builder(
-                                          padding: const EdgeInsets.fromLTRB(
-                                            12.0,
-                                            8.0,
-                                            12.0,
-                                            16.0,
-                                          ),
-                                          itemCount: _itens.length,
-                                          itemBuilder: (context, i) {
-                                            return _cardRelatorio(_itens[i]);
-                                          },
-                                        ),
-                                ),
-                                if (_itens.isNotEmpty && _temMais) ...[
-                                  const Divider(height: 1),
-                                  Padding(
-                                    padding: const EdgeInsetsDirectional.fromSTEB(
-                                        16.0, 14.0, 16.0, 10.0),
-                                    child: Align(
-                                      alignment: AlignmentDirectional.center,
-                                      child: _carregandoMais
-                                          ? Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      vertical: 10),
-                                              child: SizedBox(
-                                                width: 24,
-                                                height: 24,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                  strokeWidth: 2.5,
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .primary
-                                                      .withValues(alpha: 0.45),
-                                                ),
-                                              ),
-                                            )
-                                          : TextButton(
-                                              onPressed: () =>
-                                                  _recarregar(reset: false),
-                                              style: TextButton.styleFrom(
-                                                foregroundColor:
-                                                    FlutterFlowTheme.of(context)
-                                                        .secondaryText
-                                                        .withValues(alpha: 0.75),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 14,
-                                                  vertical: 10,
-                                                ),
-                                                minimumSize: const Size(0, 40),
-                                                tapTargetSize:
-                                                    MaterialTapTargetSize
-                                                        .padded,
-                                                visualDensity:
-                                                    VisualDensity.standard,
-                                              ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Icon(
-                                                    Icons.expand_more,
-                                                    size: 18,
-                                                    color: FlutterFlowTheme.of(
-                                                            context)
-                                                        .secondaryText
-                                                        .withValues(alpha: 0.5),
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    'Carregar mais',
-                                                    style: FlutterFlowTheme.of(
-                                                            context)
-                                                        .bodySmall
-                                                        .override(
-                                                          font:
-                                                              GoogleFonts.inter(
-                                                            fontWeight:
-                                                                FontWeight.w400,
-                                                          ),
-                                                          fontSize: 14,
-                                                          color:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .secondaryText
-                                                                  .withValues(
-                                                                      alpha:
-                                                                          0.8),
-                                                          letterSpacing: 0.1,
-                                                        ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                ),
-              ),
-              const Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: BarraNavegacaoPrincipal(),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _cardRelatorio(RelatoriosGeraisRow row) {
-    final dataExec = formatDataResumoRelatorio(row.dataExecutado);
-    final dataLabel =
-        dataExec.isNotEmpty ? dataExec : row.dataExecutado;
-    final criador = (row.criadorNome ?? row.criador ?? '').trim();
-    final obraTitulo = valueOrDefault<String>(row.obraNome, 'Obra');
-
-    void abrirDetalhes() {
-      context.pushNamed(
-        RelatorioDetalhesWidget.routeName,
-        queryParameters: {
-          'id': serializeParam(row.id, ParamType.int),
-          'uuid': serializeParam(row.uuid, ParamType.String),
-        }.withoutNulls,
-      );
-    }
-
-    return RelatorioListItemWidget(
-      numero: row.numero,
-      dataLabel: dataLabel,
-      statusId: row.statusId,
-      statusLabel: labelRelatorioStatus(
-        statusId: row.statusId,
-        statusNome: row.statusNome,
-      ),
-      criador: criador.isNotEmpty ? criador : null,
-      subtitulo: obraTitulo,
-      marginBottom: 8,
-      onTap: abrirDetalhes,
-      onVisualizar: abrirDetalhes,
-      onEditar: () {
-        context.pushNamed(
-          ObraAddRelatorioWidget.routeName,
-          queryParameters: {
-            'id': serializeParam(row.id, ParamType.int),
-            'uuid': serializeParam(row.uuid, ParamType.String),
-          }.withoutNulls,
-          extra: <String, dynamic>{
-            '__transition_info__': TransitionInfo(
-              hasTransition: true,
-              transitionType: PageTransitionType.rightToLeft,
-            ),
-          },
-        );
-      },
-      onApagar: () => _confirmarExcluir(row),
-    );
   }
 
   Future<void> _confirmarExcluir(RelatoriosGeraisRow row) async {
@@ -485,7 +164,7 @@ class _RelatoriosGeraisWidgetState extends State<RelatoriosGeraisWidget>
     );
     if (confirmar != true) return;
     await SQLiteManager.instance.softDeleteRelatorio(uuid: row.uuid);
-    if (!mounted || !context.mounted) return;
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -499,5 +178,353 @@ class _RelatoriosGeraisWidgetState extends State<RelatoriosGeraisWidget>
     setState(() {
       _itens.removeWhere((e) => e.uuid == row.uuid);
     });
+  }
+
+  Widget _buildShimmerLista(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    return Column(
+      children: List.generate(4, (index) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: index == 3 ? 0 : 6),
+          child: Container(
+            width: double.infinity,
+            decoration: rdoCardDecoration(context),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(width: 3.5, color: theme.alternate),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              _shimmerBox(context, width: 72, height: 14),
+                              const Spacer(),
+                              _shimmerBox(
+                                context,
+                                width: 64,
+                                height: 18,
+                                radius: 10,
+                              ),
+                              const SizedBox(width: 6),
+                              _shimmerBox(
+                                context,
+                                width: 28,
+                                height: 28,
+                                radius: 7,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          _shimmerBox(context, width: 180, height: 11),
+                          const SizedBox(height: 6),
+                          _shimmerBox(context, width: 120, height: 10),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildCarregarMais(BuildContext context) {
+    final t = FlutterFlowTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 2),
+      child: Center(
+        child: _carregandoMais
+            ? SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: t.primary,
+                ),
+              )
+            : TextButton.icon(
+                onPressed: () => _recarregar(reset: false),
+                icon: Icon(
+                  Icons.expand_more_rounded,
+                  size: 18,
+                  color: t.secondaryText,
+                ),
+                label: Text(
+                  'Carregar mais',
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: t.secondaryText,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _cardRelatorio(RelatoriosGeraisRow row, {required bool ultimo}) {
+    final dataExec = formatDataResumoRelatorio(row.dataExecutado);
+    final dataLabel = dataExec.isNotEmpty ? dataExec : row.dataExecutado;
+    final criador = nomeExibicaoCriadorRelatorio(row.criadorNome, row.criador);
+    final obraTitulo = valueOrDefault<String>(row.obraNome, 'Obra');
+
+    void abrirDetalhes() {
+      context.pushNamed(
+        RelatorioDetalhesWidget.routeName,
+        queryParameters: {
+          'id': serializeParam(row.id, ParamType.int),
+          'uuid': serializeParam(row.uuid, ParamType.String),
+        }.withoutNulls,
+      );
+    }
+
+    return RelatorioListItemWidget(
+      numero: row.numero,
+      dataLabel: dataLabel,
+      statusId: row.statusId,
+      statusLabel: labelRelatorioStatus(
+        statusId: row.statusId,
+        statusNome: row.statusNome,
+      ),
+      criador: criador,
+      subtitulo: obraTitulo,
+      marginBottom: ultimo && !_temMais ? 0 : 6,
+      onTap: abrirDetalhes,
+      onVisualizar: abrirDetalhes,
+      onEditar: () {
+        context.pushNamed(
+          ObraAddRelatorioWidget.routeName,
+          queryParameters: {
+            'id': serializeParam(row.id, ParamType.int),
+            'uuid': serializeParam(row.uuid, ParamType.String),
+          }.withoutNulls,
+          extra: <String, dynamic>{
+            '__transition_info__': const TransitionInfo(
+              hasTransition: true,
+              transitionType: PageTransitionType.rightToLeft,
+            ),
+          },
+        );
+      },
+      onApagar: () => _confirmarExcluir(row),
+    );
+  }
+
+  Widget _buildConteudo(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+
+    if (_carregando && _itens.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          10,
+          16,
+          kBarraNavegacaoPrincipalReservaScroll + bottomInset + 16,
+        ),
+        children: [
+          RdoSectionCard(
+            title: 'Todos os relatórios',
+            icon: Icons.description_outlined,
+            margin: EdgeInsets.zero,
+            contentPadding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+            child: _buildShimmerLista(context),
+          ),
+        ],
+      );
+    }
+
+    if (_erroInicial != null && _itens.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          40,
+          16,
+          kBarraNavegacaoPrincipalReservaScroll + bottomInset + 16,
+        ),
+        children: [
+          Icon(Icons.error_outline_rounded, size: 44, color: theme.error),
+          const SizedBox(height: 12),
+          Text(
+            _erroInicial!,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(fontSize: 13.5, color: theme.error),
+          ),
+          const SizedBox(height: 10),
+          Center(
+            child: TextButton(
+              onPressed: () => _recarregar(reset: true),
+              child: const Text('Tentar novamente'),
+            ),
+          ),
+        ],
+      );
+    }
+
+    final contagem = _temMais ? '${_itens.length}+' : '${_itens.length}';
+
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        10,
+        16,
+        kBarraNavegacaoPrincipalReservaScroll + bottomInset + 16,
+      ),
+      children: [
+        RdoSectionCard(
+          title: 'Todos os relatórios',
+          icon: Icons.description_outlined,
+          margin: EdgeInsets.zero,
+          trailing: RdoContadorChip(contagem),
+          contentPadding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+          child: _itens.isEmpty
+              ? Padding(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 28, horizontal: 8),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.folder_open_rounded,
+                        size: 44,
+                        color: theme.secondaryText.withValues(alpha: 0.45),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Nenhum relatório no dispositivo.\nSincronize o app e tente novamente.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          height: 1.35,
+                          color: theme.secondaryText,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < _itens.length; i++)
+                      _cardRelatorio(
+                        _itens[i],
+                        ultimo: i == _itens.length - 1,
+                      ),
+                    if (_temMais) _buildCarregarMais(context),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(context).unfocus();
+        FocusManager.instance.primaryFocus?.unfocus();
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: theme.primaryBackground,
+        appBar: AppBar(
+          backgroundColor: theme.primary,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          centerTitle: false,
+          titleSpacing: 0,
+          toolbarHeight: 58,
+          iconTheme: const IconThemeData(color: Colors.white),
+          automaticallyImplyLeading: false,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.goNamed(InicioWidget.routeName);
+              }
+            },
+          ),
+          title: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Relatórios',
+                  style: GoogleFonts.interTight(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  'Todos os RDOs sincronizados',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            IconButton(
+              tooltip: 'Atualizar',
+              icon: const Icon(
+                Icons.refresh_rounded,
+                color: Colors.white,
+                size: 21,
+              ),
+              onPressed: _carregando ? null : () => _recarregar(reset: true),
+            ),
+            const SizedBox(width: 4),
+          ],
+        ),
+        body: SafeArea(
+          top: true,
+          bottom: false,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: RefreshIndicator(
+                  color: theme.primary,
+                  onRefresh: () => _recarregar(reset: true),
+                  child: _buildConteudo(context),
+                ),
+              ),
+              const Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: BarraNavegacaoPrincipal(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -1,6 +1,7 @@
 import '/auth/membership_access.dart';
 import '/backend/api_requests/api_calls.dart';
 import '/backend/sqlite/sqlite_manager.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'dart:convert';
@@ -72,9 +73,9 @@ Color _statusTarefaColor(Map<String, dynamic> t) {
 
 const Map<int, Map<String, dynamic>> _statusOs = {
   1: {'text': 'Preenchendo', 'color': Color(0xFF2196F3)},
-  2: {'text': 'Aguardando Aprovação', 'color': Color(0xFF6200EE)},
-  3: {'text': 'Aprovado', 'color': Color(0xFF4CAF50)},
-  4: {'text': 'Reprovado', 'color': Color(0xFFE53935)},
+  2: {'text': 'Aguardando Aprovação', 'color': Color(0xFF7B1FA2)},
+  3: {'text': 'Aprovado', 'color': Color(0xFF2E7D32)},
+  4: {'text': 'Reprovado', 'color': Color(0xFFC62828)},
 };
 
 Future<int?> _resolverIdServidor(String? raw) async {
@@ -881,105 +882,74 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
         appBar: _buildAppBar(theme),
         body: FadeTransition(
           opacity: _animationController,
-                child: _buildBody(theme, context),
-        ),
-      ),
-    );
-  }
-
-  /// Chip de status da OS na barra superior (~30% maior que o do card).
-  Widget? _buildAppBarStatusChip(FlutterFlowTheme theme) {
-    final d = _data;
-    if (d == null) return null;
-    final statusId = int.tryParse('${d['status_id'] ?? 1}') ?? 1;
-    final st =
-        _statusOs[statusId] ?? {'text': 'Desconhecido', 'color': theme.primary};
-    final Color chipColor =
-        st['color'] is Color ? st['color'] as Color : theme.primary;
-    const scale = 1.3;
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 220),
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: (12 * scale).roundToDouble(),
-          vertical: (6 * scale).roundToDouble(),
-        ),
-        decoration: BoxDecoration(
-          color: chipColor,
-          borderRadius: BorderRadius.circular(20 * scale),
-          boxShadow: [
-            BoxShadow(
-              color: chipColor.withValues(alpha: 0.35),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Text(
-          st['text'] as String,
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.inter(
-            fontSize: (12 * scale).roundToDouble(),
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
+          child: _buildBody(theme),
         ),
       ),
     );
   }
 
   PreferredSizeWidget _buildAppBar(FlutterFlowTheme theme) {
-    final statusChip = _buildAppBarStatusChip(theme);
+    final d = _data;
+    final codigo = d == null ? '' : '${d['codigo'] ?? d['id'] ?? ''}'.trim();
+    final nome = d == null ? '' : '${d['nome'] ?? ''}'.trim();
+    final obraNome = '${_obra()?['nome'] ?? ''}'.trim();
+    final subtitulo = [
+      if (codigo.isNotEmpty) codigo,
+      if (nome.isNotEmpty) nome,
+      if (obraNome.isNotEmpty) obraNome,
+    ].join(' · ');
+
     return AppBar(
-      backgroundColor: Colors.transparent,
+      backgroundColor: theme.primary,
       elevation: 0,
       scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
-      centerTitle: statusChip != null,
-      leading: Container(
-        margin: const EdgeInsets.only(left: 8),
-        decoration: BoxDecoration(
-          color: theme.primary.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: IconButton(
-          icon: Icon(Icons.arrow_back_rounded, color: theme.primary),
-          onPressed: () => context.pop(),
-        ),
+      centerTitle: false,
+      titleSpacing: 0,
+      toolbarHeight: 58,
+      iconTheme: const IconThemeData(color: Colors.white),
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+        onPressed: () => context.safePop(),
       ),
-      title: statusChip != null
-          ? Center(child: statusChip)
-          : Text(
+      title: Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
               'Ordem de Serviço',
+              style: GoogleFonts.interTight(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+            Text(
+              subtitulo.isEmpty ? 'Detalhes da ordem' : subtitulo,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.inter(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: theme.primaryText,
-                letterSpacing: -0.3,
+                fontSize: 11.5,
+                color: Colors.white.withValues(alpha: 0.85),
               ),
             ),
-      actions: [
-        Container(
-          margin: const EdgeInsets.only(right: 8),
-          decoration: BoxDecoration(
-            color: theme.primary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: IconButton(
-            tooltip: 'Atualizar',
-            icon: Icon(Icons.refresh_rounded, color: theme.primary, size: 22),
-            onPressed: _loading ? null : _carregar,
-          ),
+          ],
         ),
+      ),
+      actions: [
+        IconButton(
+          tooltip: 'Atualizar',
+          icon: const Icon(Icons.refresh_rounded, color: Colors.white, size: 21),
+          onPressed: _loading ? null : _carregar,
+        ),
+        const SizedBox(width: 4),
       ],
     );
   }
 
-  Widget _buildBody(FlutterFlowTheme theme, BuildContext context) {
+  Widget _buildBody(FlutterFlowTheme theme) {
     if (_loading) return _buildLoadingState(theme);
     if (_error != null) return _buildErrorState(theme);
     if (_data == null) return const SizedBox.shrink();
@@ -993,27 +963,28 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
         ),
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                _buildHeaderCard(theme),
-                const SizedBox(height: 12),
                 if (_data!['revogacao_ativa'] != null) ...[
                   _buildRevogacaoBanner(theme),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                 ],
-                _buildResumeCards(theme),
-                const SizedBox(height: 12),
-                _buildInfoTwoColumns(theme),
-                const SizedBox(height: 12),
-                _buildTarefasCard(theme, context),
+                _buildResumoCard(theme),
+                const SizedBox(height: 10),
+                _buildBarraAcoes(theme),
+                _buildInfoOrdemCard(theme),
+                const SizedBox(height: 10),
+                _buildInfoObraCard(theme),
+                const SizedBox(height: 10),
+                _buildTarefasCard(theme),
                 if ((_data!['custos'] as List?)?.isNotEmpty ?? false) ...[
-                  const SizedBox(height: 12),
-                  _buildCustosCard(theme, context),
+                  const SizedBox(height: 10),
+                  _buildCustosCard(theme),
                 ],
                 if (_shouldShowAssinaturasCard()) ...[
-                  const SizedBox(height: 12),
-                  _buildAssinaturasCard(theme, context),
+                  const SizedBox(height: 10),
+                  _buildAssinaturasCard(theme),
                 ],
               ]),
             ),
@@ -1026,31 +997,21 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
   Widget _buildLoadingState(FlutterFlowTheme theme) {
     return Center(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: theme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const CircularProgressIndicator(strokeWidth: 3),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Carregando ordem',
-            style: GoogleFonts.inter(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: theme.primaryText,
+          SizedBox(
+            width: 34,
+            height: 34,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              color: theme.primary,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 14),
           Text(
-            'Aguarde um momento...',
+            'Carregando ordem…',
             style: GoogleFonts.inter(
-              fontSize: 14,
+              fontSize: 13,
               color: theme.secondaryText,
             ),
           ),
@@ -1061,51 +1022,32 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
 
   Widget _buildErrorState(FlutterFlowTheme theme) {
     return Center(
-      child: SingleChildScrollView(
+      child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: theme.error.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(25),
-              ),
-              child: Icon(Icons.error_outline_rounded,
-                  size: 40, color: theme.error),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Erro ao carregar',
-              style: GoogleFonts.inter(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: theme.primaryText,
-              ),
-            ),
-            const SizedBox(height: 12),
+            Icon(Icons.error_outline_rounded, size: 40, color: theme.error),
+            const SizedBox(height: 16),
             Text(
               _error!,
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(
-                fontSize: 14,
+                fontSize: 13.5,
                 color: theme.secondaryText,
               ),
             ),
-            const SizedBox(height: 28),
-            Container(
-              width: 200,
-              child: FilledButton.icon(
-                onPressed: _carregar,
-                icon: const Icon(Icons.refresh_rounded, size: 20),
-                label: const Text('Tentar novamente'),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: _carregar,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Tentar novamente'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 38),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
             ),
@@ -1115,92 +1057,97 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
     );
   }
 
-  Widget _buildHeaderCard(FlutterFlowTheme theme) {
-    final d = _data!;
-    final statusId = int.tryParse('${d['status_id'] ?? 1}') ?? 1;
-    final podeRevogar = d['pode_solicitar_revogacao'] == true;
-    final canEdit =
-        MembershipAccess.canPermission('edit_ordens_servico');
-
+  Widget _statusChip(FlutterFlowTheme theme, int statusId) {
+    final st = _statusOs[statusId] ??
+        {'text': 'Desconhecido', 'color': theme.secondaryText};
+    final Color cor =
+        st['color'] is Color ? st['color'] as Color : theme.secondaryText;
     return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            theme.primary,
-            theme.primary.withValues(alpha: 0.85),
-          ],
-        ),
+        color: cor.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: theme.primary.withValues(alpha: 0.3),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        border: Border.all(color: cor.withValues(alpha: 0.28)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '#${d['codigo'] ?? d['id'] ?? '-'} • ${d['nome'] ?? '-'}',
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.inter(
-                fontSize: 13 * 1.1,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-                letterSpacing: -0.5,
-                height: 1.25,
+      child: Text(
+        st['text'] as String,
+        style: GoogleFonts.inter(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+          color: cor,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResumoCard(FlutterFlowTheme theme) {
+    final d = _data!;
+    final tot = _totais();
+    final statusId = int.tryParse('${d['status_id'] ?? 1}') ?? 1;
+    final codigo = '${d['codigo'] ?? d['id'] ?? '—'}';
+    final nome = '${d['nome'] ?? ''}'.trim();
+    final di = _formatDate(d['data_inicio']);
+    final df = _formatDate(d['data_fim']);
+    final periodo = [
+      if (di.isNotEmpty) di,
+      if (df.isNotEmpty) df,
+    ].join(' → ');
+    final nAssin = (d['assinaturas'] as List?)?.length ?? 0;
+
+    return RdoSectionCard(
+      title: codigo,
+      subtitle: nome.isEmpty ? 'Ordem de serviço' : nome,
+      icon: Icons.assignment_outlined,
+      margin: EdgeInsets.zero,
+      trailing: _statusChip(theme, statusId),
+      contentPadding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          RdoKpiStrip(
+            itens: [
+              RdoKpiData(
+                label: 'Tarefas',
+                value: '${_tarefas().length}',
               ),
-            ),
-            const SizedBox(height: 16),
-            Row(
+              RdoKpiData(
+                label: 'Valor total',
+                value: _formatCurrency(tot['valorTotal']),
+                flex: 2,
+                destaque: true,
+              ),
+              RdoKpiData(
+                label: 'Assinaturas',
+                value: '$nAssin',
+              ),
+            ],
+          ),
+          Divider(height: 1, color: theme.alternate),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+            child: Row(
               children: [
+                Icon(Icons.event_outlined, size: 14, color: theme.secondaryText),
+                const SizedBox(width: 6),
                 Expanded(
-                  child: _buildActionButton(
-                    icon: Icons.picture_as_pdf_rounded,
-                    label: 'PDF',
-                    onPressed: !_pdfLoading ? _onImprimirPdf : null,
-                    loading: _pdfLoading,
-                    backgroundColor: Colors.white,
-                    foregroundColor: theme.primary,
+                  child: Text(
+                    periodo.isEmpty ? 'Período não informado' : periodo,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: theme.secondaryText,
+                    ),
                   ),
                 ),
-                if (statusId == 1 && canEdit) ...[
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildActionButton(
-                      icon: Icons.send_rounded,
-                      label: _enviandoAprovacao ? 'Enviando...' : 'Enviar',
-                      onPressed:
-                          _enviandoAprovacao ? null : _onEnviarParaAprovacao,
-                      loading: _enviandoAprovacao,
-                      backgroundColor: Colors.white,
-                      foregroundColor: theme.primary,
-                    ),
+                Text(
+                  'Emissão ${_formatDate(d['data_emissao']).isEmpty ? '—' : _formatDate(d['data_emissao'])}',
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: theme.secondaryText,
                   ),
-                ],
-                if (podeRevogar) ...[
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildActionButton(
-                      icon: Icons.settings_backup_restore_rounded,
-                      label: 'Revogar',
-                      onPressed: _onSolicitarRevogacao,
-                      backgroundColor: Colors.white.withValues(alpha: 0.2),
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ],
+                ),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1212,33 +1159,157 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
     bool loading = false,
     required Color backgroundColor,
     required Color foregroundColor,
+    bool outlined = false,
   }) {
+    final child = loading
+        ? SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: foregroundColor,
+            ),
+          )
+        : Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 17),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          );
+
+    if (outlined) {
+      return OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: foregroundColor,
+          side: BorderSide(color: foregroundColor.withValues(alpha: 0.45)),
+          backgroundColor: backgroundColor,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          minimumSize: const Size(0, 42),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        child: child,
+      );
+    }
+
     return FilledButton(
       onPressed: onPressed,
       style: FilledButton.styleFrom(
         backgroundColor: backgroundColor,
         foregroundColor: foregroundColor,
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        minimumSize: const Size(0, 42),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
       ),
-      child: loading
-          ? SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: foregroundColor,
+      child: child,
+    );
+  }
+
+  Widget _buildBarraAcoes(FlutterFlowTheme theme) {
+    final d = _data!;
+    final statusId = int.tryParse('${d['status_id'] ?? 1}') ?? 1;
+    final podeRevogar = d['pode_solicitar_revogacao'] == true;
+    final canEdit = MembershipAccess.canPermission('edit_ordens_servico');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        RdoSectionCard(
+          title: 'Documento',
+          icon: Icons.picture_as_pdf_outlined,
+          margin: const EdgeInsets.only(bottom: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Gere o PDF da ordem de serviço para impressão ou compartilhamento.',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: theme.secondaryText,
+                ),
               ),
-            )
-          : Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              const SizedBox(height: 10),
+              _buildActionButton(
+                icon: Icons.picture_as_pdf_rounded,
+                label: _pdfLoading ? 'Gerando…' : 'Imprimir PDF',
+                onPressed: !_pdfLoading ? _onImprimirPdf : null,
+                loading: _pdfLoading,
+                backgroundColor: theme.primary,
+                foregroundColor: Colors.white,
+              ),
+            ],
+          ),
+        ),
+        if (statusId == 1 && canEdit)
+          RdoSectionCard(
+            title: 'Enviar para Aprovação',
+            icon: Icons.send_rounded,
+            margin: const EdgeInsets.only(bottom: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(icon, size: 18),
-                const SizedBox(width: 8),
-                Text(label,
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  'Quando a ordem estiver pronta, envie para o fluxo de assinaturas.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: theme.secondaryText,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _buildActionButton(
+                  icon: Icons.send_rounded,
+                  label: _enviandoAprovacao
+                      ? 'Enviando…'
+                      : 'Enviar para aprovação',
+                  onPressed:
+                      _enviandoAprovacao ? null : _onEnviarParaAprovacao,
+                  loading: _enviandoAprovacao,
+                  backgroundColor: theme.primary,
+                  foregroundColor: Colors.white,
+                ),
               ],
             ),
+          ),
+        if (podeRevogar)
+          RdoSectionCard(
+            title: 'Revogar aprovação',
+            icon: Icons.settings_backup_restore_rounded,
+            margin: const EdgeInsets.only(bottom: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Solicite a revogação desta ordem aprovada para reabrir o fluxo.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: theme.secondaryText,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _buildActionButton(
+                  icon: Icons.settings_backup_restore_rounded,
+                  label: 'Revogar aprovação',
+                  onPressed: _onSolicitarRevogacao,
+                  backgroundColor: Colors.orange.withValues(alpha: 0.08),
+                  foregroundColor: Colors.orange.shade800,
+                  outlined: true,
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
@@ -1251,358 +1322,86 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
     final podeDecidir = _data!['usuario_pode_decidir_revogacao'] == true;
 
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.orange.shade200),
+      clipBehavior: Clip.antiAlias,
+      decoration: rdoCardDecoration(context).copyWith(
+        border: Border.all(color: theme.warning.withValues(alpha: 0.35)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Icon(Icons.info_outline, size: 20, color: Colors.orange.shade900),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Revogação em andamento • Solicitado por $solicitante',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.orange.shade900,
-                  ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            decoration: BoxDecoration(
+              color: theme.warning.withValues(alpha: 0.08),
+              border: Border(
+                bottom: BorderSide(
+                  color: theme.warning.withValues(alpha: 0.25),
                 ),
               ),
-            ],
-          ),
-          if (podeDecidir && uuid.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Row(
+            ),
+            child: Row(
               children: [
+                Icon(Icons.info_outline_rounded,
+                    size: 18, color: theme.warning),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: FilledButton(
-                    onPressed: () => _onDecidirRevogacao(
-                      aprovar: true,
-                      revogacaoUuid: uuid,
+                  child: Text(
+                    'Revogação em andamento · Solicitado por $solicitante',
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: theme.primaryText,
                     ),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text('Aprovar revogação'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _onDecidirRevogacao(
-                      aprovar: false,
-                      revogacaoUuid: uuid,
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text('Rejeitar'),
                   ),
                 ),
               ],
             ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  static const double _resumeMetricCardHeight = 104 * 0.7;
-
-  Widget _buildResumeCards(FlutterFlowTheme theme) {
-    final d = _data!;
-    final tot = _totais();
-    final nAssin = (d['assinaturas'] as List?)?.length ?? 0;
-    final di = _formatDate(d['data_inicio']);
-    final df = _formatDate(d['data_fim']);
-    const h = _resumeMetricCardHeight;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _buildInfoCard(
-                theme,
-                '${_tarefas().length}',
-                'Tarefas',
-                Icons.task_alt,
-                height: h,
+          ),
+          if (podeDecidir && uuid.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => _onDecidirRevogacao(
+                        aprovar: true,
+                        revogacaoUuid: uuid,
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: theme.success,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(0, 38),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text('Aprovar revogação'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _onDecidirRevogacao(
+                        aprovar: false,
+                        revogacaoUuid: uuid,
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: theme.error,
+                        side: BorderSide(
+                          color: theme.error.withValues(alpha: 0.45),
+                        ),
+                        minimumSize: const Size(0, 38),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text('Rejeitar'),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildInfoCard(
-                theme,
-                _formatCurrency(tot['valorTotal']),
-                'Valor Total',
-                Icons.currency_bitcoin,
-                height: h,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _buildPeriodResumeCard(theme, di, df, height: h),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildInfoCard(
-                theme,
-                '$nAssin',
-                'Assinaturas',
-                Icons.draw,
-                height: h,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPeriodResumeCard(
-    FlutterFlowTheme theme,
-    String di,
-    String df, {
-    double? height,
-  }) {
-    const dateFontSize = 10.5;
-    final d1 = di.isEmpty ? '---' : di;
-    final d2 = df.isEmpty ? '---' : df;
-    final dateStyle = GoogleFonts.inter(
-      fontSize: dateFontSize,
-      fontWeight: FontWeight.w600,
-      height: 1.15,
-      color: theme.primaryText,
-    );
-
-    final inner = Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: BoxDecoration(
-        color: theme.secondaryBackground,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment:
-            height != null ? MainAxisAlignment.center : MainAxisAlignment.start,
-        mainAxisSize: height != null ? MainAxisSize.max : MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.calendar_today, size: 16, color: theme.primary),
-              const SizedBox(width: 6),
-              Text(
-                'Período',
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  color: theme.secondaryText,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  d1,
-                  style: dateStyle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Icon(
-                  Icons.arrow_forward_rounded,
-                  size: 14,
-                  color: theme.secondaryText,
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  d2,
-                  style: dateStyle,
-                  textAlign: TextAlign.end,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-    if (height != null) {
-      return SizedBox(height: height, child: inner);
-    }
-    return inner;
-  }
-
-  Widget _buildInfoCard(
-    FlutterFlowTheme theme,
-    String value,
-    String label,
-    IconData icon, {
-    String? subtitle,
-    double? height,
-  }) {
-    final inner = Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: BoxDecoration(
-        color: theme.secondaryBackground,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment:
-            height != null ? MainAxisAlignment.center : MainAxisAlignment.start,
-        mainAxisSize: height != null ? MainAxisSize.max : MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 16, color: theme.primary),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  color: theme.secondaryText,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: GoogleFonts.inter(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: theme.primaryText,
-            ),
-          ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                color: theme.secondaryText,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-    if (height != null) {
-      return SizedBox(height: height, child: inner);
-    }
-    return inner;
-  }
-
-  Widget _buildInfoTwoColumns(FlutterFlowTheme theme) {
-    final obra = _obra();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildInfoSection(
-          theme,
-          'Informações da Ordem',
-          [
-            _buildInfoRow(theme, 'Código:', '${_data!['codigo'] ?? '---'}'),
-            _buildInfoRow(
-                theme, 'Emissão:', _formatDate(_data!['data_emissao'])),
-            _buildInfoRow(
-              theme,
-              'Observações:',
-              (_data!['observacoes']?.toString().isNotEmpty ?? false)
-                  ? _data!['observacoes'].toString()
-                  : 'Nenhuma',
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _buildInfoSection(
-          theme,
-          'Informações da Obra',
-          [
-            _buildInfoRow(theme, 'Nome:', obra?['nome']?.toString() ?? '---'),
-            _buildInfoRow(theme, 'Endereço:', _enderecoObra()),
-            _buildInfoRow(theme, 'Cidade/UF:', _cidadeEstadoObra()),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInfoSection(
-    FlutterFlowTheme theme,
-    String title,
-    List<Widget> rows,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.secondaryBackground,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: GoogleFonts.inter(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: theme.primaryText,
-            ),
-          ),
-          const SizedBox(height: 12),
-          ...rows,
         ],
       ),
     );
@@ -1615,7 +1414,7 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 90,
+            width: 96,
             child: Text(
               label,
               style: GoogleFonts.inter(
@@ -1639,103 +1438,128 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
     );
   }
 
-  Widget _buildTarefasCard(FlutterFlowTheme theme, BuildContext context) {
-    final lista = _tarefasFiltradas();
-    final n = _tarefas().length;
-    final tot = _totais();
-
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.secondaryBackground,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+  Widget _buildInfoOrdemCard(FlutterFlowTheme theme) {
+    final obs = _data!['observacoes']?.toString().trim() ?? '';
+    return RdoSectionCard(
+      title: 'Informações da Ordem',
+      icon: Icons.info_outline_rounded,
+      margin: EdgeInsets.zero,
+      child: Column(
+        children: [
+          _buildInfoRow(theme, 'Código', '${_data!['codigo'] ?? '—'}'),
+          _buildInfoRow(
+            theme,
+            'Emissão',
+            _formatDate(_data!['data_emissao']).isEmpty
+                ? '—'
+                : _formatDate(_data!['data_emissao']),
+          ),
+          _buildInfoRow(
+            theme,
+            'Observações',
+            obs.isEmpty ? 'Nenhuma' : obs,
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildInfoObraCard(FlutterFlowTheme theme) {
+    final obra = _obra();
+    return RdoSectionCard(
+      title: 'Informações da Obra',
+      icon: Icons.apartment_outlined,
+      margin: EdgeInsets.zero,
+      child: Column(
+        children: [
+          _buildInfoRow(theme, 'Nome', obra?['nome']?.toString() ?? '—'),
+          _buildInfoRow(theme, 'Endereço', _enderecoObra()),
+          _buildInfoRow(theme, 'Cidade/UF', _cidadeEstadoObra()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTarefasCard(FlutterFlowTheme theme) {
+    final lista = _tarefasFiltradas();
+    final n = _tarefas().length;
+    final tot = _totais();
+    final saldo = tot['saldoTotal'] ?? 0;
+
+    return RdoSectionCard(
+      title: 'Tarefas',
+      icon: Icons.task_alt_outlined,
+      margin: EdgeInsets.zero,
+      trailing: n == 0 ? null : RdoContadorChip('$n'),
+      contentPadding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
               children: [
-                Text(
-                  'Tarefas',
-                  style: GoogleFonts.inter(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: theme.primaryText,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _buildFilterChip(theme, 'todas', 'Todas ($n)'),
-                    _buildFilterChip(theme, 'pendentes', 'Pendentes'),
-                    _buildFilterChip(theme, 'concluidas', 'Concluídas'),
-                  ],
-                ),
+                _buildFilterChip(theme, 'todas', 'Todas ($n)'),
+                _buildFilterChip(theme, 'pendentes', 'Pendentes'),
+                _buildFilterChip(theme, 'concluidas', 'Concluídas'),
               ],
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            color: theme.primary.withValues(alpha: 0.04),
-            child: Wrap(
-              spacing: 20,
-              runSpacing: 8,
-              children: [
-                Text(
-                  'Programado: ${tot['programadaTotal']}',
-                  style: GoogleFonts.inter(fontSize: 12),
+            decoration: BoxDecoration(
+              color: theme.primaryBackground.withValues(alpha: 0.55),
+              border: Border(
+                top: BorderSide(color: theme.alternate),
+                bottom: BorderSide(color: theme.alternate),
+              ),
+            ),
+            child: RdoKpiStrip(
+              itens: [
+                RdoKpiData(
+                  label: 'Programado',
+                  value: '${tot['programadaTotal']}',
                 ),
-                Text(
-                  'Realizado: ${tot['realizadaTotal']}',
-                  style: GoogleFonts.inter(fontSize: 12),
+                RdoKpiData(
+                  label: 'Realizado',
+                  value: '${tot['realizadaTotal']}',
                 ),
-                Text(
-                  'Saldo: ${tot['saldoTotal']}',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: ((tot['saldoTotal'] ?? 0) > 0)
-                        ? Colors.red
-                        : Colors.green,
-                  ),
+                RdoKpiData(
+                  label: 'Saldo',
+                  value: '$saldo',
+                  destaque: true,
                 ),
               ],
             ),
           ),
           if (lista.isEmpty)
             Padding(
-              padding: const EdgeInsets.all(32),
-              child: Center(
-                child: Text(
-                  'Nenhuma tarefa neste filtro',
-                  style: GoogleFonts.inter(
-                      fontSize: 14, color: theme.secondaryText),
-                ),
+              padding: const EdgeInsets.fromLTRB(16, 28, 16, 28),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.inbox_outlined,
+                    size: 36,
+                    color: theme.secondaryText.withValues(alpha: 0.45),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Nenhuma tarefa neste filtro',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: theme.secondaryText,
+                    ),
+                  ),
+                ],
               ),
             )
           else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: lista.length,
-              separatorBuilder: (_, __) => Divider(
-                height: 1,
-                color: Theme.of(context).dividerColor,
-              ),
-              itemBuilder: (ctx, index) =>
-                  _buildTarefaItem(theme, lista[index]),
-            ),
+            for (var i = 0; i < lista.length; i++) ...[
+              if (i > 0)
+                Divider(height: 1, thickness: 1, color: theme.alternate),
+              _buildTarefaItem(theme, lista[i]),
+            ],
         ],
       ),
     );
@@ -1743,27 +1567,24 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
 
   Widget _buildFilterChip(FlutterFlowTheme theme, String key, String label) {
     final sel = _filtroTarefa == key;
-    return GestureDetector(
-      onTap: () => setState(() => _filtroTarefa = key),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: sel ? theme.primary.withValues(alpha: 0.1) : theme.alternate,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: sel ? theme.primary : Colors.transparent,
-            width: 1,
-          ),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            fontWeight: sel ? FontWeight.w600 : FontWeight.w400,
-            color: sel ? theme.primary : theme.secondaryText,
-          ),
+    return FilterChip(
+      selected: sel,
+      showCheckmark: false,
+      label: Text(
+        label,
+        style: GoogleFonts.inter(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: sel ? Colors.white : theme.primaryText,
         ),
       ),
+      selectedColor: theme.primary,
+      backgroundColor: theme.secondaryBackground,
+      side: BorderSide(color: sel ? theme.primary : theme.alternate),
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      onSelected: (_) => setState(() => _filtroTarefa = key),
     );
   }
 
@@ -1779,190 +1600,193 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
     final status = _statusTarefaText(t);
     final statusColor = _statusTarefaColor(t);
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  desc,
-                  style: GoogleFonts.inter(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: theme.primaryText,
-                  ),
+    return Material(
+      color: theme.secondaryBackground,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(width: 3, color: statusColor),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            desc,
+                            style: GoogleFonts.inter(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              color: theme.primaryText,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: statusColor.withValues(alpha: 0.28),
+                            ),
+                          ),
+                          child: Text(
+                            status,
+                            style: GoogleFonts.inter(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: statusColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (local.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        local,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: theme.secondaryText,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Prog. ${t['qtd_programada'] ?? 0}',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: theme.secondaryText,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            'Real. ${t['qtd_realizada'] ?? 0}',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: theme.primaryText,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            'Saldo ${m['saldo']}',
+                            textAlign: TextAlign.end,
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: cor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: LinearProgressIndicator(
+                              value: (pct.clamp(0, 100) / 100).toDouble(),
+                              minHeight: 5,
+                              backgroundColor: theme.alternate,
+                              color:
+                                  pct >= 100 ? theme.success : theme.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          '${pct.toStringAsFixed(0)}%',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: pct >= 100 ? theme.success : theme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  status,
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: statusColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (local.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              local,
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                color: theme.secondaryText,
               ),
             ),
           ],
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(
-                'Prog. ${t['qtd_programada'] ?? 0}',
-                style: GoogleFonts.inter(fontSize: 13),
-              ),
-              Text(
-                'Real. ${t['qtd_realizada'] ?? 0}',
-                style: GoogleFonts.inter(fontSize: 13),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: cor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'Saldo ${m['saldo']}',
-                  style: GoogleFonts.inter(
-                      fontSize: 12, fontWeight: FontWeight.w600, color: cor),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Progresso',
-                    style: GoogleFonts.inter(
-                        fontSize: 11, color: theme.secondaryText),
-                  ),
-                  Text(
-                    '${pct.toStringAsFixed(1)}%',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: pct >= 100 ? Colors.green : theme.primary,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: LinearProgressIndicator(
-                  value: pct.clamp(0, 100) / 100,
-                  minHeight: 6,
-                  backgroundColor: theme.alternate,
-                  color: pct >= 100 ? Colors.green : theme.primary,
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildCustosCard(FlutterFlowTheme theme, BuildContext context) {
+  Widget _buildCustosCard(FlutterFlowTheme theme) {
     final custos = _data!['custos'] as List? ?? [];
     final tot = _totais();
+    final bdiPct = num.tryParse('${_data!['percentual_bdi'] ?? 0}') ?? 0;
+    final impPct = num.tryParse('${_data!['percentual_impostos'] ?? 0}') ?? 0;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.secondaryBackground,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+    return RdoSectionCard(
+      title: 'Custos e Tributos',
+      icon: Icons.payments_outlined,
+      margin: EdgeInsets.zero,
+      trailing: RdoContadorChip('${custos.length}'),
+      contentPadding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Text(
-              'Custos e Tributos',
-              style: GoogleFonts.inter(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: theme.primaryText,
+          for (var i = 0; i < custos.length; i++) ...[
+            if (i > 0)
+              Divider(height: 1, thickness: 1, color: theme.alternate),
+            if (custos[i] is Map)
+              _buildCustoItem(
+                theme,
+                Map<String, dynamic>.from(custos[i] as Map),
               ),
-            ),
-          ),
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: custos.length,
-            separatorBuilder: (_, __) => Divider(
-              height: 1,
-              color: Theme.of(context).dividerColor,
-            ),
-            itemBuilder: (ctx, index) =>
-                _buildCustoItem(theme, custos[index] as Map<String, dynamic>),
-          ),
+          ],
           Container(
-            padding: const EdgeInsets.all(16),
-            color: theme.primary.withValues(alpha: 0.04),
-            child: Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 16,
-              runSpacing: 8,
+            decoration: BoxDecoration(
+              color: theme.primaryBackground.withValues(alpha: 0.55),
+              border: Border(top: BorderSide(color: theme.alternate)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  'Custos: ${_formatCurrency(tot['custoTotal'])}',
-                  style: GoogleFonts.inter(fontSize: 12),
-                ),
-                if ((num.tryParse('${_data!['percentual_bdi'] ?? 0}') ?? 0) > 0)
-                  Text(
-                    'BDI (${_data!['percentual_bdi']}%): +${_formatCurrency(tot['valorBdi'])}',
-                    style: GoogleFonts.inter(fontSize: 12),
-                  ),
-                if ((num.tryParse('${_data!['percentual_impostos'] ?? 0}') ??
-                        0) >
-                    0)
-                  Text(
-                    'Impostos (${_data!['percentual_impostos']}%): +${_formatCurrency(tot['valorImpostos'])}',
-                    style: GoogleFonts.inter(fontSize: 12),
-                  ),
-                Text(
-                  'TOTAL: ${_formatCurrency(tot['valorTotal'])}',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: theme.primary,
-                  ),
+                RdoKpiStrip(
+                  itens: [
+                    RdoKpiData(
+                      label: 'Custos',
+                      value: _formatCurrency(tot['custoTotal']),
+                    ),
+                    if (bdiPct > 0)
+                      RdoKpiData(
+                        label: 'BDI ($bdiPct%)',
+                        value: _formatCurrency(tot['valorBdi']),
+                      ),
+                    if (impPct > 0)
+                      RdoKpiData(
+                        label: 'Impostos ($impPct%)',
+                        value: _formatCurrency(tot['valorImpostos']),
+                      ),
+                    RdoKpiData(
+                      label: 'Total',
+                      value: _formatCurrency(tot['valorTotal']),
+                      destaque: true,
+                      flex: 2,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1974,40 +1798,32 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
 
   Widget _buildCustoItem(FlutterFlowTheme theme, Map<String, dynamic> c) {
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '${c['descricao'] ?? ''}',
             style: GoogleFonts.inter(
-              fontSize: 15,
+              fontSize: 13.5,
               fontWeight: FontWeight.w600,
               color: theme.primaryText,
             ),
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 16,
-            runSpacing: 6,
+          const SizedBox(height: 6),
+          Row(
             children: [
-              Text(
-                'Un: ${c['unidade'] ?? '-'}',
-                style:
-                    GoogleFonts.inter(fontSize: 12, color: theme.secondaryText),
+              Expanded(
+                child: Text(
+                  'Un ${c['unidade'] ?? '—'} · Qtd ${c['qtd_prevista'] ?? '—'}',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: theme.secondaryText,
+                  ),
+                ),
               ),
               Text(
-                'Qtd: ${c['qtd_prevista'] ?? '-'}',
-                style:
-                    GoogleFonts.inter(fontSize: 12, color: theme.secondaryText),
-              ),
-              Text(
-                'Unitário: ${_formatCurrency(num.tryParse('${c['valor_unitario'] ?? 0}'))}',
-                style:
-                    GoogleFonts.inter(fontSize: 12, color: theme.secondaryText),
-              ),
-              Text(
-                'Total: ${_formatCurrency(num.tryParse('${c['valor_total'] ?? 0}'))}',
+                _formatCurrency(num.tryParse('${c['valor_total'] ?? 0}')),
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
@@ -2015,6 +1831,14 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Unitário ${_formatCurrency(num.tryParse('${c['valor_unitario'] ?? 0}'))}',
+            style: GoogleFonts.inter(
+              fontSize: 11.5,
+              color: theme.secondaryText,
+            ),
           ),
         ],
       ),
@@ -2029,95 +1853,187 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
     return nAssin > 0 || statusId == 2 || statusId == 3;
   }
 
-  Widget _buildAssinaturasCard(FlutterFlowTheme theme, BuildContext context) {
+  Widget _buildAssinaturasCard(FlutterFlowTheme theme) {
     final d = _data!;
     final statusId = int.tryParse('${d['status_id'] ?? 1}') ?? 1;
+    final assinaturasRaw = d['assinaturas'];
+    final listaAssin = assinaturasRaw is List ? assinaturasRaw : const [];
+    final nAssin = listaAssin.length;
 
-    Widget body;
+    String? subtitle;
     if (statusId == 2) {
-      body = _buildFluxoAssinaturasBody(theme);
+      subtitle = 'Aguardando aprovação na fila';
     } else if (statusId == 3) {
-      body = _buildCarimboAprovacaoBody(theme, d, context);
-    } else {
-      final list = d['assinaturas'] as List? ?? [];
-      body = _buildListaAssinaturasSimples(theme, list);
+      subtitle = 'Ordem aprovada';
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.secondaryBackground,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Assinaturas',
-              style: GoogleFonts.inter(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: theme.primaryText,
-              ),
-            ),
-            const SizedBox(height: 12),
-            body,
-          ],
-        ),
-      ),
+    Widget inner;
+    if (statusId == 2) {
+      inner = _buildFluxoAssinaturasBody(theme);
+    } else if (statusId == 3) {
+      inner = _buildCarimboAprovacaoBody(theme, d);
+    } else {
+      inner = _buildListaAssinaturasSimples(theme, listaAssin);
+    }
+
+    final contagem = statusId == 2
+        ? (_fluxo is Map && (_fluxo!['assinaturas'] is List)
+            ? (_fluxo!['assinaturas'] as List).length
+            : null)
+        : (statusId == 3
+            ? (_aprovadoresPayload?['aprovadores'] is List
+                ? (_aprovadoresPayload!['aprovadores'] as List).length
+                : null)
+            : nAssin);
+
+    return RdoSectionCard(
+      title: 'Assinaturas',
+      subtitle: subtitle,
+      icon: Icons.draw_outlined,
+      margin: EdgeInsets.zero,
+      trailing: contagem != null && contagem > 0
+          ? RdoContadorChip('$contagem')
+          : null,
+      contentPadding: EdgeInsets.zero,
+      child: inner,
     );
   }
 
   Widget _buildListaAssinaturasSimples(FlutterFlowTheme theme, List list) {
+    if (list.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
+        child: Text(
+          'Nenhuma assinatura registrada.',
+          style: GoogleFonts.inter(fontSize: 13, color: theme.secondaryText),
+        ),
+      );
+    }
     return Column(
-      children: list.map((raw) {
-        if (raw is! Map<String, dynamic>) return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            children: [
-              Icon(Icons.person_outline, size: 20, color: theme.secondaryText),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  raw['assinante'] is Map
-                      ? '${(raw['assinante'] as Map)['nome'] ?? '-'}'
-                      : '${raw['nome_assinante'] ?? raw['assinante_id'] ?? '-'}',
-                  style: GoogleFonts.inter(fontSize: 14),
-                ),
+      children: [
+        for (var i = 0; i < list.length; i++) ...[
+          if (i > 0)
+            Divider(height: 1, thickness: 1, color: theme.alternate),
+          if (list[i] is Map)
+            _buildLinhaAssinaturaCompacta(
+              theme,
+              Map<String, dynamic>.from(list[i] as Map),
+            ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildLinhaAssinaturaCompacta(
+    FlutterFlowTheme theme,
+    Map<String, dynamic> a,
+  ) {
+    final nome = a['assinante'] is Map
+        ? (a['assinante'] as Map)['nome']?.toString()
+        : (a['nome_assinante'] ?? a['assinante'] ?? a['assinante_id'])
+            ?.toString();
+    final pos = a['posicao'];
+    final sit = '${a['situacao'] ?? a['status'] ?? a['status_texto'] ?? '—'}';
+    final data = a['data_assinatura'];
+    final sitLower = sit.toLowerCase();
+    Color cor = theme.secondaryText;
+    IconData icone = Icons.person_outline_rounded;
+    if (sitLower.contains('aprov')) {
+      cor = theme.success;
+      icone = Icons.check_circle_rounded;
+    } else if (sitLower.contains('reprov') || sitLower.contains('rejeit')) {
+      cor = theme.error;
+      icone = Icons.cancel_rounded;
+    } else if (sitLower.contains('aguard') || sitLower.contains('pend')) {
+      cor = theme.warning;
+      icone = Icons.hourglass_top_rounded;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      child: Row(
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: theme.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '${pos ?? '—'}',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: theme.primary,
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.alternate,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${raw['situacao'] ?? raw['status'] ?? ''}',
-                  style: GoogleFonts.inter(fontSize: 11),
-                ),
-              ),
-            ],
+            ),
           ),
-        );
-      }).toList(),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  (nome ?? '').trim().isEmpty ? '—' : nome!.trim(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: theme.primaryText,
+                  ),
+                ),
+                if (data != null && _strOs(data).isNotEmpty)
+                  Text(
+                    _formatDataHoraMiniOs(data),
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: theme.secondaryText,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: cor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: cor.withValues(alpha: 0.28)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icone, size: 12, color: cor),
+                const SizedBox(width: 4),
+                Text(
+                  sit,
+                  style: GoogleFonts.inter(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: cor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildFluxoAssinaturasBody(FlutterFlowTheme theme) {
     if (_fluxoLoading) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 32),
-          child: CircularProgressIndicator(),
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 28),
+        child: Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
         ),
       );
     }
@@ -2127,179 +2043,305 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
     final lista = assinaturas is List ? assinaturas : const [];
     final prox = fluxoMap == null ? null : fluxoMap['proximo'];
     final proxNome = prox is Map ? _strOs(prox['nome']) : '';
+    final canApprove =
+        MembershipAccess.canPermission('approve_ordens_servico');
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (lista.isEmpty)
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-              child: Text(
-                'Não foi possível carregar a fila de aprovadores.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  color: theme.secondaryText,
-                ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
+            child: Text(
+              'Não foi possível carregar a fila de aprovadores. Atualize a tela.',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: theme.secondaryText,
               ),
             ),
           )
-        else ...[
-          for (final raw in lista)
-            if (raw is Map) ...[
-              _buildLinhaFluxoAssinatura(theme, Map<String, dynamic>.from(raw)),
-              const SizedBox(height: 8),
-            ],
-        ],
-        if (proxNome.isNotEmpty && _podeProcessarAssinatura != true) ...[
-          const SizedBox(height: 8),
+        else
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+            child: Column(
+              children: [
+                for (var i = 0; i < lista.length; i++)
+                  if (lista[i] is Map)
+                    _buildLinhaFluxoAssinatura(
+                      theme,
+                      Map<String, dynamic>.from(lista[i] as Map),
+                      isLast: i == lista.length - 1,
+                    ),
+              ],
+            ),
+          ),
+        if (proxNome.isNotEmpty && _podeProcessarAssinatura != true)
           Container(
-            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
             decoration: BoxDecoration(
-              color: theme.info.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(12),
+              color: theme.primary.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.primary.withValues(alpha: 0.2)),
             ),
             child: Row(
               children: [
-                Icon(Icons.hourglass_bottom_outlined, color: theme.info),
+                Icon(Icons.schedule_rounded, size: 16, color: theme.primary),
                 const SizedBox(width: 8),
-                Text(
-                  'Próximo na fila: $proxNome',
-                  style: GoogleFonts.inter(fontSize: 13),
+                Expanded(
+                  child: Text(
+                    'Próximo na fila: $proxNome',
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: theme.primaryText,
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-        ],
         if (_podeProcessarAssinatura == true) ...[
-          const Divider(height: 24),
-          if (MembershipAccess.canPermission('approve_ordens_servico')) ...[
-            Text(
-              'Sua decisão',
-              style: GoogleFonts.inter(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: theme.primaryBackground.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.alternate),
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildActionButton(
-                    icon: Icons.picture_as_pdf_rounded,
-                    label: 'PDF',
-                    onPressed: !_pdfLoading ? _onImprimirPdf : null,
-                    loading: _pdfLoading,
-                    backgroundColor: theme.primary,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildActionButton(
-                    icon: Icons.check,
-                    label: 'Aprovar',
-                    onPressed:
-                        _processandoAssinatura ? null : _onAprovarAssinatura,
-                    loading: _processandoAssinatura,
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed:
-                        _processandoAssinatura ? null : _onReprovarAssinatura,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+            child: canApprove
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('SUA DECISÃO', style: rdoColumnLabelStyle(context)),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: theme.success,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 8),
+                                minimumSize: const Size(0, 38),
+                                tapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              onPressed: _processandoAssinatura
+                                  ? null
+                                  : _onAprovarAssinatura,
+                              icon: _processandoAssinatura
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(Icons.check_rounded, size: 17),
+                              label: const Text('Aprovar'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: theme.error,
+                                side: BorderSide(
+                                  color: theme.error.withValues(alpha: 0.45),
+                                ),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 8),
+                                minimumSize: const Size(0, 38),
+                                tapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              onPressed: _processandoAssinatura
+                                  ? null
+                                  : _onReprovarAssinatura,
+                              icon: _processandoAssinatura
+                                  ? SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: theme.error,
+                                      ),
+                                    )
+                                  : const Icon(Icons.close_rounded, size: 17),
+                              label: const Text('Reprovar'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  )
+                : Text(
+                    'Sem permissão para aprovar ordens de serviço.',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: theme.primaryText,
                     ),
-                    child: const Text('Reprovar'),
                   ),
-                ),
-              ],
-            ),
-          ] else
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: theme.info.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                'Sem permissão para aprovar ordens de serviço.',
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  color: theme.primaryText,
-                ),
-              ),
-            ),
+          ),
         ],
       ],
     );
   }
 
   Widget _buildLinhaFluxoAssinatura(
-      FlutterFlowTheme theme, Map<String, dynamic> a) {
+    FlutterFlowTheme theme,
+    Map<String, dynamic> a, {
+    bool isLast = false,
+  }) {
     final situacao = _strOs(a['situacao']);
     final numSit = a['situacao_numero'];
-    Color chipColor = theme.secondaryText;
-    if (numSit == 1) chipColor = Colors.orange;
-    if (numSit == 2) chipColor = Colors.green.shade700;
-    if (numSit == 3) chipColor = theme.error;
     final proximo = a['e_proximo'] == true;
+    final nome = _strOs(a['nome']);
+    final pos = _strOs(a['posicao']);
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: proximo
-            ? theme.primary.withValues(alpha: 0.08)
-            : theme.alternate.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(12),
-      ),
+    Color chipColor = theme.secondaryText;
+    IconData statusIcon = Icons.radio_button_unchecked;
+    if (numSit == 1) {
+      chipColor = theme.warning;
+      statusIcon = Icons.hourglass_top_rounded;
+    } else if (numSit == 2) {
+      chipColor = theme.success;
+      statusIcon = Icons.check_circle_rounded;
+    } else if (numSit == 3) {
+      chipColor = theme.error;
+      statusIcon = Icons.cancel_rounded;
+    }
+    if (proximo) {
+      chipColor = theme.primary;
+      statusIcon = Icons.play_circle_outline_rounded;
+    }
+
+    return IntrinsicHeight(
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(
-            proximo ? Icons.arrow_circle_right : Icons.person_outline,
-            color: proximo ? theme.primary : theme.secondaryText,
-            size: 22,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
+          SizedBox(
+            width: 28,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '${_strOs(a['posicao'])}º ${_strOs(a['nome'])}',
-                  style: GoogleFonts.inter(
-                      fontSize: 14, fontWeight: FontWeight.w500),
+                Container(
+                  width: 24,
+                  height: 24,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: proximo
+                        ? theme.primary
+                        : chipColor.withValues(alpha: 0.14),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: proximo
+                          ? theme.primary
+                          : chipColor.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Text(
+                    pos.isEmpty ? '—' : pos,
+                    style: GoogleFonts.inter(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: proximo ? Colors.white : chipColor,
+                    ),
+                  ),
                 ),
-                if (proximo)
-                  Text(
-                    'Aguardando esta assinatura',
-                    style:
-                        GoogleFonts.inter(fontSize: 11, color: theme.primary),
+                if (!isLast)
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      margin: const EdgeInsets.symmetric(vertical: 2),
+                      color: theme.alternate,
+                    ),
                   ),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: chipColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              situacao,
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: chipColor,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Container(
+              margin: EdgeInsets.only(bottom: isLast ? 0 : 8),
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+              decoration: BoxDecoration(
+                color: proximo
+                    ? theme.primary.withValues(alpha: 0.06)
+                    : theme.secondaryBackground,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: proximo
+                      ? theme.primary.withValues(alpha: 0.28)
+                      : theme.alternate,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          nome.isEmpty ? '—' : nome,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: theme.primaryText,
+                          ),
+                        ),
+                        if (proximo)
+                          Text(
+                            'Aguardando esta assinatura',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: theme.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: chipColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: chipColor.withValues(alpha: 0.28),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(statusIcon, size: 12, color: chipColor),
+                        const SizedBox(width: 4),
+                        Text(
+                          situacao.isEmpty
+                              ? (proximo ? 'Na fila' : '—')
+                              : situacao,
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: chipColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -2308,13 +2350,19 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
     );
   }
 
-  Widget _buildCarimboAprovacaoBody(FlutterFlowTheme theme,
-      Map<String, dynamic> d, BuildContext context) {
+  Widget _buildCarimboAprovacaoBody(
+    FlutterFlowTheme theme,
+    Map<String, dynamic> d,
+  ) {
     if (_aprovadoresLoading) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 32),
-          child: CircularProgressIndicator(),
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 28),
+        child: Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
         ),
       );
     }
@@ -2325,87 +2373,90 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
     final ultima = pay != null ? pay['ultima_aprovacao'] : null;
 
     if (aprovadores.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.info_outline,
-                size: 48,
-                color: theme.secondaryText.withValues(alpha: 0.5),
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 20, 12, 20),
+        child: Column(
+          children: [
+            Icon(
+              Icons.info_outline_rounded,
+              size: 36,
+              color: theme.secondaryText.withValues(alpha: 0.5),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Nenhuma aprovação registrada',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: theme.secondaryText,
               ),
-              const SizedBox(height: 12),
-              Text(
-                'Nenhuma aprovação registrada',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: theme.secondaryText,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     }
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Icon(Icons.verified_rounded,
-                color: Colors.green.shade700, size: 28),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'ORDEM APROVADA',
-                style: GoogleFonts.inter(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.green.shade700,
-                ),
-              ),
-            ),
-            if (ultima != null)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.alternate,
-                  borderRadius: BorderRadius.circular(12),
-                ),
+        Container(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          decoration: BoxDecoration(
+            color: theme.success.withValues(alpha: 0.08),
+            border: Border(bottom: BorderSide(color: theme.alternate)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.verified_rounded, color: theme.success, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
                 child: Text(
-                  _formatDataHoraMiniOs(ultima).split(' ').first,
-                  style: GoogleFonts.inter(fontSize: 11),
+                  'Ordem aprovada',
+                  style: GoogleFonts.inter(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: theme.success,
+                  ),
                 ),
               ),
-          ],
+              if (ultima != null)
+                Text(
+                  _formatDataHoraMiniOs(ultima).split(' ').first,
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: theme.secondaryText,
+                  ),
+                ),
+            ],
+          ),
         ),
-        const SizedBox(height: 16),
-        for (var i = 0; i < aprovadores.length; i++)
-          if (aprovadores[i] is Map) ...[
+        for (var i = 0; i < aprovadores.length; i++) ...[
+          if (i > 0) Divider(height: 1, color: theme.alternate),
+          if (aprovadores[i] is Map)
             _buildCarimboAprovador(
-                theme,
-                context,
-                Map<String, dynamic>.from(aprovadores[i] as Map),
-                destaque: i == 0),
-            const SizedBox(height: 12),
-          ],
-        const Divider(height: 24),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Icon(Icons.shield_outlined, size: 14, color: theme.secondaryText),
-            const SizedBox(width: 6),
-            Text(
-              '#${_hashCarimbo(d['id'], ultima)}',
-              style:
-                  GoogleFonts.inter(fontSize: 11, color: theme.secondaryText),
+              theme,
+              Map<String, dynamic>.from(aprovadores[i] as Map),
+              destaque: i == 0,
             ),
-          ],
+        ],
+        Container(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: theme.alternate)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.shield_outlined, size: 14, color: theme.secondaryText),
+              const SizedBox(width: 6),
+              Text(
+                '#${_hashCarimbo(d['id'], ultima)}',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  color: theme.secondaryText,
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -2413,39 +2464,28 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
 
   Widget _buildCarimboAprovador(
     FlutterFlowTheme theme,
-    BuildContext context,
     Map<String, dynamic> a, {
     required bool destaque,
   }) {
     final nome = _strOs(a['nome']);
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: destaque
-              ? Colors.green.shade300
-              : Theme.of(context).dividerColor,
-          width: destaque ? 2 : 1,
-        ),
-        color: destaque ? Colors.green.shade50 : null,
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           CircleAvatar(
-            backgroundColor: destaque ? Colors.green.shade600 : theme.primary,
-            radius: 24,
+            backgroundColor: destaque ? theme.success : theme.primary,
+            radius: 18,
             child: Text(
               _iniciaisNome(nome.isEmpty ? null : nome),
               style: GoogleFonts.inter(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
-                fontSize: 14,
+                fontSize: 12,
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2453,11 +2493,12 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
                 Text(
                   nome.isEmpty ? 'N/A' : nome,
                   style: GoogleFonts.inter(
-                    fontSize: 15,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w600,
+                    color: theme.primaryText,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
                   _cargoExibicao(a),
                   style: GoogleFonts.inter(
@@ -2465,13 +2506,17 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
                     color: theme.secondaryText,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 Wrap(
                   spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: theme.alternate,
                         borderRadius: BorderRadius.circular(8),
@@ -2485,7 +2530,9 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
                       Text(
                         _formatDataHoraMiniOs(a['data_assinatura']),
                         style: GoogleFonts.inter(
-                            fontSize: 11, color: theme.secondaryText),
+                          fontSize: 11,
+                          color: theme.secondaryText,
+                        ),
                       ),
                   ],
                 ),

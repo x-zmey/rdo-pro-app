@@ -20,13 +20,13 @@ class AddMateriaisRecebidosRelatorioModalCopyModel
     extends FlutterFlowModel<AddMateriaisRecebidosRelatorioModalCopyWidget> {
   ///  Local state fields for this component.
 
-  String? materialSelecionado;
+  List<String>? materiaisSelecionados;
 
   ///  State fields for stateful widgets in this component.
 
-  // State field(s) for DropDown widget.
-  String? dropDownValue;
-  FormFieldController<String>? dropDownValueController;
+  // State field(s) for DropDown widget (multi-select).
+  List<String>? dropDownValue;
+  FormFieldController<List<String>?>? dropDownValueController;
   // State field(s) for qtd widget.
   FocusNode? qtdFocusNode;
   TextEditingController? qtdTextController;

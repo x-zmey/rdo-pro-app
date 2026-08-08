@@ -1,12 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '/auth/membership_access.dart';
 import '/backend/api_requests/api_calls.dart';
 import '/backend/sqlite/sqlite_manager.dart';
+import '/componentes/navegacao/barra_navegacao_principal.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/custom_code/actions/index.dart' as custom_actions;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import 'package:easy_debounce/easy_debounce.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -76,18 +78,6 @@ String _isoDateToBrField(dynamic v) {
   return '';
 }
 
-String _formatDateTimeBrFromIso(dynamic v) {
-  if (v == null) return '—';
-  final s = v.toString().trim();
-  if (s.isEmpty) return '—';
-  try {
-    final dt = DateTime.parse(s.replaceFirst(' ', 'T'));
-    return DateFormat('dd/MM/yyyy HH:mm', 'pt_BR').format(dt.toLocal());
-  } catch (_) {
-    return s;
-  }
-}
-
 String _statusEquipLabel(String situacao) {
   switch (situacao) {
     case 'disponivel':
@@ -103,7 +93,7 @@ String _statusEquipLabel(String situacao) {
   }
 }
 
-Color _situacaoChipColor(BuildContext context, String s) {
+Color _situacaoChipColor(String s) {
   switch (s) {
     case 'disponivel':
       return Colors.green.shade700;
@@ -114,7 +104,7 @@ Color _situacaoChipColor(BuildContext context, String s) {
     case 'inativo':
       return Colors.grey.shade700;
     default:
-      return FlutterFlowTheme.of(context).secondaryText;
+      return Colors.grey.shade600;
   }
 }
 
@@ -130,7 +120,8 @@ class EquipamentosCadastrosWidget extends StatefulWidget {
       _EquipamentosCadastrosWidgetState();
 }
 
-class _EquipamentosCadastrosWidgetState extends State<EquipamentosCadastrosWidget> {
+class _EquipamentosCadastrosWidgetState
+    extends State<EquipamentosCadastrosWidget> {
   late EquipamentosCadastrosModel _model;
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final _searchController = TextEditingController();
@@ -140,13 +131,12 @@ class _EquipamentosCadastrosWidgetState extends State<EquipamentosCadastrosWidge
   List<Map<String, dynamic>> _items = [];
   List<Map<String, dynamic>> _filteredAll = [];
   int _total = 0;
-  int _page = 1;
-  int _perPage = 10;
   String _sortBy = 'nome';
   String _sortOrder = 'asc';
   String _filterSituacao = '';
   String _filterCategoria = '';
   List<String> _categorias = [];
+  String _busca = '';
 
   static const _debounceTag = 'equipamentos-search';
 
@@ -154,7 +144,19 @@ class _EquipamentosCadastrosWidgetState extends State<EquipamentosCadastrosWidge
   void initState() {
     super.initState();
     _model = createModel(context, () => EquipamentosCadastrosModel());
-    _bootstrap();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!MembershipAccess.canPermission('view_equipamentos')) {
+        MembershipAccess.showDenied(
+          context,
+          'Sem permissão para visualizar equipamentos.',
+        );
+        if (context.mounted && context.canPop()) {
+          context.pop();
+        }
+        return;
+      }
+      _bootstrap();
+    });
   }
 
   Future<void> _bootstrap() async {
@@ -212,8 +214,14 @@ class _EquipamentosCadastrosWidgetState extends State<EquipamentosCadastrosWidge
     if (kIsWeb) return;
     try {
       final db = SQLiteManager.instance.database;
+      final owner = FFAppState().creatorUuid.trim();
+      if (owner.isEmpty) {
+        if (mounted) setState(() => _categorias = []);
+        return;
+      }
       final rows = await db.rawQuery(
-        "SELECT DISTINCT categoria FROM equipamentos WHERE categoria IS NOT NULL AND TRIM(categoria) != '' ORDER BY categoria COLLATE NOCASE",
+        "SELECT DISTINCT categoria FROM equipamentos WHERE created_by = ? AND categoria IS NOT NULL AND TRIM(categoria) != '' ORDER BY categoria COLLATE NOCASE",
+        [owner],
       );
       final list = <String>[];
       for (final r in rows) {
@@ -289,7 +297,8 @@ class _EquipamentosCadastrosWidgetState extends State<EquipamentosCadastrosWidge
                   .compareTo('${b['placa_identificacao'] ?? ''}');
         case 'valor_hora':
           return asc *
-              _eqToDouble(a['valor_hora']).compareTo(_eqToDouble(b['valor_hora']));
+              _eqToDouble(a['valor_hora'])
+                  .compareTo(_eqToDouble(b['valor_hora']));
         case 'valor_diaria':
           return asc *
               _eqToDouble(a['valor_diaria'])
@@ -355,7 +364,22 @@ class _EquipamentosCadastrosWidgetState extends State<EquipamentosCadastrosWidge
         }
       }
 
-      final rawAll = await db.query('equipamentos');
+      final owner = FFAppState().creatorUuid.trim();
+      if (owner.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _filteredAll = [];
+          _items = [];
+          _total = 0;
+        });
+        return;
+      }
+      final rawAll = await db.query(
+        'equipamentos',
+        where: 'created_by = ?',
+        whereArgs: [owner],
+      );
       final raw = rawAll.where((r) {
         final d = r['deleted_at'];
         if (d == null) return true;
@@ -373,16 +397,12 @@ class _EquipamentosCadastrosWidgetState extends State<EquipamentosCadastrosWidge
       final filtered = mapped.where(_rowMatchesFilters).toList();
       _sortFiltered(filtered);
 
-      final total = filtered.length;
-      final start = ((_page - 1) * _perPage).clamp(0, 1 << 30);
-      final pageItems = filtered.skip(start).take(_perPage).toList();
-
       if (!mounted) return;
       setState(() {
         _loading = false;
         _filteredAll = filtered;
-        _items = pageItems;
-        _total = total;
+        _items = filtered;
+        _total = filtered.length;
       });
     } catch (e) {
       if (!mounted) return;
@@ -410,6 +430,12 @@ class _EquipamentosCadastrosWidgetState extends State<EquipamentosCadastrosWidge
     } catch (_) {}
     if (mounted) await _loadCategoriasFromSqlite();
     if (mounted) await _fetchEquipamentos();
+  }
+
+  int _serverId(Map<String, dynamic> m) {
+    final id = m['id'];
+    if (id is int) return id;
+    return int.tryParse('$id') ?? 0;
   }
 
   Future<void> _exportLocalCsv() async {
@@ -468,14 +494,12 @@ class _EquipamentosCadastrosWidgetState extends State<EquipamentosCadastrosWidge
     );
   }
 
-  void _onSearchChanged(String _) {
+  void _onSearchChanged(String value) {
+    setState(() => _busca = value);
     EasyDebounce.debounce(
       _debounceTag,
       const Duration(milliseconds: 450),
-      () {
-        _page = 1;
-        _fetchEquipamentos();
-      },
+      () => _fetchEquipamentos(),
     );
   }
 
@@ -490,6 +514,10 @@ class _EquipamentosCadastrosWidgetState extends State<EquipamentosCadastrosWidge
   @override
   Widget build(BuildContext context) {
     context.watch<FFAppState>();
+    final theme = FlutterFlowTheme.of(context);
+    final canCreate = MembershipAccess.canPermission('create_equipamentos');
+    final canEdit = MembershipAccess.canPermission('edit_equipamentos');
+    final canDelete = MembershipAccess.canPermission('delete_equipamentos');
 
     return GestureDetector(
       onTap: () {
@@ -498,602 +526,643 @@ class _EquipamentosCadastrosWidgetState extends State<EquipamentosCadastrosWidge
       },
       child: Scaffold(
         key: scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
+        backgroundColor: theme.primaryBackground,
         appBar: AppBar(
-          backgroundColor: FlutterFlowTheme.of(context).primary,
-          automaticallyImplyLeading: true,
-          title: Text(
-            'Equipamentos',
-            style: FlutterFlowTheme.of(context).titleLarge.override(
-                  font: GoogleFonts.interTight(fontWeight: FontWeight.w600),
-                  color: Colors.white,
-                  fontSize: 20,
+          backgroundColor: theme.primary,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          centerTitle: false,
+          titleSpacing: 0,
+          toolbarHeight: 58,
+          iconTheme: const IconThemeData(color: Colors.white),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: () => context.safePop(),
+          ),
+          title: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Equipamentos',
+                  style: GoogleFonts.interTight(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
                 ),
+                Text(
+                  'Catálogo geral do sistema',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
           ),
           actions: [
             IconButton(
               tooltip: 'Sincronizar e atualizar',
               onPressed: _loading ? null : _syncAndReloadList,
               icon: _loading
-                  ? SizedBox(
-                      width: 22,
-                      height: 22,
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: FlutterFlowTheme.of(context).info,
+                        color: Colors.white,
                       ),
                     )
-                  : Icon(Icons.refresh, color: FlutterFlowTheme.of(context).info),
+                  : const Icon(Icons.refresh_rounded,
+                      color: Colors.white, size: 21),
             ),
             PopupMenuButton<String>(
-              tooltip: 'Exportar',
-              icon: Icon(Icons.ios_share, color: FlutterFlowTheme.of(context).info),
+              tooltip: 'Mais opções',
+              icon: const Icon(Icons.more_vert_rounded,
+                  color: Colors.white, size: 22),
               onSelected: (v) {
-                if (v == 'csv') _exportLocalCsv();
+                if (v == 'csv') {
+                  _exportLocalCsv();
+                  return;
+                }
+                if (v.startsWith('sort:')) {
+                  setState(() => _sortBy = v.substring(5));
+                  _fetchEquipamentos();
+                  return;
+                }
+                if (v == 'order') {
+                  setState(() {
+                    _sortOrder = _sortOrder == 'asc' ? 'desc' : 'asc';
+                  });
+                  _fetchEquipamentos();
+                }
               },
               itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'csv',
-                  child: Text('CSV (SQLite / filtros)'),
-                ),
-              ],
-            ),
-          ],
-          elevation: 0,
-        ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _openForm(context, null),
-          backgroundColor: FlutterFlowTheme.of(context).primary,
-          icon: Icon(Icons.add, color: FlutterFlowTheme.of(context).info),
-          label: Text(
-            'Novo equipamento',
-            style: TextStyle(color: FlutterFlowTheme.of(context).info),
-          ),
-        ),
-        body: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildHeader(context),
-              _buildFilters(context),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.all(12),
+                PopupMenuItem(
+                  value: 'order',
                   child: Text(
-                    _error!,
-                    style: TextStyle(color: FlutterFlowTheme.of(context).error),
+                    _sortOrder == 'asc'
+                        ? 'Ordenar decrescente'
+                        : 'Ordenar crescente',
                   ),
                 ),
-              Expanded(child: _buildBody(context)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: FlutterFlowTheme.of(context).primary.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(Icons.handyman_outlined,
-                color: FlutterFlowTheme.of(context).primary, size: 26),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Equipamentos',
-                  style: FlutterFlowTheme.of(context).headlineSmall.override(
-                        font: GoogleFonts.interTight(fontWeight: FontWeight.bold),
-                        color: FlutterFlowTheme.of(context).primary,
-                      ),
-                ),
-                Text(
-                  'Lista no SQLite; alterações vão à API e em seguida sincronizam o catálogo.',
-                  style: FlutterFlowTheme.of(context).bodySmall.override(
-                        color: FlutterFlowTheme.of(context).secondaryText,
-                      ),
-                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                    value: 'sort:nome', child: Text('Ordenar por nome')),
+                const PopupMenuItem(
+                    value: 'sort:codigo', child: Text('Ordenar por código')),
+                const PopupMenuItem(
+                    value: 'sort:categoria',
+                    child: Text('Ordenar por categoria')),
+                const PopupMenuItem(
+                    value: 'sort:marca', child: Text('Ordenar por marca')),
+                const PopupMenuItem(
+                    value: 'sort:situacao',
+                    child: Text('Ordenar por situação')),
+                const PopupMenuDivider(),
+                const PopupMenuItem(value: 'csv', child: Text('Exportar CSV')),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilters(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: FlutterFlowTheme.of(context).alternate,
+            if (canCreate)
+              IconButton(
+                tooltip: 'Novo equipamento',
+                icon: const Icon(Icons.add_rounded,
+                    color: Colors.white, size: 24),
+                onPressed: () => _openForm(null),
+              ),
+            const SizedBox(width: 4),
+          ],
         ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
+        body: Column(
           children: [
-            TextField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: 'Buscar por nome, código, placa, marca ou modelo...',
-                prefixIcon: Icon(Icons.search,
-                    color: FlutterFlowTheme.of(context).secondaryText),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            Expanded(
+              child: RefreshIndicator(
+                color: theme.primary,
+                onRefresh: _syncAndReloadList,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(
+                    16,
+                    10,
+                    16,
+                    kBarraNavegacaoPrincipalReservaScroll,
+                  ),
+                  children: [
+                    if (canCreate)
+                      RdoSectionCard(
+                        title: 'Incluir equipamento',
+                        icon: Icons.add_box_outlined,
+                        subtitle: 'Cadastrar no catálogo',
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: FilledButton.icon(
+                          onPressed: () => _openForm(null),
+                          icon: const Icon(Icons.add_rounded, size: 18),
+                          label: Text(
+                            'Novo equipamento',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: theme.primary,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(double.infinity, 42),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    RdoSectionCard(
+                      title: 'Buscar e filtrar',
+                      icon: Icons.search_rounded,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: Column(
+                        children: [
+                          TextField(
+                            controller: _searchController,
+                            onChanged: _onSearchChanged,
+                            style: rdoFormFieldTextStyle(context),
+                            decoration: rdoFormFieldDecoration(
+                              context,
+                              label: 'Nome, código, placa, marca ou modelo',
+                              hint: 'Digite para filtrar',
+                              suffixIcon: _busca.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      tooltip: 'Limpar',
+                                      icon: Icon(
+                                        Icons.close_rounded,
+                                        size: 18,
+                                        color: theme.secondaryText,
+                                      ),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        setState(() => _busca = '');
+                                        _fetchEquipamentos();
+                                      },
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  key: ValueKey('f_sit_$_filterSituacao'),
+                                  initialValue: _filterSituacao,
+                                  isExpanded: true,
+                                  style: rdoFormFieldTextStyle(context),
+                                  decoration: rdoFormFieldDecoration(
+                                    context,
+                                    label: 'Situação',
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(
+                                        value: '', child: Text('Todas')),
+                                    DropdownMenuItem(
+                                        value: 'disponivel',
+                                        child: Text('Disponível')),
+                                    DropdownMenuItem(
+                                        value: 'em_uso',
+                                        child: Text('Em uso')),
+                                    DropdownMenuItem(
+                                        value: 'manutencao',
+                                        child: Text('Manutenção')),
+                                    DropdownMenuItem(
+                                        value: 'inativo',
+                                        child: Text('Inativo')),
+                                  ],
+                                  onChanged: (v) {
+                                    setState(() => _filterSituacao = v ?? '');
+                                    _fetchEquipamentos();
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  key: ValueKey('f_cat_$_filterCategoria'),
+                                  initialValue: _filterCategoria,
+                                  isExpanded: true,
+                                  style: rdoFormFieldTextStyle(context),
+                                  decoration: rdoFormFieldDecoration(
+                                    context,
+                                    label: 'Categoria',
+                                  ),
+                                  items: [
+                                    const DropdownMenuItem(
+                                        value: '', child: Text('Todas')),
+                                    ..._categorias.map(
+                                      (c) => DropdownMenuItem(
+                                        value: c,
+                                        child: Text(
+                                          c,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                    if (_filterCategoria.isNotEmpty &&
+                                        !_categorias
+                                            .contains(_filterCategoria))
+                                      DropdownMenuItem(
+                                        value: _filterCategoria,
+                                        child: Text(
+                                          _filterCategoria,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                  ],
+                                  onChanged: (v) {
+                                    setState(
+                                        () => _filterCategoria = v ?? '');
+                                    _fetchEquipamentos();
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_filterSituacao.isNotEmpty ||
+                              _filterCategoria.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    _filterSituacao = '';
+                                    _filterCategoria = '';
+                                  });
+                                  _fetchEquipamentos();
+                                },
+                                icon: Icon(
+                                  Icons.filter_alt_off_rounded,
+                                  size: 16,
+                                  color: theme.secondaryText,
+                                ),
+                                label: Text(
+                                  'Limpar filtros',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.secondaryText,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    RdoSectionCard(
+                      title: 'Lista de equipamentos',
+                      icon: Icons.handyman_outlined,
+                      subtitle: _loading
+                          ? 'Carregando…'
+                          : _error != null
+                              ? 'Falha ao carregar'
+                              : _items.isEmpty
+                                  ? 'Nenhum equipamento encontrado'
+                                  : _busca.trim().isEmpty &&
+                                          _filterSituacao.isEmpty &&
+                                          _filterCategoria.isEmpty
+                                      ? 'Catálogo sincronizado'
+                                      : '$_total resultado${_total == 1 ? '' : 's'}',
+                      margin: EdgeInsets.zero,
+                      trailing:
+                          _items.isEmpty ? null : RdoContadorChip('$_total'),
+                      contentPadding: EdgeInsets.zero,
+                      child: _buildLista(theme, canCreate, canEdit, canDelete),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    key: ValueKey('f_sit_$_filterSituacao'),
-                    initialValue: _filterSituacao,
-                    decoration: InputDecoration(
-                      labelText: 'Situação',
-                      isDense: true,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: '', child: Text('Todas')),
-                      DropdownMenuItem(
-                          value: 'disponivel', child: Text('Disponível')),
-                      DropdownMenuItem(value: 'em_uso', child: Text('Em uso')),
-                      DropdownMenuItem(
-                          value: 'manutencao', child: Text('Manutenção')),
-                      DropdownMenuItem(value: 'inativo', child: Text('Inativo')),
-                    ],
-                    onChanged: (v) {
-                      setState(() {
-                        _filterSituacao = v ?? '';
-                        _page = 1;
-                      });
-                      _fetchEquipamentos();
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    key: ValueKey('f_cat_$_filterCategoria'),
-                    initialValue: _filterCategoria,
-                    decoration: InputDecoration(
-                      labelText: 'Categoria',
-                      isDense: true,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    items: [
-                      const DropdownMenuItem(value: '', child: Text('Todas')),
-                      ..._categorias.map(
-                        (c) => DropdownMenuItem(value: c, child: Text(c)),
-                      ),
-                      if (_filterCategoria.isNotEmpty &&
-                          !_categorias.contains(_filterCategoria))
-                        DropdownMenuItem(
-                          value: _filterCategoria,
-                          child: Text(_filterCategoria),
-                        ),
-                    ],
-                    onChanged: (v) {
-                      setState(() {
-                        _filterCategoria = v ?? '';
-                        _page = 1;
-                      });
-                      _fetchEquipamentos();
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Text('Ordenar:', style: FlutterFlowTheme.of(context).labelMedium),
-                const SizedBox(width: 8),
-                DropdownButton<String>(
-                  value: _sortBy,
-                  items: const [
-                    DropdownMenuItem(value: 'nome', child: Text('Nome')),
-                    DropdownMenuItem(value: 'codigo', child: Text('Código')),
-                    DropdownMenuItem(value: 'categoria', child: Text('Categoria')),
-                    DropdownMenuItem(value: 'marca', child: Text('Marca')),
-                    DropdownMenuItem(value: 'modelo', child: Text('Modelo')),
-                    DropdownMenuItem(
-                        value: 'placa_identificacao', child: Text('Placa')),
-                    DropdownMenuItem(value: 'valor_hora', child: Text('Valor hora')),
-                    DropdownMenuItem(
-                        value: 'valor_diaria', child: Text('Valor diária')),
-                    DropdownMenuItem(value: 'situacao', child: Text('Situação')),
-                  ],
-                  onChanged: (v) {
-                    if (v == null) return;
-                    setState(() {
-                      _sortBy = v;
-                      _page = 1;
-                    });
-                    _fetchEquipamentos();
-                  },
-                ),
-                IconButton(
-                  tooltip: _sortOrder == 'asc' ? 'Crescente' : 'Decrescente',
-                  onPressed: () {
-                    setState(() {
-                      _sortOrder = _sortOrder == 'asc' ? 'desc' : 'asc';
-                      _page = 1;
-                    });
-                    _fetchEquipamentos();
-                  },
-                  icon: Icon(
-                    _sortOrder == 'asc' ? Icons.arrow_upward : Icons.arrow_downward,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                if (_filterSituacao.isNotEmpty || _filterCategoria.isNotEmpty)
-                  ActionChip(
-                    avatar: const Icon(Icons.filter_alt_off, size: 18),
-                    label: const Text('Limpar filtros'),
-                    onPressed: () {
-                      setState(() {
-                        _filterSituacao = '';
-                        _filterCategoria = '';
-                        _page = 1;
-                      });
-                      _fetchEquipamentos();
-                    },
-                  ),
-                const Spacer(),
-                Chip(
-                  label: Text('$_total equipamento${_total == 1 ? '' : 's'}'),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
-            ),
+            const BarraNavegacaoPrincipal(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBody(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_total == 0 && _error == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.construction, size: 56, color: Colors.grey.shade400),
-              const SizedBox(height: 12),
-              Text(
-                'Nenhum equipamento encontrado',
-                style: FlutterFlowTheme.of(context).titleMedium,
-              ),
-              const SizedBox(height: 8),
-              FFButtonWidget(
-                onPressed: () => _openForm(context, null),
-                text: 'Novo equipamento',
-                options: FFButtonOptions(
-                  color: FlutterFlowTheme.of(context).primary,
-                  textStyle: FlutterFlowTheme.of(context).titleSmall.override(
-                        color: FlutterFlowTheme.of(context).info,
-                      ),
-                ),
-              ),
-            ],
+  Widget _buildLista(
+    FlutterFlowTheme theme,
+    bool canCreate,
+    bool canEdit,
+    bool canDelete,
+  ) {
+    if (_loading && _items.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 36),
+        child: Center(
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
           ),
         ),
       );
     }
 
-    final lastPage = (_total / _perPage).ceil().clamp(1, 99999);
+    if (_error != null && _items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 28),
+        child: Column(
+          children: [
+            Icon(Icons.error_outline_rounded, size: 40, color: theme.error),
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(fontSize: 13, color: theme.error),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: _syncAndReloadList,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: Text(
+                'Tentar novamente',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: theme.primary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(160, 40),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 28, 16, 28),
+        child: Column(
+          children: [
+            Icon(
+              Icons.handyman_outlined,
+              size: 40,
+              color: theme.secondaryText.withValues(alpha: 0.4),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _busca.trim().isEmpty &&
+                      _filterSituacao.isEmpty &&
+                      _filterCategoria.isEmpty
+                  ? 'Nenhum equipamento cadastrado'
+                  : 'Nenhum resultado nos filtros',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: theme.primaryText,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _busca.trim().isEmpty &&
+                      _filterSituacao.isEmpty &&
+                      _filterCategoria.isEmpty
+                  ? (canCreate
+                      ? 'Cadastre o primeiro equipamento do catálogo.'
+                      : 'Não há equipamentos disponíveis.')
+                  : 'Ajuste a busca ou limpe os filtros.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                color: theme.secondaryText,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Column(
       children: [
-        Expanded(
-          child: Scrollbar(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SingleChildScrollView(
-                child: DataTable(
-                  headingRowColor: WidgetStateProperty.all(
-                    FlutterFlowTheme.of(context).primary.withValues(alpha: 0.06),
-                  ),
-                  columns: [
-                    DataColumn(label: Text('Código', style: _th(context))),
-                    DataColumn(label: Text('Equipamento', style: _th(context))),
-                    DataColumn(label: Text('Categoria', style: _th(context))),
-                    DataColumn(label: Text('Marca/Modelo', style: _th(context))),
-                    DataColumn(label: Text('Placa', style: _th(context))),
-                    DataColumn(label: Text('Valores', style: _th(context))),
-                    DataColumn(label: Text('Situação', style: _th(context))),
-                    DataColumn(label: Text('Ações', style: _th(context))),
-                  ],
-                  rows: _items.map((m) => _buildRow(context, m)).toList(),
-                ),
-              ),
-            ),
-          ),
-        ),
-        _buildPagination(context, lastPage),
-      ],
-    );
-  }
-
-  TextStyle _th(BuildContext context) => FlutterFlowTheme.of(context).labelLarge
-      .override(fontWeight: FontWeight.w700, fontSize: 11);
-
-  DataRow _buildRow(BuildContext context, Map<String, dynamic> m) {
-    final id = m['id'];
-    final idInt = id is int ? id : int.tryParse('$id') ?? 0;
-    final situacao = '${m['situacao'] ?? ''}';
-    final chipColor = _situacaoChipColor(context, situacao);
-
-    return DataRow(
-      cells: [
-        DataCell(
-          Chip(
-            label: Text('${m['codigo'] ?? '—'}'),
-            padding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            labelStyle: const TextStyle(fontSize: 11),
-          ),
-        ),
-        DataCell(
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 220),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '${m['nome'] ?? ''}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: FlutterFlowTheme.of(context).primary,
-                  ),
-                ),
-                if ('${m['descricao'] ?? ''}'.isNotEmpty)
-                  Text(
-                    '${m['descricao']}'.length > 48
-                        ? '${'${m['descricao']}'.substring(0, 48)}…'
-                        : '${m['descricao']}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: FlutterFlowTheme.of(context).labelSmall,
-                  ),
-              ],
-            ),
-          ),
-        ),
-        DataCell(Text('${m['categoria'] ?? '—'}')),
-        DataCell(
-          Text(
-            '${m['marca'] ?? '—'} / ${m['modelo'] ?? '—'}',
-            style: const TextStyle(fontSize: 12),
-          ),
-        ),
-        DataCell(Text('${m['placa_identificacao'] ?? '—'}')),
-        DataCell(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (_eqToDouble(m['valor_hora']) > 0)
-                Text('H: ${m['valor_hora_formatado']}',
-                    style: const TextStyle(fontSize: 12)),
-              if (_eqToDouble(m['valor_diaria']) > 0)
-                Text('D: ${m['valor_diaria_formatado']}',
-                    style: const TextStyle(fontSize: 12)),
-              if (_eqToDouble(m['valor_mensal']) > 0)
-                Text('M: ${m['valor_mensal_formatado']}',
-                    style: const TextStyle(fontSize: 11)),
-              if (_eqToDouble(m['valor_hora']) <= 0 &&
-                  _eqToDouble(m['valor_diaria']) <= 0 &&
-                  _eqToDouble(m['valor_mensal']) <= 0)
-                Text(
-                  '—',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: FlutterFlowTheme.of(context).secondaryText,
-                  ),
-                ),
-            ],
-          ),
-        ),
-        DataCell(
-          Chip(
-            label: Text(
-              '${m['status_texto'] ?? _statusEquipLabel(situacao)}',
-              style: const TextStyle(fontSize: 11, color: Colors.white),
-            ),
-            padding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            backgroundColor: chipColor.withValues(alpha: 0.9),
-          ),
-        ),
-        DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                tooltip: 'Ver',
-                icon: Icon(Icons.visibility_outlined,
-                    color: FlutterFlowTheme.of(context).primary, size: 20),
-                onPressed: () => _showView(context, m),
-              ),
-              IconButton(
-                tooltip: 'Editar',
-                icon: Icon(Icons.edit_outlined,
-                    color: Colors.orange.shade700, size: 20),
-                onPressed: () => _openForm(context, m),
-              ),
-              PopupMenuButton<String>(
-                onSelected: (v) {
-                  if (v == 'disponivel' ||
-                      v == 'em_uso' ||
-                      v == 'manutencao') {
-                    _patchSituacao(idInt, v);
-                  } else if (v == 'del') {
-                    _confirmDelete(context, idInt);
-                  }
-                },
-                itemBuilder: (c) => [
-                  const PopupMenuItem(
-                      value: 'disponivel', child: Text('Disponível')),
-                  const PopupMenuItem(value: 'em_uso', child: Text('Em uso')),
-                  const PopupMenuItem(
-                      value: 'manutencao', child: Text('Manutenção')),
-                  const PopupMenuDivider(),
-                  PopupMenuItem(
-                    value: 'del',
-                    child: Text('Excluir',
-                        style:
-                            TextStyle(color: FlutterFlowTheme.of(context).error)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPagination(BuildContext context, int lastPage) {
-    return Material(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        child: Row(
-          children: [
-            DropdownButton<int>(
-              value: _perPage,
-              items: const [10, 25, 50]
-                  .map((e) => DropdownMenuItem(value: e, child: Text('$e / página')))
-                  .toList(),
-              onChanged: (v) {
-                if (v == null) return;
-                setState(() {
-                  _perPage = v;
-                  _page = 1;
-                });
-                _fetchEquipamentos();
-              },
-            ),
-            const Spacer(),
-            IconButton(
-              onPressed: _page > 1
-                  ? () {
-                      setState(() => _page--);
-                      _fetchEquipamentos();
-                    }
-                  : null,
-              icon: const Icon(Icons.chevron_left),
-            ),
-            Text('Página $_page / $lastPage'),
-            IconButton(
-              onPressed: _page < lastPage
-                  ? () {
-                      setState(() => _page++);
-                      _fetchEquipamentos();
-                    }
-                  : null,
-              icon: const Icon(Icons.chevron_right),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showView(BuildContext context, Map<String, dynamic> m) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('${m['nome']}'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _kv('Código', '${m['codigo'] ?? '—'}'),
-              _kv('Categoria', '${m['categoria'] ?? '—'}'),
-              _kv('Marca', '${m['marca'] ?? '—'}'),
-              _kv('Modelo', '${m['modelo'] ?? '—'}'),
-              _kv('Placa', '${m['placa_identificacao'] ?? '—'}'),
-              _kv('Unidade', '${m['unidade_medida'] ?? '—'}'),
-              _kv('Valor hora', '${m['valor_hora_formatado'] ?? '—'}'),
-              _kv('Valor diária', '${m['valor_diaria_formatado'] ?? '—'}'),
-              _kv('Valor mensal', '${m['valor_mensal_formatado'] ?? '—'}'),
-              _kv('Localização', '${m['localizacao'] ?? '—'}'),
-              _kv('Situação', '${m['status_texto'] ?? m['situacao']}'),
-              _kv('Criado em', _formatDateTimeBrFromIso(m['created_at'])),
-              _kv('Atualizado em', _formatDateTimeBrFromIso(m['updated_at'])),
-              if ('${m['descricao'] ?? ''}'.isNotEmpty)
-                _kv('Descrição', '${m['descricao']}'),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Fechar'),
-          ),
+        for (var i = 0; i < _items.length; i++) ...[
+          if (i > 0)
+            Divider(height: 1, thickness: 1, color: theme.alternate),
+          _buildEquipamentoItem(theme, _items[i], canEdit, canDelete),
         ],
+      ],
+    );
+  }
+
+  Widget _buildEquipamentoItem(
+    FlutterFlowTheme theme,
+    Map<String, dynamic> m,
+    bool canEdit,
+    bool canDelete,
+  ) {
+    final nome = valueOrDefault<String>(
+        m['nome']?.toString(), 'Equipamento sem nome');
+    final codigo = '${m['codigo'] ?? ''}'.trim();
+    final categoria = '${m['categoria'] ?? ''}'.trim();
+    final marca = '${m['marca'] ?? ''}'.trim();
+    final modelo = '${m['modelo'] ?? ''}'.trim();
+    final placa = '${m['placa_identificacao'] ?? ''}'.trim();
+    final situacao = '${m['situacao'] ?? 'disponivel'}';
+    final statusCor = _situacaoChipColor(situacao);
+    final sid = _serverId(m);
+    final temAcoes = canEdit || canDelete;
+
+    final marcaModelo = [
+      if (marca.isNotEmpty) marca,
+      if (modelo.isNotEmpty) modelo,
+    ].join(' / ');
+
+    final valores = <String>[];
+    if (_eqToDouble(m['valor_hora']) > 0) {
+      valores.add('H ${m['valor_hora_formatado']}');
+    }
+    if (_eqToDouble(m['valor_diaria']) > 0) {
+      valores.add('D ${m['valor_diaria_formatado']}');
+    }
+    if (_eqToDouble(m['valor_mensal']) > 0) {
+      valores.add('M ${m['valor_mensal_formatado']}');
+    }
+
+    final meta = [
+      if (codigo.isNotEmpty) codigo,
+      if (categoria.isNotEmpty) categoria,
+      if (marcaModelo.isNotEmpty) marcaModelo,
+      if (placa.isNotEmpty) placa,
+      if (valores.isNotEmpty) valores.join(' · '),
+    ].join(' · ');
+
+    return Material(
+      color: theme.secondaryBackground,
+      child: InkWell(
+        onTap: canEdit ? () => _openForm(m) : null,
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(width: 3, color: statusCor),
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(12, 10, temAcoes ? 4 : 12, 10),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: statusCor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.handyman_rounded,
+                          size: 18,
+                          color: statusCor,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    nome,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: theme.primaryText,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: statusCor.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    _statusEquipLabel(situacao),
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: statusCor,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (meta.isNotEmpty) ...[
+                              const SizedBox(height: 3),
+                              Text(
+                                meta,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  color: theme.secondaryText,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (canEdit)
+                        IconButton(
+                          tooltip: 'Editar',
+                          onPressed: () => _openForm(m),
+                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints(
+                            minWidth: 36,
+                            minHeight: 36,
+                          ),
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            Icons.edit_outlined,
+                            size: 18,
+                            color: theme.secondaryText,
+                          ),
+                        ),
+                      if (canDelete)
+                        IconButton(
+                          tooltip: 'Excluir',
+                          onPressed: () => _confirmDelete(sid),
+                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints(
+                            minWidth: 36,
+                            minHeight: 36,
+                          ),
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            Icons.delete_outline_rounded,
+                            size: 18,
+                            color: theme.error,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _kv(String k, String v) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 110,
-              child: Text(k,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-            ),
-            Expanded(child: Text(v, style: const TextStyle(fontSize: 13))),
-          ],
-        ),
+  Future<void> _openForm(Map<String, dynamic>? existing) async {
+    if (existing == null) {
+      if (!MembershipAccess.canPermission('create_equipamentos')) {
+        MembershipAccess.showDenied(
+          context,
+          'Sem permissão para criar equipamentos.',
+        );
+        return;
+      }
+    } else if (!MembershipAccess.canPermission('edit_equipamentos')) {
+      MembershipAccess.showDenied(
+        context,
+        'Sem permissão para editar equipamentos.',
       );
+      return;
+    }
 
-  Future<void> _openForm(BuildContext context, Map<String, dynamic>? existing) async {
-    final result = await showDialog<Map<String, dynamic>>(
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _EquipamentoFormDialog(existing: existing),
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(ctx).bottom,
+        ),
+        child: _EquipamentoFormSheet(existing: existing),
+      ),
     );
 
-    if (result == null || !mounted || !context.mounted) return;
+    if (result == null || !mounted) return;
 
     final nomeVal = (result['nome'] as String?)?.trim() ?? '';
     final codigoVal = (result['codigo'] as String?)?.trim() ?? '';
@@ -1155,8 +1224,7 @@ class _EquipamentosCadastrosWidgetState extends State<EquipamentosCadastrosWidge
         _showApiError(r);
       }
     } else {
-      final id = existing['id'];
-      final idInt = id is int ? id : int.tryParse('$id') ?? 0;
+      final idInt = _serverId(existing);
       if (idInt <= 0) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1169,7 +1237,8 @@ class _EquipamentosCadastrosWidgetState extends State<EquipamentosCadastrosWidge
         }
         return;
       }
-      final r = await EquipamentoUpdateCall.call(token: token, id: idInt, body: body);
+      final r =
+          await EquipamentoUpdateCall.call(token: token, id: idInt, body: body);
       if (r.succeeded) {
         await _afterMutation('Equipamento atualizado.');
       } else {
@@ -1192,7 +1261,14 @@ class _EquipamentosCadastrosWidgetState extends State<EquipamentosCadastrosWidge
     }
   }
 
-  Future<void> _patchSituacao(int id, String situacao) async {
+  Future<void> _confirmDelete(int id) async {
+    if (!MembershipAccess.canPermission('delete_equipamentos')) {
+      MembershipAccess.showDenied(
+        context,
+        'Sem permissão para excluir equipamentos.',
+      );
+      return;
+    }
     if (id <= 0) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1205,55 +1281,42 @@ class _EquipamentosCadastrosWidgetState extends State<EquipamentosCadastrosWidge
       }
       return;
     }
-    final token = FFAppState().UserToken.trim();
-    if (token.isEmpty) return;
-    final r = await EquipamentoPatchSituacaoCall.call(
-      token: token,
-      id: id,
-      situacao: situacao,
-    );
-    if (r.succeeded) {
-      await _afterMutation('Situação atualizada.');
-    } else {
-      _showApiError(r);
-    }
-  }
 
-  Future<void> _confirmDelete(BuildContext context, int id) async {
-    if (!FFAppState().hasPermission('edit_insumos')) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Você não tem permissão para excluir equipamentos.'),
-          ),
-        );
-      }
-      return;
-    }
-    if (id <= 0) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Sincronize (ícone atualizar) para obter o ID do servidor neste aparelho.',
-            ),
-          ),
-        );
-      }
-      return;
-    }
+    final theme = FlutterFlowTheme.of(context);
     final go = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Excluir equipamento?'),
-        content: const Text('Esta ação não pode ser desfeita.'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text(
+          'Excluir equipamento?',
+          style: GoogleFonts.inter(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: theme.primaryText,
+          ),
+        ),
+        content: Text(
+          'Esta ação não pode ser desfeita.',
+          style: GoogleFonts.inter(fontSize: 13.5, color: theme.secondaryText),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
+            child: Text(
+              'Cancelar',
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w600,
+                color: theme.secondaryText,
+              ),
+            ),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.error,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Excluir'),
           ),
@@ -1271,17 +1334,16 @@ class _EquipamentosCadastrosWidgetState extends State<EquipamentosCadastrosWidge
   }
 }
 
-/// Controllers vivem no State do diálogo até a rota ser descartada.
-class _EquipamentoFormDialog extends StatefulWidget {
-  const _EquipamentoFormDialog({this.existing});
+class _EquipamentoFormSheet extends StatefulWidget {
+  const _EquipamentoFormSheet({this.existing});
 
   final Map<String, dynamic>? existing;
 
   @override
-  State<_EquipamentoFormDialog> createState() => _EquipamentoFormDialogState();
+  State<_EquipamentoFormSheet> createState() => _EquipamentoFormSheetState();
 }
 
-class _EquipamentoFormDialogState extends State<_EquipamentoFormDialog> {
+class _EquipamentoFormSheetState extends State<_EquipamentoFormSheet> {
   late final TextEditingController nome;
   late final TextEditingController codigo;
   late final TextEditingController descricao;
@@ -1302,7 +1364,6 @@ class _EquipamentoFormDialogState extends State<_EquipamentoFormDialog> {
   late final FocusNode _valorHoraFocus;
   late final FocusNode _valorDiariaFocus;
   late final FocusNode _valorMensalFocus;
-  late final FocusNode _dataAquisicaoFocus;
   late String situacao;
 
   void _setMaskedValue(TextEditingController controller, String value) {
@@ -1346,8 +1407,10 @@ class _EquipamentoFormDialogState extends State<_EquipamentoFormDialog> {
     );
     marca = TextEditingController(text: e?['marca']?.toString() ?? '');
     modelo = TextEditingController(text: e?['modelo']?.toString() ?? '');
-    placa = TextEditingController(text: e?['placa_identificacao']?.toString() ?? '');
-    numeroSerie = TextEditingController(text: e?['numero_serie']?.toString() ?? '');
+    placa =
+        TextEditingController(text: e?['placa_identificacao']?.toString() ?? '');
+    numeroSerie =
+        TextEditingController(text: e?['numero_serie']?.toString() ?? '');
     anoFab = TextEditingController(
       text: e != null && e['ano_fabricacao'] != null
           ? '${e['ano_fabricacao']}'
@@ -1360,13 +1423,13 @@ class _EquipamentoFormDialogState extends State<_EquipamentoFormDialog> {
       text: e != null && e['vida_util'] != null ? '${e['vida_util']}' : '',
     );
     local = TextEditingController(text: e?['localizacao']?.toString() ?? '');
-    observacoes = TextEditingController(text: e?['observacoes']?.toString() ?? '');
+    observacoes =
+        TextEditingController(text: e?['observacoes']?.toString() ?? '');
     situacao = '${e?['situacao'] ?? 'disponivel'}';
 
     _valorHoraFocus = FocusNode();
     _valorDiariaFocus = FocusNode();
     _valorMensalFocus = FocusNode();
-    _dataAquisicaoFocus = FocusNode();
     _valorHoraFocus.addListener(() {
       if (!_valorHoraFocus.hasFocus) _formatPrecoOnBlur(valorHora);
     });
@@ -1383,7 +1446,6 @@ class _EquipamentoFormDialogState extends State<_EquipamentoFormDialog> {
     _valorHoraFocus.dispose();
     _valorDiariaFocus.dispose();
     _valorMensalFocus.dispose();
-    _dataAquisicaoFocus.dispose();
     nome.dispose();
     codigo.dispose();
     descricao.dispose();
@@ -1431,153 +1493,340 @@ class _EquipamentoFormDialogState extends State<_EquipamentoFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.existing == null
-          ? 'Novo equipamento'
-          : 'Editar equipamento'),
-      content: SizedBox(
-        width: 440,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nome,
-                decoration: const InputDecoration(labelText: 'Nome *'),
-              ),
-              TextField(
-                controller: codigo,
-                decoration: const InputDecoration(labelText: 'Código'),
-              ),
-              TextField(
-                controller: descricao,
-                decoration: const InputDecoration(labelText: 'Descrição'),
-                maxLines: 2,
-              ),
-              TextField(
-                controller: categoria,
-                decoration: const InputDecoration(labelText: 'Categoria'),
-              ),
-              TextField(
-                controller: unidade,
-                decoration: const InputDecoration(
-                  labelText: 'Unidade de medida * (ex.: H, DIA)',
-                ),
-              ),
-              TextField(
-                controller: valorHora,
-                focusNode: _valorHoraFocus,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,R$\s]')),
-                ],
-                decoration: const InputDecoration(
-                  labelText: 'Valor hora',
-                  hintText: r'R$ 0,00',
-                ),
-              ),
-              TextField(
-                controller: valorDiaria,
-                focusNode: _valorDiariaFocus,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,R$\s]')),
-                ],
-                decoration: const InputDecoration(
-                  labelText: 'Valor diária',
-                  hintText: r'R$ 0,00',
-                ),
-              ),
-              TextField(
-                controller: valorMensal,
-                focusNode: _valorMensalFocus,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,R$\s]')),
-                ],
-                decoration: const InputDecoration(
-                  labelText: 'Valor mensal',
-                  hintText: r'R$ 0,00',
-                ),
-              ),
-              TextField(
-                controller: marca,
-                decoration: const InputDecoration(labelText: 'Marca'),
-              ),
-              TextField(
-                controller: modelo,
-                decoration: const InputDecoration(labelText: 'Modelo'),
-              ),
-              TextField(
-                controller: placa,
-                decoration: const InputDecoration(labelText: 'Placa / identificação'),
-              ),
-              TextField(
-                controller: numeroSerie,
-                decoration: const InputDecoration(labelText: 'Número de série'),
-              ),
-              TextField(
-                controller: anoFab,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Ano fabricação'),
-              ),
-              TextField(
-                controller: dataAquisicao,
-                focusNode: _dataAquisicaoFocus,
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                ],
-                onChanged: (v) => _setMaskedValue(
-                  dataAquisicao,
-                  _formatDateBr(v),
-                ),
-                decoration: const InputDecoration(
-                  labelText: 'Data de aquisição',
-                  hintText: 'dd/mm/aaaa',
-                ),
-              ),
-              TextField(
-                controller: vidaUtil,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Vida útil (meses)'),
-              ),
-              TextField(
-                controller: local,
-                decoration: const InputDecoration(labelText: 'Localização'),
-              ),
-              TextField(
-                controller: observacoes,
-                decoration: const InputDecoration(labelText: 'Observações'),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                key: ValueKey(situacao),
-                initialValue: situacao,
-                decoration: const InputDecoration(labelText: 'Situação'),
-                items: const [
-                  DropdownMenuItem(value: 'disponivel', child: Text('Disponível')),
-                  DropdownMenuItem(value: 'em_uso', child: Text('Em uso')),
-                  DropdownMenuItem(value: 'manutencao', child: Text('Manutenção')),
-                  DropdownMenuItem(value: 'inativo', child: Text('Inativo')),
-                ],
-                onChanged: (v) => setState(() => situacao = v ?? 'disponivel'),
-              ),
-            ],
-          ),
-        ),
+    final theme = FlutterFlowTheme.of(context);
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.92,
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: _salvar,
-          child: const Text('Salvar'),
-        ),
-      ],
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      decoration: BoxDecoration(
+        color: theme.secondaryBackground,
+        borderRadius: BorderRadius.circular(kRdoRadius),
+        border: Border.all(color: theme.alternate),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 8, 0),
+            child: Row(
+              children: [
+                Icon(Icons.handyman_outlined,
+                    size: 18, color: theme.secondaryText),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.existing == null
+                        ? 'Novo equipamento'
+                        : 'Editar equipamento',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: theme.primaryText,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Fechar',
+                  onPressed: () => Navigator.pop(context),
+                  icon: Icon(Icons.close_rounded,
+                      size: 20, color: theme.secondaryText),
+                ),
+              ],
+            ),
+          ),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: nome,
+                    style: rdoFormFieldTextStyle(context),
+                    decoration:
+                        rdoFormFieldDecoration(context, label: 'Nome *'),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: codigo,
+                          style: rdoFormFieldTextStyle(context),
+                          decoration: rdoFormFieldDecoration(
+                            context,
+                            label: 'Código',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: unidade,
+                          style: rdoFormFieldTextStyle(context),
+                          decoration: rdoFormFieldDecoration(
+                            context,
+                            label: 'Unidade *',
+                            hint: 'H, DIA',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: categoria,
+                    style: rdoFormFieldTextStyle(context),
+                    decoration:
+                        rdoFormFieldDecoration(context, label: 'Categoria'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: descricao,
+                    style: rdoFormFieldTextStyle(context),
+                    maxLines: 2,
+                    decoration:
+                        rdoFormFieldDecoration(context, label: 'Descrição'),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: valorHora,
+                          focusNode: _valorHoraFocus,
+                          style: rdoFormFieldTextStyle(context),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9.,R$\s]')),
+                          ],
+                          decoration: rdoFormFieldDecoration(
+                            context,
+                            label: 'Valor hora',
+                            hint: r'R$ 0,00',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: valorDiaria,
+                          focusNode: _valorDiariaFocus,
+                          style: rdoFormFieldTextStyle(context),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9.,R$\s]')),
+                          ],
+                          decoration: rdoFormFieldDecoration(
+                            context,
+                            label: 'Valor diária',
+                            hint: r'R$ 0,00',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: valorMensal,
+                    focusNode: _valorMensalFocus,
+                    style: rdoFormFieldTextStyle(context),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                          RegExp(r'[0-9.,R$\s]')),
+                    ],
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Valor mensal',
+                      hint: r'R$ 0,00',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: marca,
+                          style: rdoFormFieldTextStyle(context),
+                          decoration:
+                              rdoFormFieldDecoration(context, label: 'Marca'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: modelo,
+                          style: rdoFormFieldTextStyle(context),
+                          decoration:
+                              rdoFormFieldDecoration(context, label: 'Modelo'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: placa,
+                    style: rdoFormFieldTextStyle(context),
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Placa / identificação',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: numeroSerie,
+                    style: rdoFormFieldTextStyle(context),
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Número de série',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: anoFab,
+                          style: rdoFormFieldTextStyle(context),
+                          keyboardType: TextInputType.number,
+                          decoration: rdoFormFieldDecoration(
+                            context,
+                            label: 'Ano fabricação',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: vidaUtil,
+                          style: rdoFormFieldTextStyle(context),
+                          keyboardType: TextInputType.number,
+                          decoration: rdoFormFieldDecoration(
+                            context,
+                            label: 'Vida útil (meses)',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: dataAquisicao,
+                    style: rdoFormFieldTextStyle(context),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
+                    onChanged: (v) => _setMaskedValue(
+                      dataAquisicao,
+                      _formatDateBr(v),
+                    ),
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Data de aquisição',
+                      hint: 'dd/mm/aaaa',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: local,
+                    style: rdoFormFieldTextStyle(context),
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Localização',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: observacoes,
+                    style: rdoFormFieldTextStyle(context),
+                    maxLines: 2,
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Observações',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey(situacao),
+                    initialValue: situacao,
+                    style: rdoFormFieldTextStyle(context),
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Situação',
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'disponivel', child: Text('Disponível')),
+                      DropdownMenuItem(value: 'em_uso', child: Text('Em uso')),
+                      DropdownMenuItem(
+                          value: 'manutencao', child: Text('Manutenção')),
+                      DropdownMenuItem(
+                          value: 'inativo', child: Text('Inativo')),
+                    ],
+                    onChanged: (v) =>
+                        setState(() => situacao = v ?? 'disponivel'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: theme.secondaryText,
+                      side: BorderSide(color: theme.alternate),
+                      minimumSize: const Size(0, 42),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text(
+                      'Cancelar',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _salvar,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: theme.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(0, 42),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text(
+                      'Salvar',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

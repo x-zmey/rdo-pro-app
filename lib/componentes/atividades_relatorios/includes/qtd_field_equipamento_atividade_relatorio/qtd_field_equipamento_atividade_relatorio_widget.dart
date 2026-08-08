@@ -1,4 +1,5 @@
 import '/backend/sqlite/sqlite_manager.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
@@ -92,59 +93,12 @@ class _QtdFieldEquipamentoAtividadeRelatorioWidgetState
       autofocus: false,
       textInputAction: TextInputAction.done,
       obscureText: false,
-      decoration: InputDecoration(
-        isDense: true,
-        hintText: '0',
-        hintStyle: FlutterFlowTheme.of(context).bodyLarge.override(
-              font: GoogleFonts.inter(
-                fontWeight: FlutterFlowTheme.of(context).bodyLarge.fontWeight,
-                fontStyle: FlutterFlowTheme.of(context).bodyLarge.fontStyle,
-              ),
-              letterSpacing: 0.0,
-              fontWeight: FlutterFlowTheme.of(context).bodyLarge.fontWeight,
-              fontStyle: FlutterFlowTheme.of(context).bodyLarge.fontStyle,
-            ),
-        enabledBorder: OutlineInputBorder(
-          borderSide: BorderSide(
-            color: FlutterFlowTheme.of(context).alternate,
-            width: 1.0,
-          ),
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderSide: BorderSide(
-            color: Color(0x00000000),
-            width: 1.0,
-          ),
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderSide: BorderSide(
-            color: Color(0x00000000),
-            width: 1.0,
-          ),
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderSide: BorderSide(
-            color: Color(0x00000000),
-            width: 1.0,
-          ),
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        filled: true,
+      decoration: rdoCompactFieldDecoration(
+        context,
+        hint: '0',
         fillColor: FlutterFlowTheme.of(context).primaryBackground,
       ),
-      style: FlutterFlowTheme.of(context).bodyMedium.override(
-            font: GoogleFonts.inter(
-              fontWeight: FlutterFlowTheme.of(context).bodyMedium.fontWeight,
-              fontStyle: FlutterFlowTheme.of(context).bodyMedium.fontStyle,
-            ),
-            fontSize: 16.0,
-            letterSpacing: 0.0,
-            fontWeight: FlutterFlowTheme.of(context).bodyMedium.fontWeight,
-            fontStyle: FlutterFlowTheme.of(context).bodyMedium.fontStyle,
-          ),
+      style: rdoCompactFieldTextStyle(context),
       textAlign: TextAlign.center,
       keyboardType: TextInputType.number,
       validator: _model.textControllerValidator.asValidator(context),

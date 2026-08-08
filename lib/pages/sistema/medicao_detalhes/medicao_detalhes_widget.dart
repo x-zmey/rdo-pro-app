@@ -1,4 +1,5 @@
 import '/backend/api_requests/api_calls.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'dart:convert';
@@ -762,33 +763,6 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
     }
   }
 
-  Widget? _buildAppBarStatusChip(FlutterFlowTheme theme) {
-    if (_medicao == null) return null;
-    final chipColor = _statusMedicaoChipColor(theme);
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 180),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: chipColor.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: chipColor.withValues(alpha: 0.35)),
-        ),
-        child: Text(
-          _labelStatusMedicao(),
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.inter(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: chipColor,
-          ),
-        ),
-      ),
-    );
-  }
-
   List<Map<String, dynamic>> _allItens() {
     final m = _medicao;
     if (m == null) return [];
@@ -982,43 +956,58 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
   }
 
   PreferredSizeWidget _buildAppBar(FlutterFlowTheme theme) {
-    final statusChip = _buildAppBarStatusChip(theme);
+    final m = _medicao;
+    final numero = m != null ? '${m['numero'] ?? ''}'.trim() : '';
+    final obraNome = _obraNome();
+    final subtitulo = [
+      if (numero.isNotEmpty) 'Medição #$numero',
+      if (obraNome.isNotEmpty && obraNome != 'Obra') obraNome,
+    ].join(' · ');
+
     return AppBar(
-      backgroundColor: Colors.transparent,
+      backgroundColor: theme.primary,
       elevation: 0,
       scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
-      centerTitle: statusChip != null,
-      leading: Container(
-        margin: const EdgeInsets.only(left: 8),
-        decoration: BoxDecoration(
-          color: theme.primary.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: IconButton(
-          icon: Icon(Icons.arrow_back_rounded, color: theme.primary),
-          onPressed: () => context.safePop(),
-        ),
+      centerTitle: false,
+      titleSpacing: 0,
+      toolbarHeight: 58,
+      iconTheme: const IconThemeData(color: Colors.white),
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+        onPressed: () => context.safePop(),
       ),
-      title: statusChip != null
-          ? Center(child: statusChip)
-          : Text(
-              'Medição',
-              style: GoogleFonts.inter(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: theme.primaryText,
-                letterSpacing: -0.3,
+      title: Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Detalhes da Medição',
+              style: GoogleFonts.interTight(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
               ),
             ),
+            Text(
+              subtitulo.isEmpty ? 'Medição' : subtitulo,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
+            ),
+          ],
+        ),
+      ),
       actions: [
         IconButton(
           tooltip: 'Atualizar',
-          icon: Icon(Icons.refresh_rounded, color: theme.primary, size: 22),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-          visualDensity: VisualDensity.compact,
-          onPressed: _load,
+          icon: const Icon(Icons.refresh_rounded, color: Colors.white, size: 21),
+          onPressed: _loading ? null : _load,
         ),
         const SizedBox(width: 4),
       ],
@@ -1039,15 +1028,14 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
         ),
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 ..._buildRevogacaoWidgets(theme),
                 ..._buildHistoricoRevogacoes(theme),
                 _buildResumoCard(theme),
-                const SizedBox(height: 8),
-                _buildBarraAcoesMedicao(theme),
                 const SizedBox(height: 10),
+                _buildBarraAcoesMedicao(theme),
                 _buildItensSection(theme),
                 const SizedBox(height: 10),
                 _buildAssinaturasSection(theme),
@@ -1062,31 +1050,21 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
   Widget _buildLoadingState(FlutterFlowTheme theme) {
     return Center(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: theme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const CircularProgressIndicator(strokeWidth: 3),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Carregando medição',
-            style: GoogleFonts.inter(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: theme.primaryText,
+          SizedBox(
+            width: 34,
+            height: 34,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              color: theme.primary,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 14),
           Text(
-            'Aguarde um momento...',
+            'Carregando medição…',
             style: GoogleFonts.inter(
-              fontSize: 14,
+              fontSize: 13,
               color: theme.secondaryText,
             ),
           ),
@@ -1097,51 +1075,31 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
 
   Widget _buildErrorState(FlutterFlowTheme theme) {
     return Center(
-      child: SingleChildScrollView(
+      child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: theme.error.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(25),
-              ),
-              child: Icon(Icons.error_outline_rounded,
-                  size: 40, color: theme.error),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Erro ao carregar',
-              style: GoogleFonts.inter(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: theme.primaryText,
-              ),
-            ),
-            const SizedBox(height: 12),
+            Icon(Icons.error_outline_rounded, size: 40, color: theme.error),
+            const SizedBox(height: 16),
             Text(
               _error!,
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(
-                fontSize: 14,
+                fontSize: 13.5,
                 color: theme.secondaryText,
               ),
             ),
-            const SizedBox(height: 28),
-            Container(
-              width: 200,
-              child: FilledButton.icon(
-                onPressed: _load,
-                icon: const Icon(Icons.refresh_rounded, size: 20),
-                label: const Text('Tentar novamente'),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: _load,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Tentar novamente'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 38),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
             ),
@@ -1165,150 +1123,196 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
     return [
       Container(
         margin: const EdgeInsets.only(bottom: 10),
-        decoration: BoxDecoration(
-          color: theme.warning.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: theme.warning.withValues(alpha: 0.2)),
+        clipBehavior: Clip.antiAlias,
+        decoration: rdoCardDecoration(context).copyWith(
+          border: Border.all(color: theme.warning.withValues(alpha: 0.35)),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Revogação em andamento',
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: theme.warning,
-                ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 0, 6, 0),
+              constraints: const BoxConstraints(minHeight: 44),
+              decoration: BoxDecoration(
+                color: theme.warning.withValues(alpha: 0.08),
+                border: Border(bottom: BorderSide(color: theme.warning.withValues(alpha: 0.25))),
               ),
-              const SizedBox(height: 8),
-              _buildInfoRow('Solicitante', '${r['solicitante'] ?? '—'}'),
-              _buildInfoRow('Data', _formatData(r['data_solicitacao'])),
-              _buildInfoRow('Motivo', '${r['motivo'] ?? '—'}'),
-              if (list.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Assinaturas',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+              child: Row(
+                children: [
+                  Icon(Icons.gavel_rounded, size: 16, color: theme.warning),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Revogação em andamento',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: theme.primaryText,
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                ...list.map((raw) {
-                  if (raw is! Map) return const SizedBox.shrink();
-                  final a = Map<String, dynamic>.from(raw);
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        Icon(
-                          a['status'] == 'Decidido'
-                              ? (a['decisao'] == 'Aprovou'
-                                  ? Icons.check_circle_outline
-                                  : Icons.cancel_outlined)
-                              : Icons.schedule,
-                          size: 18,
-                          color: a['status'] == 'Decidido'
-                              ? (a['decisao'] == 'Aprovou'
-                                  ? Colors.green
-                                  : Colors.red)
-                              : theme.warning,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '${a['posicao'] ?? ''}º ${a['assinante'] ?? ''}',
-                            style: GoogleFonts.inter(fontSize: 13),
-                          ),
-                        ),
-                        if (a['decisao'] != null)
-                          Text(
-                            '${a['decisao']}',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: a['decisao'] == 'Aprovou'
-                                  ? Colors.green
-                                  : Colors.red,
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildInfoRow('Solicitante', '${r['solicitante'] ?? '—'}'),
+                  _buildInfoRow('Data', _formatData(r['data_solicitacao'])),
+                  _buildInfoRow('Motivo', '${r['motivo'] ?? '—'}'),
+                  if (list.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Assinaturas',
+                      style: rdoColumnLabelStyle(context),
+                    ),
+                    const SizedBox(height: 4),
+                    ...list.map((raw) {
+                      if (raw is! Map) return const SizedBox.shrink();
+                      final a = Map<String, dynamic>.from(raw);
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            Icon(
+                              a['status'] == 'Decidido'
+                                  ? (a['decisao'] == 'Aprovou'
+                                      ? Icons.check_circle_outline
+                                      : Icons.cancel_outlined)
+                                  : Icons.schedule,
+                              size: 18,
+                              color: a['status'] == 'Decidido'
+                                  ? (a['decisao'] == 'Aprovou'
+                                      ? Colors.green
+                                      : Colors.red)
+                                  : theme.warning,
                             ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '${a['posicao'] ?? ''}º ${a['assinante'] ?? ''}',
+                                style: GoogleFonts.inter(fontSize: 12.5),
+                              ),
+                            ),
+                            if (a['decisao'] != null)
+                              Text(
+                                '${a['decisao']}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: a['decisao'] == 'Aprovou'
+                                      ? Colors.green
+                                      : Colors.red,
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                  if (podeDecidir && uuid.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildActionButton(
+                            icon: Icons.check_rounded,
+                            label: 'Aprovar',
+                            onPressed: () => _onDecidirRevogacao(
+                              aprovar: true,
+                              revogacaoUuid: uuid,
+                            ),
+                            backgroundColor: Colors.green,
                           ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildActionButton(
+                            icon: Icons.close_rounded,
+                            label: 'Rejeitar',
+                            onPressed: () => _onDecidirRevogacao(
+                              aprovar: false,
+                              revogacaoUuid: uuid,
+                            ),
+                            backgroundColor: Colors.red,
+                          ),
+                        ),
                       ],
                     ),
-                  );
-                }),
-              ],
-              if (podeDecidir && uuid.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildActionButton(
-                        icon: Icons.check_rounded,
-                        label: 'Aprovar',
-                        onPressed: () => _onDecidirRevogacao(
-                          aprovar: true,
-                          revogacaoUuid: uuid,
-                        ),
-                        backgroundColor: Colors.green,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildActionButton(
-                        icon: Icons.close_rounded,
-                        label: 'Rejeitar',
-                        onPressed: () => _onDecidirRevogacao(
-                          aprovar: false,
-                          revogacaoUuid: uuid,
-                        ),
-                        backgroundColor: Colors.red,
-                      ),
-                    ),
                   ],
-                ),
-              ],
-            ],
-          ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
-      const SizedBox(height: 8),
     ];
   }
 
   Widget _buildActionButton({
     required IconData icon,
     required String label,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
+    bool loading = false,
     required Color backgroundColor,
+    Color foregroundColor = Colors.white,
+    bool outlined = false,
   }) {
+    final borderRadius = BorderRadius.circular(8);
+    final child = loading
+        ? SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: foregroundColor,
+            ),
+          )
+        : Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          );
+
+    if (outlined) {
+      return OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          backgroundColor: backgroundColor,
+          foregroundColor: foregroundColor,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+          minimumSize: const Size(0, 36),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          side: BorderSide(color: foregroundColor.withValues(alpha: 0.35)),
+          shape: RoundedRectangleBorder(borderRadius: borderRadius),
+        ),
+        child: child,
+      );
+    }
+
     return FilledButton(
       onPressed: onPressed,
       style: FilledButton.styleFrom(
         backgroundColor: backgroundColor,
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+        foregroundColor: foregroundColor,
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
         minimumSize: const Size(0, 36),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(borderRadius: borderRadius),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
+      child: child,
     );
   }
 
@@ -1319,22 +1323,22 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
     if (hist is! List || hist.isEmpty) return [];
 
     return [
-      _buildSectionTitle('Histórico de revogações', Icons.history),
-      Container(
+      RdoSectionCard(
+        title: 'Histórico de revogações',
+        icon: Icons.history_rounded,
         margin: const EdgeInsets.only(bottom: 10),
-        decoration: BoxDecoration(
-          color: theme.secondaryBackground,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: theme.alternate),
-        ),
+        contentPadding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
         child: Column(
           children: hist.map((raw) {
             if (raw is! Map) return const SizedBox.shrink();
             final h = Map<String, dynamic>.from(raw);
             return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 8),
               child: Row(
                 children: [
+                  Icon(Icons.description_outlined,
+                      size: 18, color: theme.secondaryText),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1342,7 +1346,7 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
                         Text(
                           '${h['solicitante'] ?? ''}',
                           style: GoogleFonts.inter(
-                            fontSize: 12,
+                            fontSize: 12.5,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -1382,7 +1386,6 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
           }).toList(),
         ),
       ),
-      const SizedBox(height: 8),
     ];
   }
 
@@ -1396,144 +1399,138 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
   Widget _buildResumoCard(FlutterFlowTheme theme) {
     final m = _medicao!;
     final statusCor = _statusMedicaoChipColor(theme);
-    return Container(
+    final periodo =
+        '${_formatData(m['data_inicio_periodo'])} — ${_formatData(m['data_termino_periodo'])}';
+
+    return RdoSectionCard(
+      title: 'Resumo',
+      icon: Icons.receipt_long_outlined,
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.secondaryBackground,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.alternate),
-      ),
+      contentPadding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Medição #${m['numero'] ?? '—'}',
-                      style: GoogleFonts.inter(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: theme.primaryText,
-                        letterSpacing: -0.2,
-                      ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
+            decoration: BoxDecoration(
+              color: theme.primaryBackground.withValues(alpha: 0.5),
+              border: Border(bottom: BorderSide(color: theme.alternate)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.apartment_rounded,
+                    size: 16, color: theme.secondaryText),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _obraNome(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: theme.primaryText,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _obraNome(),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: theme.secondaryText,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: statusCor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: statusCor.withValues(alpha: 0.25)),
-                ),
-                child: Text(
-                  _labelStatusMedicao(),
-                  style: GoogleFonts.inter(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: statusCor,
                   ),
                 ),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusCor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    _labelStatusMedicao(),
+                    style: GoogleFonts.inter(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: statusCor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          RdoKpiStrip(
+            itens: [
+              RdoKpiData(
+                label: 'Mês ref.',
+                value: _formatMesRef(m['mes_referencia']),
+              ),
+              RdoKpiData(
+                label: 'Período',
+                value: periodo,
+                flex: 3,
+              ),
+              RdoKpiData(
+                label: '% físico',
+                value:
+                    '${_toDouble(m['percentual_fisico_acumulado']).toStringAsFixed(1)}%',
+                destaque: true,
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _buildInfoChip(
-                    theme,
-                    'Mês ref.',
-                    _formatMesRef(m['mes_referencia']),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _buildInfoChip(
-                    theme,
-                    'Período',
-                    '${_formatData(m['data_inicio_periodo'])} — ${_formatData(m['data_termino_periodo'])}',
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _buildInfoChip(
-                    theme,
-                    '% físico',
-                    '${_toDouble(m['percentual_fisico_acumulado']).toStringAsFixed(1)}%',
-                  ),
-                ),
-              ],
+          Container(
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: theme.alternate)),
             ),
-          ),
-          const SizedBox(height: 6),
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _buildInfoChip(
-                    theme,
-                    'R\$ acumulado',
-                    'R\$ ${_money.format(_toDouble(m['valor_acumulado']))}',
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: RdoKpiStrip(
+                      itens: [
+                        RdoKpiData(
+                          label: 'R\$ acumulado',
+                          value:
+                              'R\$ ${_money.format(_toDouble(m['valor_acumulado']))}',
+                          flex: 2,
+                        ),
+                        RdoKpiData(
+                          label: 'R\$ mês',
+                          value:
+                              'R\$ ${_money.format(_toDouble(m['valor_realizado']))}',
+                          flex: 2,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _buildInfoChip(
-                    theme,
-                    'R\$ mês',
-                    'R\$ ${_money.format(_toDouble(m['valor_realizado']))}',
+                  VerticalDivider(width: 1, color: theme.alternate),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 6),
+                    child: Center(child: _buildPdfResumoButton(theme)),
                   ),
-                ),
-                const SizedBox(width: 6),
-                SizedBox(
-                  width: 72,
-                  child: _buildPdfResumoButton(theme),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           if ((m['observacoes'] ?? '').toString().trim().isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Divider(height: 1, color: theme.alternate),
-            const SizedBox(height: 8),
-            Text(
-              'Observações',
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: theme.secondaryText,
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: theme.alternate)),
               ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              m['observacoes'].toString(),
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                color: theme.primaryText,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'OBSERVAÇÕES',
+                    style: rdoColumnLabelStyle(context),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    m['observacoes'].toString(),
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                      color: theme.primaryText,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -1580,46 +1577,6 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
     );
   }
 
-  Widget _buildInfoChip(FlutterFlowTheme theme, String label, String value) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: theme.primaryBackground,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: theme.alternate),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.inter(
-              fontSize: 9,
-              color: theme.secondaryText,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: theme.primaryText,
-              height: 1.15,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildBarraAcoesMedicao(FlutterFlowTheme theme) {
     final m = _medicao!;
     final sid = _toInt(m['status_id']);
@@ -1627,48 +1584,66 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
     if (sid != 1 && !podeRevogar) {
       return const SizedBox.shrink();
     }
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (sid == 1)
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              minimumSize: const Size(0, 36),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            onPressed: _enviandoAprovacao ? null : _onEnviarParaAprovacao,
-            icon: _enviandoAprovacao
-                ? SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.send_rounded, size: 18),
-            label: Text(
-              _enviandoAprovacao ? 'Enviando…' : 'Enviar para aprovação',
-              style: GoogleFonts.inter(fontSize: 12),
+          RdoSectionCard(
+            title: 'Enviar para Aprovação',
+            icon: Icons.send_rounded,
+            margin: const EdgeInsets.only(bottom: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Quando a medição estiver pronta, envie para o fluxo de assinaturas.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: theme.secondaryText,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _buildActionButton(
+                  icon: Icons.send_rounded,
+                  label: _enviandoAprovacao
+                      ? 'Enviando...'
+                      : 'Enviar para aprovação',
+                  onPressed:
+                      _enviandoAprovacao ? null : _onEnviarParaAprovacao,
+                  loading: _enviandoAprovacao,
+                  backgroundColor: theme.primary,
+                  foregroundColor: Colors.white,
+                ),
+              ],
             ),
           ),
         if (podeRevogar)
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.orange.shade800,
-              side: BorderSide(color: Colors.orange.shade300),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              minimumSize: const Size(0, 36),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
+          RdoSectionCard(
+            title: 'Revogar aprovação',
+            icon: Icons.settings_backup_restore_rounded,
+            margin: const EdgeInsets.only(bottom: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Solicite a revogação desta medição aprovada para reabrir o fluxo.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: theme.secondaryText,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _buildActionButton(
+                  icon: Icons.settings_backup_restore_rounded,
+                  label: 'Revogar aprovação',
+                  onPressed: _onSolicitarRevogacao,
+                  backgroundColor: Colors.orange.withValues(alpha: 0.08),
+                  foregroundColor: Colors.orange.shade800,
+                  outlined: true,
+                ),
+              ],
             ),
-            onPressed: _onSolicitarRevogacao,
-            icon: Icon(Icons.settings_backup_restore_rounded, size: 18),
-            label: const Text('Revogar aprovação'),
           ),
       ],
     );
@@ -1682,232 +1657,532 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
     final tot = _totaisRodape(all);
 
     int cnt(String tipo) => all.where((i) => (i['tipo'] ?? '') == tipo).length;
+    final nEtapas = cnt('etapa');
+    final nTarefas = cnt('tarefa');
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildSectionTitle('Itens da medição', Icons.account_tree_outlined),
-        Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: theme.secondaryBackground,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: theme.alternate),
-          ),
-          child: Wrap(
-            spacing: 6,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _buildMiniStatChip(theme, 'Total: ${all.length}'),
-              _buildMiniStatChip(theme, 'Etapas: ${cnt('etapa')}'),
-              _buildMiniStatChip(theme, 'Tarefas: ${cnt('tarefa')}'),
-              TextButton(
-                onPressed: _expandirTudo,
-                style: TextButton.styleFrom(
-                  foregroundColor: theme.primary,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: const Size(0, 28),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: Text('Expandir', style: GoogleFonts.inter(fontSize: 11)),
-              ),
-              TextButton(
-                onPressed: _colapsarTudo,
-                style: TextButton.styleFrom(
-                  foregroundColor: theme.primary,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: const Size(0, 28),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: Text('Recolher', style: GoogleFonts.inter(fontSize: 11)),
-              ),
-            ],
-          ),
-        ),
-        if (visiveis.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: theme.secondaryBackground,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: theme.alternate),
-            ),
-            child: Center(
-              child: Text(
-                'Nenhum item nesta medição.',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: theme.secondaryText,
-                ),
-              ),
-            ),
-          )
-        else
-          Container(
-            decoration: BoxDecoration(
-              color: theme.secondaryBackground,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: theme.alternate),
-            ),
-            child: Column(
+    return RdoSectionCard(
+      title: 'Itens da medição',
+      icon: Icons.account_tree_outlined,
+      margin: const EdgeInsets.only(bottom: 10),
+      subtitle: nEtapas > 0 || nTarefas > 0
+          ? '$nEtapas etapas · $nTarefas tarefas'
+          : null,
+      trailing: all.isEmpty
+          ? null
+          : Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    headingRowHeight: 32,
-                    dataRowMinHeight: 28,
-                    dataRowMaxHeight: 34,
-                    columnSpacing: 8,
-                    headingRowColor: WidgetStateProperty.all(
-                      theme.primary.withValues(alpha: 0.05),
-                    ),
-                    headingTextStyle: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: theme.primaryText,
-                    ),
-                    dataTextStyle: GoogleFonts.inter(fontSize: 11),
-                    columns: const [
-                      DataColumn(
-                        label: Text('EDT'),
-                        tooltip: 'Código e hierarquia (nível 1 com fundo)',
-                      ),
-                      DataColumn(label: Text('Descrição')),
-                      DataColumn(label: Text('Un')),
-                      DataColumn(label: Text('Q.orç'), numeric: true),
-                      DataColumn(label: Text('Q.acum'), numeric: true),
-                      DataColumn(label: Text('Q.mês'), numeric: true),
-                      DataColumn(label: Text('R\$ atual'), numeric: true),
-                      DataColumn(label: Text('R\$ acumulada'), numeric: true),
-                      DataColumn(label: Text('Saldo R\$'), numeric: true),
-                    ],
-                    rows: visiveis.map((it) {
-                      final id = _toInt(it['id']);
-                      final edt = '${it['codigo_edt'] ?? ''}';
-                      final depth = _depthEdt(edt);
-                      final edtCellPad = 4.0 + (depth * 10.0);
-                      final isRoot = _idPaiDeItem(it, all, edtToId) == null;
-                      final desc = '${it['descricao'] ?? ''}';
-                      final tem = id != null && _temFilhos(it, all, edtToId);
-                      final edtBg = isRoot
-                          ? theme.primary.withValues(alpha: 0.08)
-                          : theme.alternate.withValues(alpha: 0.35);
-
-                      return DataRow(
-                        color: isRoot
-                            ? WidgetStatePropertyAll(
-                                theme.primaryBackground,
-                              )
-                            : null,
-                        cells: [
-                          DataCell(
-                            Container(
-                              color: edtBg,
-                              padding: EdgeInsets.only(
-                                left: edtCellPad,
-                                right: 8,
-                                top: 4,
-                                bottom: 4,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (tem)
-                                    InkWell(
-                                      onTap: () {
-                                        final h = _toInt(it['id']);
-                                        if (h == null) return;
-                                        setState(() {
-                                          if (_expandedIds.contains(h)) {
-                                            _expandedIds.remove(h);
-                                          } else {
-                                            _expandedIds.add(h);
-                                          }
-                                        });
-                                      },
-                                      child: Icon(
-                                        _expandedIds.contains(id)
-                                            ? Icons.expand_more
-                                            : Icons.chevron_right,
-                                        size: 18,
-                                        color: theme.primary,
-                                      ),
-                                    )
-                                  else
-                                    const SizedBox(width: 4),
-                                  Text(
-                                    edt,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: isRoot
-                                          ? FontWeight.w600
-                                          : FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          DataCell(
-                            Text(
-                              desc,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          DataCell(Text('${it['unidade'] ?? '—'}')),
-                          DataCell(Text(
-                              _qty.format(_toDouble(it['quantidade_orcada'])))),
-                          DataCell(Text(_qty.format(
-                              _toDouble(it['quantidade_acumulada_atual'])))),
-                          DataCell(Text(
-                            it['quantidade_realizada_mes'] == '-'
-                                ? '—'
-                                : _qty.format(
-                                    _toDouble(it['quantidade_realizada_mes'])),
-                          )),
-                          DataCell(Text(
-                              'R\$ ${_money.format(_toDouble(it['valor_realizado_mes']))}')),
-                          DataCell(Text(
-                              'R\$ ${_money.format(_toDouble(it['valor_acumulado']))}')),
-                          DataCell(Text(
-                              'R\$ ${_money.format(_toDouble(it['saldo_valor']))}')),
-                        ],
-                      );
-                    }).toList(),
+                RdoContadorChip('${all.length}'),
+                const SizedBox(width: 2),
+                IconButton(
+                  tooltip: 'Expandir tudo',
+                  onPressed: _expandirTudo,
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  icon: Icon(
+                    Icons.unfold_more_rounded,
+                    size: 18,
+                    color: theme.primary,
                   ),
                 ),
-                Divider(height: 1, color: Theme.of(context).dividerColor),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-                  child: Text(
-                    'Totais (sem etapas) · Q.orç ${_qty.format(tot['qOrc']!)} · Q.acum ${_qty.format(tot['qAcum']!)} · Q.mês ${_qty.format(tot['qReal']!)}',
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: theme.secondaryText,
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-                  child: Text(
-                    'R\$ atual ${_money.format(tot['vAtual']!)} · acum. ${_money.format(tot['vAcum']!)} · saldo ${_money.format(tot['vSaldo']!)}',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: theme.primary,
-                    ),
+                IconButton(
+                  tooltip: 'Recolher tudo',
+                  onPressed: _colapsarTudo,
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  icon: Icon(
+                    Icons.unfold_less_rounded,
+                    size: 18,
+                    color: theme.primary,
                   ),
                 ),
               ],
             ),
+      contentPadding: EdgeInsets.zero,
+      child: visiveis.isEmpty
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 12),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.inbox_outlined,
+                    size: 36,
+                    color: theme.secondaryText.withValues(alpha: 0.45),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Nenhum item nesta medição.',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: theme.secondaryText,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < visiveis.length; i++) ...[
+                  if (i > 0)
+                    Divider(height: 1, thickness: 1, color: theme.alternate),
+                  _buildItemMedicaoRow(
+                    theme,
+                    visiveis[i],
+                    all: all,
+                    edtToId: edtToId,
+                  ),
+                ],
+                Container(
+                  decoration: BoxDecoration(
+                    color: theme.primaryBackground.withValues(alpha: 0.55),
+                    border: Border(top: BorderSide(color: theme.alternate)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                        child: Text(
+                          'TOTAIS (SEM ETAPAS)',
+                          style: rdoColumnLabelStyle(context),
+                        ),
+                      ),
+                      RdoKpiStrip(
+                        itens: [
+                          RdoKpiData(
+                            label: 'Q.mês',
+                            value: _qty.format(tot['qReal']!),
+                          ),
+                          RdoKpiData(
+                            label: 'R\$ mês',
+                            value: 'R\$ ${_money.format(tot['vAtual']!)}',
+                            flex: 2,
+                            destaque: true,
+                          ),
+                          RdoKpiData(
+                            label: 'R\$ acum.',
+                            value: 'R\$ ${_money.format(tot['vAcum']!)}',
+                            flex: 2,
+                          ),
+                        ],
+                      ),
+                      Divider(height: 1, color: theme.alternate),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Q.orç ${_qty.format(tot['qOrc']!)} · Q.acum ${_qty.format(tot['qAcum']!)}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: theme.secondaryText,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              'Saldo R\$ ${_money.format(tot['vSaldo']!)}',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: theme.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  /// Cores por nível EDT: 1º (depth 0), 2º (1), 3º+ (2…).
+  ({Color bg, Color accent, Color badgeBg, Color badgeFg}) _coresNivelHierarquia(
+    FlutterFlowTheme theme,
+    int depth,
+  ) {
+    switch (depth) {
+      case 0:
+        return (
+          bg: theme.primary.withValues(alpha: 0.06),
+          accent: theme.primary,
+          badgeBg: theme.primary.withValues(alpha: 0.14),
+          badgeFg: theme.primary,
+        );
+      case 1:
+        return (
+          bg: const Color(0xFF5C6BC0).withValues(alpha: 0.07),
+          accent: const Color(0xFF5C6BC0),
+          badgeBg: const Color(0xFF5C6BC0).withValues(alpha: 0.14),
+          badgeFg: const Color(0xFF3949AB),
+        );
+      default:
+        return (
+          bg: const Color(0xFF00897B).withValues(alpha: 0.06),
+          accent: const Color(0xFF00897B),
+          badgeBg: const Color(0xFF00897B).withValues(alpha: 0.12),
+          badgeFg: const Color(0xFF00695C),
+        );
+    }
+  }
+
+  Widget _buildItemMedicaoRow(
+    FlutterFlowTheme theme,
+    Map<String, dynamic> it, {
+    required List<Map<String, dynamic>> all,
+    required Map<String, int> edtToId,
+  }) {
+    final id = _toInt(it['id']);
+    final edt = '${it['codigo_edt'] ?? ''}'.trim();
+    final depth = _depthEdt(edt).clamp(0, 6);
+    final isRoot = depth == 0 || _idPaiDeItem(it, all, edtToId) == null;
+    final nivel = isRoot ? 0 : depth;
+    final cores = _coresNivelHierarquia(theme, nivel);
+    final isEtapa = (it['tipo'] ?? '').toString() == 'etapa';
+    final desc = '${it['descricao'] ?? ''}'.trim();
+    final un = '${it['unidade'] ?? ''}'.trim();
+    final tem = id != null && _temFilhos(it, all, edtToId);
+    final aberto = id != null && _expandedIds.contains(id);
+    final indent = 10.0 + (nivel * 14.0);
+
+    final qMesRaw = it['quantidade_realizada_mes'];
+    final qMes = qMesRaw == '-' || qMesRaw == null
+        ? '—'
+        : _qty.format(_toDouble(qMesRaw));
+
+    void toggle() {
+      if (id == null || !tem) return;
+      setState(() {
+        if (_expandedIds.contains(id)) {
+          _expandedIds.remove(id);
+        } else {
+          _expandedIds.add(id);
+        }
+      });
+    }
+
+    return Material(
+      color: cores.bg,
+      child: InkWell(
+        onTap: tem ? toggle : null,
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(width: 3, color: cores.accent),
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(indent, 10, 12, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: tem
+                                ? Icon(
+                                    aberto
+                                        ? Icons.expand_more_rounded
+                                        : Icons.chevron_right_rounded,
+                                    size: 20,
+                                    color: cores.accent,
+                                  )
+                                : Icon(
+                                    isEtapa
+                                        ? Icons.folder_outlined
+                                        : Icons.circle,
+                                    size: isEtapa ? 16 : 6,
+                                    color: isEtapa
+                                        ? cores.accent.withValues(alpha: 0.75)
+                                        : theme.secondaryText
+                                            .withValues(alpha: 0.45),
+                                  ),
+                          ),
+                          const SizedBox(width: 6),
+                          if (edt.isNotEmpty) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: cores.badgeBg,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                edt,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: cores.badgeFg,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          Expanded(
+                            child: Text(
+                              desc.isEmpty ? '—' : desc,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: isRoot
+                                    ? FontWeight.w700
+                                    : FontWeight.w600,
+                                color: theme.primaryText,
+                                height: 1.25,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isEtapa
+                                  ? theme.primary.withValues(alpha: 0.1)
+                                  : theme.success.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              isEtapa ? 'Etapa' : 'Tarefa',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color:
+                                    isEtapa ? theme.primary : theme.success,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (!isEtapa) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            if (un.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: Text(
+                                  un,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.secondaryText,
+                                  ),
+                                ),
+                              ),
+                            Expanded(
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  _buildItemMetricChip(
+                                    theme,
+                                    'Q.orç',
+                                    _qty.format(
+                                      _toDouble(it['quantidade_orcada']),
+                                    ),
+                                  ),
+                                  _buildItemMetricChip(
+                                    theme,
+                                    'Q.acum',
+                                    _qty.format(
+                                      _toDouble(
+                                        it['quantidade_acumulada_atual'],
+                                      ),
+                                    ),
+                                  ),
+                                  _buildItemMetricChip(
+                                    theme,
+                                    'Q.mês',
+                                    qMes,
+                                    destaque: true,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(8, 7, 8, 7),
+                          decoration: BoxDecoration(
+                            color: theme.secondaryBackground
+                                .withValues(alpha: 0.85),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: theme.alternate),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildItemMoneyCell(
+                                  theme,
+                                  'R\$ mês',
+                                  _money.format(
+                                    _toDouble(it['valor_realizado_mes']),
+                                  ),
+                                  destaque: true,
+                                ),
+                              ),
+                              Container(
+                                width: 1,
+                                height: 28,
+                                color: theme.alternate,
+                              ),
+                              Expanded(
+                                child: _buildItemMoneyCell(
+                                  theme,
+                                  'R\$ acum.',
+                                  _money.format(
+                                    _toDouble(it['valor_acumulado']),
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                width: 1,
+                                height: 28,
+                                color: theme.alternate,
+                              ),
+                              Expanded(
+                                child: _buildItemMoneyCell(
+                                  theme,
+                                  'Saldo',
+                                  _money.format(
+                                    _toDouble(it['saldo_valor']),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ] else if (_toDouble(it['valor_acumulado']) != 0 ||
+                          _toDouble(it['valor_realizado_mes']) != 0) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildItemMetricChip(
+                                theme,
+                                'R\$ mês',
+                                'R\$ ${_money.format(_toDouble(it['valor_realizado_mes']))}',
+                                destaque: true,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: _buildItemMetricChip(
+                                theme,
+                                'R\$ acum.',
+                                'R\$ ${_money.format(_toDouble(it['valor_acumulado']))}',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-      ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildItemMetricChip(
+    FlutterFlowTheme theme,
+    String label,
+    String value, {
+    bool destaque = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      decoration: BoxDecoration(
+        color: destaque
+            ? theme.primary.withValues(alpha: 0.08)
+            : theme.secondaryBackground,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: destaque
+              ? theme.primary.withValues(alpha: 0.22)
+              : theme.alternate,
+        ),
+      ),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: '$label ',
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: theme.secondaryText,
+              ),
+            ),
+            TextSpan(
+              text: value,
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: destaque ? theme.primary : theme.primaryText,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildItemMoneyCell(
+    FlutterFlowTheme theme,
+    String label,
+    String value, {
+    bool destaque = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: GoogleFonts.inter(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
+              color: theme.secondaryText,
+            ),
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'R\$ $value',
+              maxLines: 1,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: destaque ? theme.primary : theme.primaryText,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1920,6 +2195,13 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
     final showCard = nAssin > 0 || sid == 2 || sid == 3;
     if (!showCard) return const SizedBox.shrink();
 
+    String? subtitle;
+    if (sid == 2) {
+      subtitle = 'Aguardando aprovação na fila';
+    } else if (sid == 3) {
+      subtitle = 'Medição aprovada';
+    }
+
     Widget inner;
     if (sid == 2) {
       inner = _buildFluxoMedicaoBody(theme);
@@ -1929,22 +2211,26 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
       inner = _buildListaAssinaturasSimplesMedicao(theme, listaAssin);
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildSectionTitle('Assinaturas', Icons.draw_outlined),
-        Container(
-          decoration: BoxDecoration(
-            color: theme.secondaryBackground,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: theme.alternate),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: inner,
-          ),
-        ),
-      ],
+    final contagem = sid == 2
+        ? (_fluxo is Map && (_fluxo!['assinaturas'] is List)
+            ? (_fluxo!['assinaturas'] as List).length
+            : null)
+        : (sid == 3
+            ? (_aprovadoresPayload?['aprovadores'] is List
+                ? (_aprovadoresPayload!['aprovadores'] as List).length
+                : null)
+            : nAssin);
+
+    return RdoSectionCard(
+      title: 'Assinaturas',
+      subtitle: subtitle,
+      icon: Icons.draw_outlined,
+      margin: const EdgeInsets.only(bottom: 10),
+      trailing: contagem != null && contagem > 0
+          ? RdoContadorChip('$contagem')
+          : null,
+      contentPadding: EdgeInsets.zero,
+      child: inner,
     );
   }
 
@@ -1953,49 +2239,137 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
     List lista,
   ) {
     if (lista.isEmpty) {
-      return Text(
-        'Nenhuma assinatura registrada.',
-        style: GoogleFonts.inter(fontSize: 13, color: theme.secondaryText),
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
+        child: Text(
+          'Nenhuma assinatura registrada.',
+          style: GoogleFonts.inter(fontSize: 13, color: theme.secondaryText),
+        ),
       );
     }
     return Column(
-      children: lista.map((raw) {
-        if (raw is! Map) return const SizedBox.shrink();
-        final a = Map<String, dynamic>.from(raw);
-        final nome = a['assinante'] is Map
-            ? (a['assinante'] as Map)['nome']?.toString()
-            : a['assinante']?.toString();
-        final pos = a['posicao'];
-        final sit = a['situacao'] ?? a['status_texto'];
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${pos ?? ''}º ${nome ?? '—'} · ${sit ?? '—'}',
-                  style: GoogleFonts.inter(fontSize: 12),
-                ),
-              ),
-              if (a['data_assinatura'] != null)
-                Text(
-                  _formatDataHoraMini(a['data_assinatura']).split(' ').first,
-                  style: GoogleFonts.inter(
-                      fontSize: 11, color: theme.secondaryText),
-                ),
-            ],
+      children: [
+        for (var i = 0; i < lista.length; i++) ...[
+          if (i > 0)
+            Divider(height: 1, thickness: 1, color: theme.alternate),
+          _buildLinhaAssinaturaCompacta(
+            theme,
+            Map<String, dynamic>.from(lista[i] as Map),
           ),
-        );
-      }).toList(),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildLinhaAssinaturaCompacta(
+    FlutterFlowTheme theme,
+    Map<String, dynamic> a,
+  ) {
+    final nome = a['assinante'] is Map
+        ? (a['assinante'] as Map)['nome']?.toString()
+        : a['assinante']?.toString();
+    final pos = a['posicao'];
+    final sit = '${a['situacao'] ?? a['status_texto'] ?? '—'}';
+    final data = a['data_assinatura'];
+    final sitLower = sit.toLowerCase();
+    Color cor = theme.secondaryText;
+    IconData icone = Icons.person_outline_rounded;
+    if (sitLower.contains('aprov')) {
+      cor = theme.success;
+      icone = Icons.check_circle_rounded;
+    } else if (sitLower.contains('reprov') || sitLower.contains('rejeit')) {
+      cor = theme.error;
+      icone = Icons.cancel_rounded;
+    } else if (sitLower.contains('aguard') || sitLower.contains('pend')) {
+      cor = theme.warning;
+      icone = Icons.hourglass_top_rounded;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      child: Row(
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: theme.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '${pos ?? '—'}',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: theme.primary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  (nome ?? '').trim().isEmpty ? '—' : nome!.trim(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: theme.primaryText,
+                  ),
+                ),
+                if (data != null)
+                  Text(
+                    _formatDataHoraMini(data),
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: theme.secondaryText,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: cor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: cor.withValues(alpha: 0.28)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icone, size: 12, color: cor),
+                const SizedBox(width: 4),
+                Text(
+                  sit,
+                  style: GoogleFonts.inter(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: cor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildFluxoMedicaoBody(FlutterFlowTheme theme) {
     if (_fluxoCarregando) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 32),
-          child: CircularProgressIndicator(),
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 28),
+        child: Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
         ),
       );
     }
@@ -2009,112 +2383,139 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          'Fluxo de assinaturas',
-          style: GoogleFonts.inter(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
         if (lista.isEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 16),
+            padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
             child: Text(
               'Não foi possível carregar a fila de aprovadores. Atualize a tela.',
-              style:
-                  GoogleFonts.inter(fontSize: 13, color: theme.secondaryText),
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: theme.secondaryText,
+              ),
             ),
           )
-        else ...[
-          const SizedBox(height: 8),
-          for (final raw in lista)
-            if (raw is Map) ...[
-              _buildLinhaFluxoMedicao(theme, Map<String, dynamic>.from(raw)),
-              const SizedBox(height: 4),
-            ],
-        ],
-        if (proxNome.isNotEmpty && _podeProcessarAssinatura != true) ...[
-          const SizedBox(height: 12),
+        else
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+            child: Column(
+              children: [
+                for (var i = 0; i < lista.length; i++)
+                  if (lista[i] is Map)
+                    _buildLinhaFluxoMedicao(
+                      theme,
+                      Map<String, dynamic>.from(lista[i] as Map),
+                      isLast: i == lista.length - 1,
+                    ),
+              ],
+            ),
+          ),
+        if (proxNome.isNotEmpty && _podeProcessarAssinatura != true)
           Container(
-            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
             decoration: BoxDecoration(
-              color: theme.info.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(12),
+              color: theme.primary.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.primary.withValues(alpha: 0.2)),
             ),
             child: Row(
               children: [
-                Icon(Icons.hourglass_bottom_outlined, color: theme.info),
+                Icon(Icons.schedule_rounded, size: 16, color: theme.primary),
                 const SizedBox(width: 8),
-                Text(
-                  'Próximo na fila: $proxNome',
-                  style: GoogleFonts.inter(fontSize: 13),
+                Expanded(
+                  child: Text(
+                    'Próximo na fila: $proxNome',
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: theme.primaryText,
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-        ],
         if (_podeProcessarAssinatura == true) ...[
-          const Divider(height: 16),
-          Text(
-            'Sua decisão',
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: theme.primaryBackground.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.alternate),
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.green.shade700,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    minimumSize: const Size(0, 36),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  onPressed:
-                      _processandoAssinatura ? null : _onAprovarAssinatura,
-                  icon: _processandoAssinatura
-                      ? SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'SUA DECISÃO',
+                  style: rdoColumnLabelStyle(context),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: theme.success,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          minimumSize: const Size(0, 38),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                        )
-                      : const Icon(Icons.check, size: 18),
-                  label: const Text('Aprovar'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    minimumSize: const Size(0, 36),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                        ),
+                        onPressed: _processandoAssinatura
+                            ? null
+                            : _onAprovarAssinatura,
+                        icon: _processandoAssinatura
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.check_rounded, size: 17),
+                        label: const Text('Aprovar'),
+                      ),
                     ),
-                  ),
-                  onPressed:
-                      _processandoAssinatura ? null : _onReprovarAssinatura,
-                  icon: _processandoAssinatura
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.close, size: 18),
-                  label: const Text('Reprovar'),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: theme.error,
+                          side: BorderSide(
+                            color: theme.error.withValues(alpha: 0.45),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          minimumSize: const Size(0, 38),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: _processandoAssinatura
+                            ? null
+                            : _onReprovarAssinatura,
+                        icon: _processandoAssinatura
+                            ? SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: theme.error,
+                                ),
+                              )
+                            : const Icon(Icons.close_rounded, size: 17),
+                        label: const Text('Reprovar'),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ],
@@ -2122,58 +2523,149 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
   }
 
   Widget _buildLinhaFluxoMedicao(
-      FlutterFlowTheme theme, Map<String, dynamic> a) {
+    FlutterFlowTheme theme,
+    Map<String, dynamic> a, {
+    bool isLast = false,
+  }) {
     final situacao = _str(a['situacao']);
     final numSit = a['situacao_numero'];
-    Color chipColor = theme.secondaryText;
-    if (numSit == 1) chipColor = Colors.orange;
-    if (numSit == 2) chipColor = Colors.green.shade700;
-    if (numSit == 3) chipColor = theme.error;
     final proximo = a['e_proximo'] == true;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: proximo
-            ? theme.primary.withValues(alpha: 0.06)
-            : theme.primaryBackground,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: proximo
-              ? theme.primary.withValues(alpha: 0.2)
-              : theme.alternate,
-        ),
-      ),
+    final nome = _str(a['nome']);
+    final pos = _str(a['posicao']);
+
+    Color chipColor = theme.secondaryText;
+    IconData statusIcon = Icons.radio_button_unchecked;
+    if (numSit == 1) {
+      chipColor = theme.warning;
+      statusIcon = Icons.hourglass_top_rounded;
+    } else if (numSit == 2) {
+      chipColor = theme.success;
+      statusIcon = Icons.check_circle_rounded;
+    } else if (numSit == 3) {
+      chipColor = theme.error;
+      statusIcon = Icons.cancel_rounded;
+    }
+    if (proximo) {
+      chipColor = theme.primary;
+      statusIcon = Icons.play_circle_outline_rounded;
+    }
+
+    return IntrinsicHeight(
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(
-            proximo ? Icons.arrow_circle_right : Icons.person_outline,
-            color: proximo ? theme.primary : theme.secondaryText,
-            size: 18,
+          SizedBox(
+            width: 28,
+            child: Column(
+              children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: proximo
+                        ? theme.primary
+                        : chipColor.withValues(alpha: 0.14),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: proximo
+                          ? theme.primary
+                          : chipColor.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Text(
+                    pos.isEmpty ? '—' : pos,
+                    style: GoogleFonts.inter(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: proximo ? Colors.white : chipColor,
+                    ),
+                  ),
+                ),
+                if (!isLast)
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      margin: const EdgeInsets.symmetric(vertical: 2),
+                      color: theme.alternate,
+                    ),
+                  ),
+              ],
+            ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              proximo
-                  ? '${_str(a['posicao'])}º ${_str(a['nome'])} · aguardando'
-                  : '${_str(a['posicao'])}º ${_str(a['nome'])}',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
+            child: Container(
+              margin: EdgeInsets.only(bottom: isLast ? 0 : 8),
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+              decoration: BoxDecoration(
+                color: proximo
+                    ? theme.primary.withValues(alpha: 0.06)
+                    : theme.secondaryBackground,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: proximo
+                      ? theme.primary.withValues(alpha: 0.28)
+                      : theme.alternate,
+                ),
               ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: chipColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              situacao,
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: chipColor,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          nome.isEmpty ? '—' : nome,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: theme.primaryText,
+                          ),
+                        ),
+                        if (proximo)
+                          Text(
+                            'Aguardando sua vez / decisão',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: theme.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: chipColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border:
+                          Border.all(color: chipColor.withValues(alpha: 0.28)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(statusIcon, size: 12, color: chipColor),
+                        const SizedBox(width: 4),
+                        Text(
+                          proximo
+                              ? (situacao.isEmpty ? 'Na fila' : situacao)
+                              : (situacao.isEmpty ? '—' : situacao),
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: chipColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -2187,10 +2679,14 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
     Map<String, dynamic> d,
   ) {
     if (_aprovadoresLoading) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 32),
-          child: CircularProgressIndicator(),
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 28),
+        child: Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
         ),
       );
     }
@@ -2201,75 +2697,90 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
     final ultima = pay != null ? pay['ultima_aprovacao'] : null;
 
     if (aprovadores.isEmpty) {
-      return Column(
-        children: [
-          Icon(Icons.info_outline,
-              size: 48, color: theme.secondaryText.withValues(alpha: 0.5)),
-          const SizedBox(height: 12),
-          Text(
-            'Nenhuma aprovação registrada',
-            style: GoogleFonts.inter(fontSize: 14, color: theme.secondaryText),
-          ),
-        ],
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 20, 12, 20),
+        child: Column(
+          children: [
+            Icon(
+              Icons.info_outline_rounded,
+              size: 36,
+              color: theme.secondaryText.withValues(alpha: 0.5),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Nenhuma aprovação registrada',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: theme.secondaryText,
+              ),
+            ),
+          ],
+        ),
       );
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Icon(Icons.verified_rounded,
-                color: Colors.green.shade700, size: 28),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'MEDIÇÃO APROVADA',
-                style: GoogleFonts.inter(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.green.shade700,
-                  letterSpacing: -0.3,
-                ),
-              ),
-            ),
-            if (ultima != null)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.alternate,
-                  borderRadius: BorderRadius.circular(12),
-                ),
+        Container(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          decoration: BoxDecoration(
+            color: theme.success.withValues(alpha: 0.08),
+            border: Border(bottom: BorderSide(color: theme.alternate)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.verified_rounded, color: theme.success, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
                 child: Text(
-                  _formatDataHoraMini(ultima).split(' ').first,
-                  style: GoogleFonts.inter(fontSize: 11),
+                  'Medição aprovada',
+                  style: GoogleFonts.inter(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: theme.success,
+                  ),
                 ),
               ),
-          ],
+              if (ultima != null)
+                Text(
+                  _formatDataHoraMini(ultima).split(' ').first,
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: theme.secondaryText,
+                  ),
+                ),
+            ],
+          ),
         ),
-        const SizedBox(height: 16),
-        for (var i = 0; i < aprovadores.length; i++)
-          if (aprovadores[i] is Map) ...[
+        for (var i = 0; i < aprovadores.length; i++) ...[
+          if (i > 0) Divider(height: 1, color: theme.alternate),
+          if (aprovadores[i] is Map)
             _buildCarimboAprovadorMedicao(
               theme,
               Map<String, dynamic>.from(aprovadores[i] as Map),
               destaque: i == 0,
             ),
-            const SizedBox(height: 12),
-          ],
-        const Divider(height: 24),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Icon(Icons.shield_outlined, size: 14, color: theme.secondaryText),
-            const SizedBox(width: 6),
-            Text(
-              '#${_hashCarimbo(d['id'], ultima)}',
-              style:
-                  GoogleFonts.inter(fontSize: 11, color: theme.secondaryText),
-            ),
-          ],
+        ],
+        Container(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: theme.alternate)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.shield_outlined, size: 13, color: theme.secondaryText),
+              const SizedBox(width: 6),
+              Text(
+                '#${_hashCarimbo(d['id'], ultima)}',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  color: theme.secondaryText,
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -2281,122 +2792,99 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
     required bool destaque,
   }) {
     final nome = _str(a['nome']);
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color:
-              destaque ? Colors.green.shade300 : Theme.of(context).dividerColor,
-          width: destaque ? 2 : 1,
-        ),
-        color: destaque ? Colors.green.shade50 : null,
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           CircleAvatar(
-            backgroundColor: destaque ? Colors.green.shade600 : theme.primary,
-            radius: 24,
+            radius: 18,
+            backgroundColor: destaque
+                ? theme.success.withValues(alpha: 0.15)
+                : theme.primary.withValues(alpha: 0.12),
             child: Text(
               _iniciaisNome(nome.isEmpty ? null : nome),
               style: GoogleFonts.inter(
-                color: Colors.white,
+                color: destaque ? theme.success : theme.primary,
                 fontWeight: FontWeight.w700,
-                fontSize: 14,
+                fontSize: 11,
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   nome.isEmpty ? 'N/A' : nome,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.inter(
-                    fontSize: 15,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
+                    color: theme.primaryText,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
                   _cargoExibicao(a),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.inter(
-                    fontSize: 12,
+                    fontSize: 11.5,
                     color: theme.secondaryText,
                   ),
                 ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 8,
+                const SizedBox(height: 5),
+                Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
-                        color: theme.alternate,
-                        borderRadius: BorderRadius.circular(8),
+                        color: theme.primaryBackground,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: theme.alternate),
                       ),
                       child: Text(
                         '${_str(a['posicao'])}º na hierarquia',
-                        style: GoogleFonts.inter(fontSize: 10),
-                      ),
-                    ),
-                    if (_str(a['data_assinatura']).isNotEmpty)
-                      Text(
-                        _formatDataHoraMini(a['data_assinatura']),
                         style: GoogleFonts.inter(
-                          fontSize: 11,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
                           color: theme.secondaryText,
                         ),
                       ),
+                    ),
+                    if (_str(a['data_assinatura']).isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.event_outlined,
+                        size: 12,
+                        color: theme.secondaryText,
+                      ),
+                      const SizedBox(width: 3),
+                      Flexible(
+                        child: Text(
+                          _formatDataHoraMini(a['data_assinatura']),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: theme.secondaryText,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMiniStatChip(FlutterFlowTheme theme, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: theme.primaryBackground,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: theme.alternate),
-      ),
-      child: Text(
-        label,
-        style: GoogleFonts.inter(
-          fontSize: 10,
-          fontWeight: FontWeight.w500,
-          color: theme.secondaryText,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title, IconData icon) {
-    final theme = FlutterFlowTheme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Icon(icon, size: 17, color: theme.primary),
-          const SizedBox(width: 8),
-          Text(
-            title,
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: theme.primaryText,
-              letterSpacing: -0.2,
-            ),
-          ),
+          if (destaque)
+            Icon(Icons.verified_rounded, size: 18, color: theme.success),
         ],
       ),
     );

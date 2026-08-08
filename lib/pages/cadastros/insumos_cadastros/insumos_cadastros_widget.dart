@@ -1,12 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '/auth/membership_access.dart';
 import '/backend/api_requests/api_calls.dart';
 import '/backend/sqlite/sqlite_manager.dart';
+import '/componentes/navegacao/barra_navegacao_principal.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/custom_code/actions/index.dart' as custom_actions;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import 'package:easy_debounce/easy_debounce.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -48,18 +50,6 @@ String _formatQtyFieldBr(double v) {
   return NumberFormat('#,##0.##', 'pt_BR').format(v);
 }
 
-String _formatDateTimeBrFromIso(dynamic v) {
-  if (v == null) return '—';
-  final s = v.toString().trim();
-  if (s.isEmpty) return '—';
-  try {
-    final dt = DateTime.parse(s.replaceFirst(' ', 'T'));
-    return DateFormat('dd/MM/yyyy HH:mm', 'pt_BR').format(dt.toLocal());
-  } catch (_) {
-    return s;
-  }
-}
-
 /// Catálogo de insumos: CRUD na API, depois `syncInsumos()`; listagem e filtros vêm do SQLite.
 class InsumosCadastrosWidget extends StatefulWidget {
   const InsumosCadastrosWidget({super.key});
@@ -79,16 +69,14 @@ class _InsumosCadastrosWidgetState extends State<InsumosCadastrosWidget> {
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _items = [];
-  /// Todas as linhas após filtro/ordenação (export usa isto; `_items` é só a página atual).
   List<Map<String, dynamic>> _filteredAll = [];
   int _total = 0;
-  int _page = 1;
-  int _perPage = 10;
   String _sortBy = 'nome';
   String _sortOrder = 'asc';
   String _filterSituacao = '';
   String _filterCategoria = '';
   List<String> _categorias = [];
+  String _busca = '';
 
   static const _debounceTag = 'insumos-search';
 
@@ -96,7 +84,19 @@ class _InsumosCadastrosWidgetState extends State<InsumosCadastrosWidget> {
   void initState() {
     super.initState();
     _model = createModel(context, () => InsumosCadastrosModel());
-    _bootstrap();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!MembershipAccess.canPermission('view_insumos')) {
+        MembershipAccess.showDenied(
+          context,
+          'Sem permissão para visualizar insumos.',
+        );
+        if (context.mounted && context.canPop()) {
+          context.pop();
+        }
+        return;
+      }
+      _bootstrap();
+    });
   }
 
   Future<void> _bootstrap() async {
@@ -154,8 +154,14 @@ class _InsumosCadastrosWidgetState extends State<InsumosCadastrosWidget> {
     if (kIsWeb) return;
     try {
       final db = SQLiteManager.instance.database;
+      final owner = FFAppState().creatorUuid.trim();
+      if (owner.isEmpty) {
+        if (mounted) setState(() => _categorias = []);
+        return;
+      }
       final rows = await db.rawQuery(
-        "SELECT DISTINCT categoria FROM insumos WHERE categoria IS NOT NULL AND TRIM(categoria) != '' ORDER BY categoria COLLATE NOCASE",
+        "SELECT DISTINCT categoria FROM insumos WHERE created_by = ? AND categoria IS NOT NULL AND TRIM(categoria) != '' ORDER BY categoria COLLATE NOCASE",
+        [owner],
       );
       final list = <String>[];
       for (final r in rows) {
@@ -284,7 +290,22 @@ class _InsumosCadastrosWidgetState extends State<InsumosCadastrosWidget> {
         }
       }
 
-      final rawAll = await db.query('insumos');
+      final owner = FFAppState().creatorUuid.trim();
+      if (owner.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _filteredAll = [];
+          _items = [];
+          _total = 0;
+        });
+        return;
+      }
+      final rawAll = await db.query(
+        'insumos',
+        where: 'created_by = ?',
+        whereArgs: [owner],
+      );
       final raw = rawAll.where((r) {
         final d = r['deleted_at'];
         if (d == null) return true;
@@ -302,16 +323,12 @@ class _InsumosCadastrosWidgetState extends State<InsumosCadastrosWidget> {
       final filtered = mapped.where(_rowMatchesFilters).toList();
       _sortFiltered(filtered);
 
-      final total = filtered.length;
-      final start = ((_page - 1) * _perPage).clamp(0, 1 << 30);
-      final pageItems = filtered.skip(start).take(_perPage).toList();
-
       if (!mounted) return;
       setState(() {
         _loading = false;
         _filteredAll = filtered;
-        _items = pageItems;
-        _total = total;
+        _items = filtered;
+        _total = filtered.length;
       });
     } catch (e) {
       if (!mounted) return;
@@ -342,12 +359,16 @@ class _InsumosCadastrosWidgetState extends State<InsumosCadastrosWidget> {
   }
 
   bool _estoqueBaixo(Map<String, dynamic> m) {
-    final ea = _toDouble(m['estoque_atual']);
-    final em = _toDouble(m['estoque_minimo']);
+    final ea = _insumoToDouble(m['estoque_atual']);
+    final em = _insumoToDouble(m['estoque_minimo']);
     return em > 0 && ea <= em;
   }
 
-  double _toDouble(dynamic v) => _insumoToDouble(v);
+  int _serverId(Map<String, dynamic> m) {
+    final id = m['id'];
+    if (id is int) return id;
+    return int.tryParse('$id') ?? 0;
+  }
 
   Future<void> _exportLocalCsv() async {
     if (kIsWeb) return;
@@ -400,14 +421,12 @@ class _InsumosCadastrosWidgetState extends State<InsumosCadastrosWidget> {
     );
   }
 
-  void _onSearchChanged(String _) {
+  void _onSearchChanged(String value) {
+    setState(() => _busca = value);
     EasyDebounce.debounce(
       _debounceTag,
       const Duration(milliseconds: 450),
-      () {
-        _page = 1;
-        _fetchInsumos();
-      },
+      () => _fetchInsumos(),
     );
   }
 
@@ -422,6 +441,10 @@ class _InsumosCadastrosWidgetState extends State<InsumosCadastrosWidget> {
   @override
   Widget build(BuildContext context) {
     context.watch<FFAppState>();
+    final theme = FlutterFlowTheme.of(context);
+    final canCreate = MembershipAccess.canPermission('create_insumos');
+    final canEdit = MembershipAccess.canPermission('edit_insumos');
+    final canDelete = MembershipAccess.canPermission('delete_insumos');
 
     return GestureDetector(
       onTap: () {
@@ -430,573 +453,630 @@ class _InsumosCadastrosWidgetState extends State<InsumosCadastrosWidget> {
       },
       child: Scaffold(
         key: scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
+        backgroundColor: theme.primaryBackground,
         appBar: AppBar(
-          backgroundColor: FlutterFlowTheme.of(context).primary,
-          automaticallyImplyLeading: true,
-          title: Text(
-            'Insumos',
-            style: FlutterFlowTheme.of(context).titleLarge.override(
-                  font: GoogleFonts.interTight(fontWeight: FontWeight.w600),
-                  color: Colors.white,
-                  fontSize: 20,
+          backgroundColor: theme.primary,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          centerTitle: false,
+          titleSpacing: 0,
+          toolbarHeight: 58,
+          iconTheme: const IconThemeData(color: Colors.white),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: () => context.safePop(),
+          ),
+          title: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Insumos',
+                  style: GoogleFonts.interTight(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
                 ),
+                Text(
+                  'Catálogo geral do sistema',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
           ),
           actions: [
             IconButton(
               tooltip: 'Sincronizar e atualizar',
               onPressed: _loading ? null : _syncAndReloadList,
               icon: _loading
-                  ? SizedBox(
-                      width: 22,
-                      height: 22,
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: FlutterFlowTheme.of(context).info,
+                        color: Colors.white,
                       ),
                     )
-                  : Icon(Icons.refresh, color: FlutterFlowTheme.of(context).info),
+                  : const Icon(Icons.refresh_rounded,
+                      color: Colors.white, size: 21),
             ),
             PopupMenuButton<String>(
-              tooltip: 'Exportar',
-              icon: Icon(Icons.ios_share, color: FlutterFlowTheme.of(context).info),
+              tooltip: 'Mais opções',
+              icon: const Icon(Icons.more_vert_rounded,
+                  color: Colors.white, size: 22),
               onSelected: (v) {
-                if (v == 'csv') _exportLocalCsv();
+                if (v == 'csv') {
+                  _exportLocalCsv();
+                  return;
+                }
+                if (v.startsWith('sort:')) {
+                  setState(() => _sortBy = v.substring(5));
+                  _fetchInsumos();
+                  return;
+                }
+                if (v == 'order') {
+                  setState(() {
+                    _sortOrder = _sortOrder == 'asc' ? 'desc' : 'asc';
+                  });
+                  _fetchInsumos();
+                }
               },
               itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'csv',
-                  child: Text('CSV (SQLite / filtros)'),
-                ),
-              ],
-            ),
-          ],
-          elevation: 0,
-        ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _openForm(context, null),
-          backgroundColor: FlutterFlowTheme.of(context).primary,
-          icon: Icon(Icons.add, color: FlutterFlowTheme.of(context).info),
-          label: Text(
-            'Novo insumo',
-            style: TextStyle(color: FlutterFlowTheme.of(context).info),
-          ),
-        ),
-        body: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildHeader(context),
-              _buildFilters(context),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.all(12),
+                PopupMenuItem(
+                  value: 'order',
                   child: Text(
-                    _error!,
-                    style: TextStyle(color: FlutterFlowTheme.of(context).error),
+                    _sortOrder == 'asc' ? 'Ordenar decrescente' : 'Ordenar crescente',
                   ),
                 ),
-              Expanded(child: _buildBody(context)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: FlutterFlowTheme.of(context).primary.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(Icons.inventory_2_outlined,
-                color: FlutterFlowTheme.of(context).primary, size: 26),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Insumos',
-                  style: FlutterFlowTheme.of(context).headlineSmall.override(
-                        font: GoogleFonts.interTight(fontWeight: FontWeight.bold),
-                        color: FlutterFlowTheme.of(context).primary,
-                      ),
-                ),
-                Text(
-                  'Lista no SQLite; alterações vão à API e em seguida sincronizam o catálogo.',
-                  style: FlutterFlowTheme.of(context).bodySmall.override(
-                        color: FlutterFlowTheme.of(context).secondaryText,
-                      ),
-                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(value: 'sort:nome', child: Text('Ordenar por nome')),
+                const PopupMenuItem(
+                    value: 'sort:codigo', child: Text('Ordenar por código')),
+                const PopupMenuItem(
+                    value: 'sort:categoria', child: Text('Ordenar por categoria')),
+                const PopupMenuItem(
+                    value: 'sort:preco_unitario', child: Text('Ordenar por preço')),
+                const PopupMenuItem(
+                    value: 'sort:estoque_atual', child: Text('Ordenar por estoque')),
+                const PopupMenuItem(
+                    value: 'sort:situacao', child: Text('Ordenar por situação')),
+                const PopupMenuDivider(),
+                const PopupMenuItem(value: 'csv', child: Text('Exportar CSV')),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilters(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: FlutterFlowTheme.of(context).alternate,
+            if (canCreate)
+              IconButton(
+                tooltip: 'Novo insumo',
+                icon: const Icon(Icons.add_rounded,
+                    color: Colors.white, size: 24),
+                onPressed: () => _openForm(null),
+              ),
+            const SizedBox(width: 4),
+          ],
         ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
+        body: Column(
           children: [
-            TextField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: 'Buscar por nome, código ou categoria...',
-                prefixIcon: Icon(Icons.search,
-                    color: FlutterFlowTheme.of(context).secondaryText),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            Expanded(
+              child: RefreshIndicator(
+                color: theme.primary,
+                onRefresh: _syncAndReloadList,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(
+                    16,
+                    10,
+                    16,
+                    kBarraNavegacaoPrincipalReservaScroll,
+                  ),
+                  children: [
+                    if (canCreate)
+                      RdoSectionCard(
+                        title: 'Incluir insumo',
+                        icon: Icons.add_box_outlined,
+                        subtitle: 'Cadastrar no catálogo',
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: FilledButton.icon(
+                          onPressed: () => _openForm(null),
+                          icon: const Icon(Icons.add_rounded, size: 18),
+                          label: Text(
+                            'Novo insumo',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: theme.primary,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(double.infinity, 42),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    RdoSectionCard(
+                      title: 'Buscar e filtrar',
+                      icon: Icons.search_rounded,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: Column(
+                        children: [
+                          TextField(
+                            controller: _searchController,
+                            onChanged: _onSearchChanged,
+                            style: rdoFormFieldTextStyle(context),
+                            decoration: rdoFormFieldDecoration(
+                              context,
+                              label: 'Nome, código ou categoria',
+                              hint: 'Digite para filtrar',
+                              suffixIcon: _busca.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      tooltip: 'Limpar',
+                                      icon: Icon(
+                                        Icons.close_rounded,
+                                        size: 18,
+                                        color: theme.secondaryText,
+                                      ),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        setState(() => _busca = '');
+                                        _fetchInsumos();
+                                      },
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  key: ValueKey('f_sit_$_filterSituacao'),
+                                  initialValue: _filterSituacao,
+                                  style: rdoFormFieldTextStyle(context),
+                                  decoration: rdoFormFieldDecoration(
+                                    context,
+                                    label: 'Situação',
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(
+                                        value: '', child: Text('Todas')),
+                                    DropdownMenuItem(
+                                        value: 'ativo', child: Text('Ativo')),
+                                    DropdownMenuItem(
+                                        value: 'inativo',
+                                        child: Text('Inativo')),
+                                  ],
+                                  onChanged: (v) {
+                                    setState(() => _filterSituacao = v ?? '');
+                                    _fetchInsumos();
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  key: ValueKey('f_cat_$_filterCategoria'),
+                                  initialValue: _filterCategoria,
+                                  isExpanded: true,
+                                  style: rdoFormFieldTextStyle(context),
+                                  decoration: rdoFormFieldDecoration(
+                                    context,
+                                    label: 'Categoria',
+                                  ),
+                                  items: [
+                                    const DropdownMenuItem(
+                                        value: '', child: Text('Todas')),
+                                    ..._categorias.map(
+                                      (c) => DropdownMenuItem(
+                                        value: c,
+                                        child: Text(
+                                          c,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                    if (_filterCategoria.isNotEmpty &&
+                                        !_categorias
+                                            .contains(_filterCategoria))
+                                      DropdownMenuItem(
+                                        value: _filterCategoria,
+                                        child: Text(
+                                          _filterCategoria,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                  ],
+                                  onChanged: (v) {
+                                    setState(
+                                        () => _filterCategoria = v ?? '');
+                                    _fetchInsumos();
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_filterSituacao.isNotEmpty ||
+                              _filterCategoria.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    _filterSituacao = '';
+                                    _filterCategoria = '';
+                                  });
+                                  _fetchInsumos();
+                                },
+                                icon: Icon(
+                                  Icons.filter_alt_off_rounded,
+                                  size: 16,
+                                  color: theme.secondaryText,
+                                ),
+                                label: Text(
+                                  'Limpar filtros',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.secondaryText,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    RdoSectionCard(
+                      title: 'Lista de insumos',
+                      icon: Icons.inventory_2_outlined,
+                      subtitle: _loading
+                          ? 'Carregando…'
+                          : _error != null
+                              ? 'Falha ao carregar'
+                              : _items.isEmpty
+                                  ? 'Nenhum insumo encontrado'
+                                  : _busca.trim().isEmpty &&
+                                          _filterSituacao.isEmpty &&
+                                          _filterCategoria.isEmpty
+                                      ? 'Catálogo sincronizado'
+                                      : '$_total resultado${_total == 1 ? '' : 's'}',
+                      margin: EdgeInsets.zero,
+                      trailing:
+                          _items.isEmpty ? null : RdoContadorChip('$_total'),
+                      contentPadding: EdgeInsets.zero,
+                      child: _buildLista(theme, canCreate, canEdit, canDelete),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    key: ValueKey('f_sit_$_filterSituacao'),
-                    initialValue: _filterSituacao,
-                    decoration: InputDecoration(
-                      labelText: 'Situação',
-                      isDense: true,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: '', child: Text('Todas')),
-                      DropdownMenuItem(value: 'ativo', child: Text('Ativo')),
-                      DropdownMenuItem(value: 'inativo', child: Text('Inativo')),
-                    ],
-                    onChanged: (v) {
-                      setState(() {
-                        _filterSituacao = v ?? '';
-                        _page = 1;
-                      });
-                      _fetchInsumos();
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    key: ValueKey('f_cat_$_filterCategoria'),
-                    initialValue: _filterCategoria,
-                    decoration: InputDecoration(
-                      labelText: 'Categoria',
-                      isDense: true,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    items: [
-                      const DropdownMenuItem(value: '', child: Text('Todas')),
-                      ..._categorias.map(
-                        (c) => DropdownMenuItem(value: c, child: Text(c)),
-                      ),
-                      if (_filterCategoria.isNotEmpty &&
-                          !_categorias.contains(_filterCategoria))
-                        DropdownMenuItem(
-                          value: _filterCategoria,
-                          child: Text(_filterCategoria),
-                        ),
-                    ],
-                    onChanged: (v) {
-                      setState(() {
-                        _filterCategoria = v ?? '';
-                        _page = 1;
-                      });
-                      _fetchInsumos();
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Text('Ordenar:', style: FlutterFlowTheme.of(context).labelMedium),
-                const SizedBox(width: 8),
-                DropdownButton<String>(
-                  value: _sortBy,
-                  items: const [
-                    DropdownMenuItem(value: 'nome', child: Text('Nome')),
-                    DropdownMenuItem(value: 'codigo', child: Text('Código')),
-                    DropdownMenuItem(value: 'categoria', child: Text('Categoria')),
-                    DropdownMenuItem(value: 'preco_unitario', child: Text('Preço')),
-                    DropdownMenuItem(value: 'estoque_atual', child: Text('Estoque')),
-                    DropdownMenuItem(value: 'situacao', child: Text('Situação')),
-                  ],
-                  onChanged: (v) {
-                    if (v == null) return;
-                    setState(() {
-                      _sortBy = v;
-                      _page = 1;
-                    });
-                    _fetchInsumos();
-                  },
-                ),
-                IconButton(
-                  tooltip: _sortOrder == 'asc' ? 'Crescente' : 'Decrescente',
-                  onPressed: () {
-                    setState(() {
-                      _sortOrder = _sortOrder == 'asc' ? 'desc' : 'asc';
-                      _page = 1;
-                    });
-                    _fetchInsumos();
-                  },
-                  icon: Icon(
-                    _sortOrder == 'asc' ? Icons.arrow_upward : Icons.arrow_downward,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                if (_filterSituacao.isNotEmpty || _filterCategoria.isNotEmpty)
-                  TextButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _filterSituacao = '';
-                        _filterCategoria = '';
-                        _page = 1;
-                      });
-                      _fetchInsumos();
-                    },
-                    icon: const Icon(Icons.filter_alt_off, size: 18),
-                    label: const Text('Limpar filtros'),
-                  ),
-                const Spacer(),
-                Chip(
-                  avatar: Icon(Icons.analytics_outlined,
-                      size: 16, color: FlutterFlowTheme.of(context).primary),
-                  label: Text('$_total insumo${_total == 1 ? '' : 's'}'),
-                ),
-              ],
-            ),
+            const BarraNavegacaoPrincipal(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBody(BuildContext context) {
+  Widget _buildLista(
+    FlutterFlowTheme theme,
+    bool canCreate,
+    bool canEdit,
+    bool canDelete,
+  ) {
     if (_loading && _items.isEmpty) {
-      return Center(
-        child: CircularProgressIndicator(color: FlutterFlowTheme.of(context).primary),
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 36),
+        child: Center(
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
       );
     }
-    if (_items.isEmpty) {
-      return Center(
+
+    if (_error != null && _items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 28),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inventory_2_outlined,
-                size: 56, color: FlutterFlowTheme.of(context).alternate),
+            Icon(Icons.error_outline_rounded, size: 40, color: theme.error),
             const SizedBox(height: 12),
             Text(
-              'Nenhum insumo encontrado',
-              style: FlutterFlowTheme.of(context).titleMedium,
+              _error!,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(fontSize: 13, color: theme.error),
             ),
-            const SizedBox(height: 8),
-            FFButtonWidget(
-              onPressed: () => _openForm(context, null),
-              text: 'Novo insumo',
-              options: FFButtonOptions(
-                height: 40,
-                color: FlutterFlowTheme.of(context).primary,
-                textStyle: FlutterFlowTheme.of(context).titleSmall.override(
-                      color: FlutterFlowTheme.of(context).info,
-                    ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final lastPage = (_total / _perPage).ceil().clamp(1, 99999);
-
-    return Column(
-      children: [
-        Expanded(
-          child: Scrollbar(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SingleChildScrollView(
-                child: DataTable(
-                  headingRowColor: WidgetStateProperty.all(
-                    FlutterFlowTheme.of(context).primary.withValues(alpha: 0.06),
-                  ),
-                  columns: [
-                    DataColumn(label: Text('Código', style: _th(context))),
-                    DataColumn(label: Text('Insumo', style: _th(context))),
-                    DataColumn(label: Text('Categoria', style: _th(context))),
-                    DataColumn(label: Text('Un', style: _th(context))),
-                    DataColumn(
-                      label: Text('Preço', style: _th(context)),
-                      numeric: true,
-                    ),
-                    DataColumn(label: Text('Estoque', style: _th(context))),
-                    DataColumn(label: Text('Estq. mín.', style: _th(context))),
-                    DataColumn(label: Text('Situação', style: _th(context))),
-                    DataColumn(label: Text('Ações', style: _th(context))),
-                  ],
-                  rows: _items.map((m) => _buildRow(context, m)).toList(),
-                ),
-              ),
-            ),
-          ),
-        ),
-        _buildPagination(context, lastPage),
-      ],
-    );
-  }
-
-  TextStyle _th(BuildContext context) => FlutterFlowTheme.of(context).labelLarge
-      .override(fontWeight: FontWeight.w700, fontSize: 11);
-
-  DataRow _buildRow(BuildContext context, Map<String, dynamic> m) {
-    final id = m['id'];
-    final idInt = id is int ? id : int.tryParse('$id') ?? 0;
-    final situacao = '${m['situacao'] ?? ''}';
-    final ativo = situacao == 'ativo';
-
-    return DataRow(
-      cells: [
-        DataCell(Text('${m['codigo'] ?? '—'}')),
-        DataCell(
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 220),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '${m['nome'] ?? ''}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: FlutterFlowTheme.of(context).primary,
-                  ),
-                ),
-                if ('${m['descricao'] ?? ''}'.isNotEmpty)
-                  Text(
-                    '${m['descricao']}'.length > 48
-                        ? '${'${m['descricao']}'.substring(0, 48)}…'
-                        : '${m['descricao']}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: FlutterFlowTheme.of(context).labelSmall,
-                  ),
-              ],
-            ),
-          ),
-        ),
-        DataCell(Text('${m['categoria'] ?? '—'}')),
-        DataCell(Text('${m['unidade_medida'] ?? ''}'.toUpperCase())),
-        DataCell(Text('${m['preco_unitario_formatado'] ?? '—'}',
-            textAlign: TextAlign.end)),
-        DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${m['estoque_atual_formatado'] ?? '—'}',
-                style: TextStyle(
-                  color: _estoqueBaixo(m)
-                      ? FlutterFlowTheme.of(context).error
-                      : FlutterFlowTheme.of(context).primary,
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: _syncAndReloadList,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: Text(
+                'Tentar novamente',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              if (_estoqueBaixo(m)) ...[
-                const SizedBox(width: 4),
-                Icon(Icons.warning_amber_rounded,
-                    size: 16, color: FlutterFlowTheme.of(context).error),
-              ],
-            ],
-          ),
-        ),
-        DataCell(Text('${m['estoque_minimo_formatado'] ?? '—'}')),
-        DataCell(
-          Chip(
-            label: Text('${m['status_texto'] ?? situacao}'),
-            padding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            labelStyle: const TextStyle(fontSize: 11),
-            backgroundColor: ativo
-                ? Colors.green.withValues(alpha: 0.15)
-                : Colors.red.withValues(alpha: 0.12),
-          ),
-        ),
-        DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                tooltip: 'Ver',
-                icon: Icon(Icons.visibility_outlined,
-                    color: FlutterFlowTheme.of(context).primary, size: 20),
-                onPressed: () => _showView(context, m),
+              style: FilledButton.styleFrom(
+                backgroundColor: theme.primary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(160, 40),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
-              IconButton(
-                tooltip: 'Editar',
-                icon: Icon(Icons.edit_outlined,
-                    color: Colors.orange.shade700, size: 20),
-                onPressed: () => _openForm(context, m),
-              ),
-              PopupMenuButton<String>(
-                onSelected: (v) {
-                  if (v == 'ativo' || v == 'inativo') {
-                    _patchSituacao(idInt, v);
-                  } else if (v == 'del') {
-                    _confirmDelete(context, idInt);
-                  }
-                },
-                itemBuilder: (c) => [
-                  const PopupMenuItem(value: 'ativo', child: Text('Ativar')),
-                  const PopupMenuItem(value: 'inativo', child: Text('Inativar')),
-                  const PopupMenuDivider(),
-                  PopupMenuItem(
-                    value: 'del',
-                    child: Text('Excluir',
-                        style: TextStyle(color: FlutterFlowTheme.of(context).error)),
-                  ),
-                ],
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
+      );
+    }
+
+    if (_items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 28, 16, 28),
+        child: Column(
+          children: [
+            Icon(
+              Icons.inventory_2_outlined,
+              size: 40,
+              color: theme.secondaryText.withValues(alpha: 0.4),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _busca.trim().isEmpty &&
+                      _filterSituacao.isEmpty &&
+                      _filterCategoria.isEmpty
+                  ? 'Nenhum insumo cadastrado'
+                  : 'Nenhum resultado nos filtros',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: theme.primaryText,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _busca.trim().isEmpty &&
+                      _filterSituacao.isEmpty &&
+                      _filterCategoria.isEmpty
+                  ? (canCreate
+                      ? 'Cadastre o primeiro insumo do catálogo.'
+                      : 'Não há insumos disponíveis.')
+                  : 'Ajuste a busca ou limpe os filtros.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                color: theme.secondaryText,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        for (var i = 0; i < _items.length; i++) ...[
+          if (i > 0)
+            Divider(height: 1, thickness: 1, color: theme.alternate),
+          _buildInsumoItem(theme, _items[i], canEdit, canDelete),
+        ],
       ],
     );
   }
 
-  Widget _buildPagination(BuildContext context, int lastPage) {
-    return Material(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        child: Row(
-          children: [
-            DropdownButton<int>(
-              value: _perPage,
-              items: const [10, 25, 50]
-                  .map((e) => DropdownMenuItem(value: e, child: Text('$e / página')))
-                  .toList(),
-              onChanged: (v) {
-                if (v == null) return;
-                setState(() {
-                  _perPage = v;
-                  _page = 1;
-                });
-                _fetchInsumos();
-              },
-            ),
-            const Spacer(),
-            IconButton(
-              onPressed: _page > 1
-                  ? () {
-                      setState(() => _page--);
-                      _fetchInsumos();
-                    }
-                  : null,
-              icon: const Icon(Icons.chevron_left),
-            ),
-            Text('Página $_page / $lastPage'),
-            IconButton(
-              onPressed: _page < lastPage
-                  ? () {
-                      setState(() => _page++);
-                      _fetchInsumos();
-                    }
-                  : null,
-              icon: const Icon(Icons.chevron_right),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _buildInsumoItem(
+    FlutterFlowTheme theme,
+    Map<String, dynamic> m,
+    bool canEdit,
+    bool canDelete,
+  ) {
+    final nome =
+        valueOrDefault<String>(m['nome']?.toString(), 'Insumo sem nome');
+    final codigo = '${m['codigo'] ?? ''}'.trim();
+    final categoria = '${m['categoria'] ?? ''}'.trim();
+    final unidade = '${m['unidade_medida'] ?? ''}'.trim().toUpperCase();
+    final preco = '${m['preco_unitario_formatado'] ?? '—'}';
+    final estoque = '${m['estoque_atual_formatado'] ?? '—'}';
+    final situacao = '${m['situacao'] ?? ''}';
+    final ativo = situacao == 'ativo';
+    final baixo = _estoqueBaixo(m);
+    final sid = _serverId(m);
+    final temAcoes = canEdit || canDelete;
 
-  void _showView(BuildContext context, Map<String, dynamic> m) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('${m['nome']}'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+    final meta = [
+      if (codigo.isNotEmpty) codigo,
+      if (categoria.isNotEmpty) categoria,
+      if (unidade.isNotEmpty) unidade,
+      preco,
+      'Est. $estoque',
+    ].join(' · ');
+
+    return Material(
+      color: theme.secondaryBackground,
+      child: InkWell(
+        onTap: canEdit ? () => _openForm(m) : null,
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _kv('Código', '${m['codigo'] ?? '—'}'),
-              _kv('Categoria', '${m['categoria'] ?? '—'}'),
-              _kv('Unidade', '${m['unidade_medida'] ?? '—'}'),
-              _kv('Preço', '${m['preco_unitario_formatado'] ?? '—'}'),
-              _kv('Estoque', '${m['estoque_atual_formatado'] ?? '—'}'),
-              _kv('Estoque mín.', '${m['estoque_minimo_formatado'] ?? '—'}'),
-              _kv('Localização', '${m['localizacao'] ?? '—'}'),
-              _kv('Situação', '${m['status_texto'] ?? m['situacao']}'),
-              _kv('Criado em', _formatDateTimeBrFromIso(m['created_at'])),
-              _kv('Atualizado em', _formatDateTimeBrFromIso(m['updated_at'])),
-              if ('${m['descricao'] ?? ''}'.isNotEmpty)
-                _kv('Descrição', '${m['descricao']}'),
+              Container(
+                width: 3,
+                color: baixo
+                    ? theme.error
+                    : (ativo ? theme.primary : Colors.grey.shade500),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(12, 10, temAcoes ? 4 : 12, 10),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: (baixo ? theme.error : theme.primary)
+                              .withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          baixo
+                              ? Icons.warning_amber_rounded
+                              : Icons.inventory_2_rounded,
+                          size: 18,
+                          color: baixo ? theme.error : theme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    nome,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: theme.primaryText,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: (ativo
+                                            ? Colors.green.shade700
+                                            : Colors.red.shade700)
+                                        .withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    ativo ? 'Ativo' : 'Inativo',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: ativo
+                                          ? Colors.green.shade700
+                                          : Colors.red.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              meta,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 11.5,
+                                color: baixo
+                                    ? theme.error
+                                    : theme.secondaryText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (canEdit)
+                        IconButton(
+                          tooltip: 'Editar',
+                          onPressed: () => _openForm(m),
+                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints(
+                            minWidth: 36,
+                            minHeight: 36,
+                          ),
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            Icons.edit_outlined,
+                            size: 18,
+                            color: theme.secondaryText,
+                          ),
+                        ),
+                      if (canDelete)
+                        IconButton(
+                          tooltip: 'Excluir',
+                          onPressed: () => _confirmDelete(sid),
+                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints(
+                            minWidth: 36,
+                            minHeight: 36,
+                          ),
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            Icons.delete_outline_rounded,
+                            size: 18,
+                            color: theme.error,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Fechar'),
-          ),
-        ],
       ),
     );
   }
 
-  Widget _kv(String k, String v) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 110,
-              child: Text(k,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-            ),
-            Expanded(child: Text(v, style: const TextStyle(fontSize: 13))),
-          ],
-        ),
+  Future<void> _openForm(Map<String, dynamic>? existing) async {
+    if (existing == null) {
+      if (!MembershipAccess.canPermission('create_insumos')) {
+        MembershipAccess.showDenied(
+          context,
+          'Sem permissão para criar insumos.',
+        );
+        return;
+      }
+    } else if (!MembershipAccess.canPermission('edit_insumos')) {
+      MembershipAccess.showDenied(
+        context,
+        'Sem permissão para editar insumos.',
       );
+      return;
+    }
 
-  Future<void> _openForm(BuildContext context, Map<String, dynamic>? existing) async {
-    final result = await showDialog<Map<String, dynamic>>(
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _InsumoFormDialog(existing: existing),
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(ctx).bottom,
+        ),
+        child: _InsumoFormSheet(existing: existing),
+      ),
     );
 
-    if (result == null || !mounted || !context.mounted) return;
+    if (result == null || !mounted) return;
 
     final nomeVal = (result['nome'] as String?)?.trim() ?? '';
     final codigoVal = (result['codigo'] as String?)?.trim() ?? '';
@@ -1040,8 +1120,7 @@ class _InsumosCadastrosWidgetState extends State<InsumosCadastrosWidget> {
         _showApiError(r);
       }
     } else {
-      final id = existing['id'];
-      final idInt = id is int ? id : int.tryParse('$id') ?? 0;
+      final idInt = _serverId(existing);
       if (idInt <= 0) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1077,39 +1156,11 @@ class _InsumosCadastrosWidgetState extends State<InsumosCadastrosWidget> {
     }
   }
 
-  Future<void> _patchSituacao(int id, String situacao) async {
-    if (id <= 0) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Sincronize (ícone atualizar) para obter o ID do servidor neste aparelho.',
-            ),
-          ),
-        );
-      }
-      return;
-    }
-    final token = FFAppState().UserToken.trim();
-    if (token.isEmpty) return;
-    final r = await InsumoPatchSituacaoCall.call(
-      token: token,
-      id: id,
-      situacao: situacao,
-    );
-    if (r.succeeded) {
-      await _afterMutation('Situação atualizada.');
-    } else {
-      _showApiError(r);
-    }
-  }
-
-  Future<void> _confirmDelete(BuildContext context, int id) async {
-    if (!FFAppState().hasPermission('edit_insumos')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Você não tem permissão para excluir insumos.'),
-        ),
+  Future<void> _confirmDelete(int id) async {
+    if (!MembershipAccess.canPermission('delete_insumos')) {
+      MembershipAccess.showDenied(
+        context,
+        'Sem permissão para excluir insumos.',
       );
       return;
     }
@@ -1125,18 +1176,42 @@ class _InsumosCadastrosWidgetState extends State<InsumosCadastrosWidget> {
       }
       return;
     }
+
+    final theme = FlutterFlowTheme.of(context);
     final go = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Excluir insumo?'),
-        content: const Text('Esta ação não pode ser desfeita.'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text(
+          'Excluir insumo?',
+          style: GoogleFonts.inter(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: theme.primaryText,
+          ),
+        ),
+        content: Text(
+          'Esta ação não pode ser desfeita.',
+          style: GoogleFonts.inter(fontSize: 13.5, color: theme.secondaryText),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
+            child: Text(
+              'Cancelar',
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w600,
+                color: theme.secondaryText,
+              ),
+            ),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.error,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Excluir'),
           ),
@@ -1154,18 +1229,16 @@ class _InsumosCadastrosWidgetState extends State<InsumosCadastrosWidget> {
   }
 }
 
-/// Diálogo com controllers próprios: o `dispose` só roda quando a rota sai da árvore,
-/// evitando "used after disposed" durante a animação de fechamento / IME.
-class _InsumoFormDialog extends StatefulWidget {
-  const _InsumoFormDialog({this.existing});
+class _InsumoFormSheet extends StatefulWidget {
+  const _InsumoFormSheet({this.existing});
 
   final Map<String, dynamic>? existing;
 
   @override
-  State<_InsumoFormDialog> createState() => _InsumoFormDialogState();
+  State<_InsumoFormSheet> createState() => _InsumoFormSheetState();
 }
 
-class _InsumoFormDialogState extends State<_InsumoFormDialog> {
+class _InsumoFormSheetState extends State<_InsumoFormSheet> {
   late final TextEditingController nome;
   late final TextEditingController codigo;
   late final TextEditingController descricao;
@@ -1208,7 +1281,8 @@ class _InsumoFormDialogState extends State<_InsumoFormDialog> {
     codigo = TextEditingController(text: e?['codigo']?.toString() ?? '');
     descricao = TextEditingController(text: e?['descricao']?.toString() ?? '');
     categoria = TextEditingController(text: e?['categoria']?.toString() ?? '');
-    unidade = TextEditingController(text: e?['unidade_medida']?.toString() ?? 'UN');
+    unidade =
+        TextEditingController(text: e?['unidade_medida']?.toString() ?? 'UN');
     final p0 = e != null ? _insumoToDouble(e['preco_unitario']) : 0.0;
     final ea0 = e != null ? _insumoToDouble(e['estoque_atual']) : 0.0;
     final em0 = e != null ? _insumoToDouble(e['estoque_minimo']) : 0.0;
@@ -1274,100 +1348,241 @@ class _InsumoFormDialogState extends State<_InsumoFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.existing == null ? 'Novo insumo' : 'Editar insumo'),
-      content: SingleChildScrollView(
-        child: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nome,
-                decoration: const InputDecoration(labelText: 'Nome *'),
-              ),
-              TextField(
-                controller: codigo,
-                decoration: const InputDecoration(labelText: 'Código'),
-              ),
-              TextField(
-                controller: descricao,
-                decoration: const InputDecoration(labelText: 'Descrição'),
-                maxLines: 2,
-              ),
-              TextField(
-                controller: categoria,
-                decoration: const InputDecoration(labelText: 'Categoria'),
-              ),
-              TextField(
-                controller: unidade,
-                decoration: const InputDecoration(labelText: 'Unidade de medida *'),
-              ),
-              TextField(
-                controller: preco,
-                focusNode: _precoFocus,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,R$\s]')),
-                ],
-                decoration: const InputDecoration(
-                  labelText: 'Preço unitário',
-                  hintText: r'R$ 0,00',
-                ),
-              ),
-              TextField(
-                controller: estoque,
-                focusNode: _estoqueFocus,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                ],
-                decoration: const InputDecoration(
-                  labelText: 'Estoque atual',
-                  hintText: '0',
-                ),
-              ),
-              TextField(
-                controller: estMin,
-                focusNode: _estMinFocus,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                ],
-                decoration: const InputDecoration(
-                  labelText: 'Estoque mínimo',
-                  hintText: '0',
-                ),
-              ),
-              TextField(
-                controller: local,
-                decoration: const InputDecoration(labelText: 'Localização'),
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                key: ValueKey(situacao),
-                initialValue: situacao,
-                decoration: const InputDecoration(labelText: 'Situação'),
-                items: const [
-                  DropdownMenuItem(value: 'ativo', child: Text('Ativo')),
-                  DropdownMenuItem(value: 'inativo', child: Text('Inativo')),
-                ],
-                onChanged: (v) => setState(() => situacao = v ?? 'ativo'),
-              ),
-            ],
-          ),
-        ),
+    final theme = FlutterFlowTheme.of(context);
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.92,
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: _salvar,
-          child: const Text('Salvar'),
-        ),
-      ],
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      decoration: BoxDecoration(
+        color: theme.secondaryBackground,
+        borderRadius: BorderRadius.circular(kRdoRadius),
+        border: Border.all(color: theme.alternate),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 8, 0),
+            child: Row(
+              children: [
+                Icon(Icons.inventory_2_outlined,
+                    size: 18, color: theme.secondaryText),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.existing == null ? 'Novo insumo' : 'Editar insumo',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: theme.primaryText,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Fechar',
+                  onPressed: () => Navigator.pop(context),
+                  icon: Icon(Icons.close_rounded,
+                      size: 20, color: theme.secondaryText),
+                ),
+              ],
+            ),
+          ),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: nome,
+                    style: rdoFormFieldTextStyle(context),
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Nome *',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: codigo,
+                          style: rdoFormFieldTextStyle(context),
+                          decoration: rdoFormFieldDecoration(
+                            context,
+                            label: 'Código',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: unidade,
+                          style: rdoFormFieldTextStyle(context),
+                          decoration: rdoFormFieldDecoration(
+                            context,
+                            label: 'Unidade *',
+                            hint: 'UN',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: categoria,
+                    style: rdoFormFieldTextStyle(context),
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Categoria',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: descricao,
+                    style: rdoFormFieldTextStyle(context),
+                    maxLines: 2,
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Descrição',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: preco,
+                    focusNode: _precoFocus,
+                    style: rdoFormFieldTextStyle(context),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                          RegExp(r'[0-9.,R$\s]')),
+                    ],
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Preço unitário',
+                      hint: r'R$ 0,00',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: estoque,
+                          focusNode: _estoqueFocus,
+                          style: rdoFormFieldTextStyle(context),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9.,]')),
+                          ],
+                          decoration: rdoFormFieldDecoration(
+                            context,
+                            label: 'Estoque atual',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: estMin,
+                          focusNode: _estMinFocus,
+                          style: rdoFormFieldTextStyle(context),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9.,]')),
+                          ],
+                          decoration: rdoFormFieldDecoration(
+                            context,
+                            label: 'Estoque mínimo',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: local,
+                    style: rdoFormFieldTextStyle(context),
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Localização',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey(situacao),
+                    initialValue: situacao,
+                    style: rdoFormFieldTextStyle(context),
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Situação',
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'ativo', child: Text('Ativo')),
+                      DropdownMenuItem(
+                          value: 'inativo', child: Text('Inativo')),
+                    ],
+                    onChanged: (v) => setState(() => situacao = v ?? 'ativo'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: theme.secondaryText,
+                      side: BorderSide(color: theme.alternate),
+                      minimumSize: const Size(0, 42),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text(
+                      'Cancelar',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _salvar,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: theme.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(0, 42),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text(
+                      'Salvar',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

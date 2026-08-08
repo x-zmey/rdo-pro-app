@@ -141,6 +141,7 @@ class _ShowMaoObraAtividadeRelatorioWidgetState
                       return ListView.builder(
                         padding: EdgeInsets.zero,
                         shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
                         scrollDirection: Axis.vertical,
                         itemCount: listViewGetItensAtividadeRowList.length,
                         itemBuilder: (context, listViewIndex) {

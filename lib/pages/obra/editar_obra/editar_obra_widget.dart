@@ -1,27 +1,20 @@
 import '/auth/membership_access.dart';
 import '/backend/api_requests/api_calls.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/custom_code/actions/index.dart' as actions;
 import '/flutter_flow/flutter_flow_drop_down.dart';
-import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import '/flutter_flow/form_field_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:provider/provider.dart';
 import 'editar_obra_model.dart';
 export 'editar_obra_model.dart';
 
-/// crie uma pagina de cadastrar obra nela vamos ter os seguintes campos,
-/// sendo um dropdown de grupos de obra outro abaixo de selecionar cliente
-/// abaixo campo de nome da obra abaixo nome da rua abaixo na mesma linha
-/// numero e ao lado ainda complemento e bairro abaixo campo cidade e ao lado
-/// selecionar estado que vai ter apenas 2 letrar cada estado brasileiro
-/// abaixo na mesma linha colocar data inicio data fim e numero do contrato e
-/// abaixo um upload de foto e abaixo botão de cancelar e cadastrar
 class EditarObraWidget extends StatefulWidget {
   const EditarObraWidget({
     super.key,
@@ -48,6 +41,38 @@ class _EditarObraWidgetState extends State<EditarObraWidget> {
   late final Future<ApiCallResponse> _situacoesFuture;
   late final Future<ApiCallResponse> _gruposFuture;
   late final Future<ApiCallResponse> _clientesFuture;
+
+  static const _estadosBr = [
+    'AC',
+    'AL',
+    'AP',
+    'AM',
+    'BA',
+    'CE',
+    'DF',
+    'ES',
+    'GO',
+    'MA',
+    'MT',
+    'MS',
+    'MG',
+    'PA',
+    'PB',
+    'PR',
+    'PE',
+    'PI',
+    'RJ',
+    'RN',
+    'RS',
+    'RO',
+    'RR',
+    'SC',
+    'SP',
+    'SE',
+    'TO',
+  ];
+
+  static const _espacoCampo = 10.0;
 
   @override
   void initState() {
@@ -101,18 +126,24 @@ class _EditarObraWidgetState extends State<EditarObraWidget> {
 
     _model.textFieldInicioTextController ??= TextEditingController();
     _model.textFieldInicioFocusNode ??= FocusNode();
+    _model.textFieldInicioMask = MaskTextInputFormatter(mask: '##/##/####');
 
     _model.textFieldFimTextController ??= TextEditingController();
     _model.textFieldFimFocusNode ??= FocusNode();
+    _model.textFieldFimMask = MaskTextInputFormatter(mask: '##/##/####');
 
     _model.textFieldContratoTextController ??= TextEditingController();
     _model.textFieldContratoFocusNode ??= FocusNode();
+
+    _model.textFieldInicioTextControllerValidator =
+        (ctx, val) => _validarDataInicio(ctx, val, aoDigitar: true);
+    _model.textFieldFimTextControllerValidator =
+        (ctx, val) => _validarDataFim(ctx, val, aoDigitar: true);
   }
 
   @override
   void dispose() {
     _model.dispose();
-
     super.dispose();
   }
 
@@ -171,10 +202,24 @@ class _EditarObraWidgetState extends State<EditarObraWidget> {
         _strFrom(o['complemento']);
     _model.textFieldBairroTextController?.text = _strFrom(o['bairro']);
     _model.textFieldCidadeTextController?.text = _strFrom(o['cidade']);
+    final inicioExibir = _dataParaExibir(o['data_inicio']?.toString());
+    final fimExibir = _dataParaExibir(o['data_final']?.toString());
+    _model.textFieldInicioMask = MaskTextInputFormatter(
+      mask: '##/##/####',
+      filter: {'#': RegExp(r'[0-9]')},
+      initialText: inicioExibir,
+      type: MaskAutoCompletionType.lazy,
+    );
+    _model.textFieldFimMask = MaskTextInputFormatter(
+      mask: '##/##/####',
+      filter: {'#': RegExp(r'[0-9]')},
+      initialText: fimExibir,
+      type: MaskAutoCompletionType.lazy,
+    );
     _model.textFieldInicioTextController?.text =
-        _dataParaExibir(o['data_inicio']?.toString());
+        _model.textFieldInicioMask.getMaskedText();
     _model.textFieldFimTextController?.text =
-        _dataParaExibir(o['data_final']?.toString());
+        _model.textFieldFimMask.getMaskedText();
 
     final gid = _intFrom(o['grupo_id']) ?? 0;
     _model.dropDownGruposValue = gid;
@@ -206,8 +251,13 @@ class _EditarObraWidgetState extends State<EditarObraWidget> {
     }
   }
 
-  /// Converte texto do formulário para `DD/MM/YYYY` esperado pelo `ObrasController@update`.
   String _dataDdMmYyyy(String raw) {
+    final parsed = _parseDataBr(raw);
+    if (parsed != null) {
+      final d = parsed.day.toString().padLeft(2, '0');
+      final m = parsed.month.toString().padLeft(2, '0');
+      return '$d/$m/${parsed.year}';
+    }
     final t = raw.trim();
     if (t.isEmpty) return '';
     List<String> p;
@@ -224,6 +274,75 @@ class _EditarObraWidgetState extends State<EditarObraWidget> {
     var y = p[2].trim();
     if (y.length == 2) y = '20$y';
     return '$d/$m/$y';
+  }
+
+  /// Converte `dd/mm/aaaa` (ou ISO) em data de calendário válida.
+  DateTime? _parseDataBr(String? raw) {
+    var t = (raw ?? '').trim();
+    if (t.isEmpty) return null;
+
+    final iso = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(t);
+    if (iso != null) {
+      t = '${iso.group(3)}/${iso.group(2)}/${iso.group(1)}';
+    }
+
+    final m = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(t);
+    if (m == null) return null;
+
+    final d = int.tryParse(m.group(1)!);
+    final mo = int.tryParse(m.group(2)!);
+    final y = int.tryParse(m.group(3)!);
+    if (d == null || mo == null || y == null) return null;
+    if (y < 1900 || y > 2100) return null;
+
+    final dt = DateTime(y, mo, d);
+    if (dt.year != y || dt.month != mo || dt.day != d) return null;
+    return dt;
+  }
+
+  String? _validarDataPrazo(String? val, {bool aoDigitar = false}) {
+    final t = (val ?? '').trim();
+    if (t.isEmpty) return null;
+    final digitos = t.replaceAll(RegExp(r'\D'), '');
+    if (aoDigitar && digitos.length < 8) return null;
+    if (_parseDataBr(t) == null) {
+      return 'Informe uma data válida (dd/mm/aaaa)';
+    }
+    return null;
+  }
+
+  String? _validarDataInicio(
+    BuildContext context,
+    String? val, {
+    bool aoDigitar = false,
+  }) {
+    final err = _validarDataPrazo(val, aoDigitar: aoDigitar);
+    if (err != null) return err;
+    final di = _parseDataBr(val);
+    final df = _parseDataBr(_model.textFieldFimTextController?.text);
+    if (di != null && df != null && df.isBefore(di)) {
+      return 'Início deve ser anterior ou igual ao fim';
+    }
+    return null;
+  }
+
+  String? _validarDataFim(
+    BuildContext context,
+    String? val, {
+    bool aoDigitar = false,
+  }) {
+    final err = _validarDataPrazo(val, aoDigitar: aoDigitar);
+    if (err != null) return err;
+    final df = _parseDataBr(val);
+    final di = _parseDataBr(_model.textFieldInicioTextController?.text);
+    if (di != null && df != null && df.isBefore(di)) {
+      return 'Fim deve ser igual ou posterior ao início';
+    }
+    return null;
+  }
+
+  void _revalidarDatasPrazo() {
+    _model.formKey.currentState?.validate();
   }
 
   String _mensagemErroApi(ApiCallResponse resp) {
@@ -291,8 +410,26 @@ class _EditarObraWidgetState extends State<EditarObraWidget> {
 
     final estado =
         (_model.dropDownEstadosValue ?? _model.estadoSelected ?? '').trim();
-    final di = _dataDdMmYyyy(_model.textFieldInicioTextController?.text ?? '');
-    final df = _dataDdMmYyyy(_model.textFieldFimTextController?.text ?? '');
+    final inicioRaw = _model.textFieldInicioTextController?.text ?? '';
+    final fimRaw = _model.textFieldFimTextController?.text ?? '';
+    if (_validarDataInicio(context, inicioRaw) != null ||
+        _validarDataFim(context, fimRaw) != null) {
+      _revalidarDatasPrazo();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Corrija as datas de prazo antes de continuar.',
+            style: TextStyle(color: FlutterFlowTheme.of(context).primaryText),
+          ),
+          backgroundColor: FlutterFlowTheme.of(context).error,
+        ),
+      );
+      return;
+    }
+
+    final di = _dataDdMmYyyy(inicioRaw);
+    final df = _dataDdMmYyyy(fimRaw);
 
     safeSetState(() => _model.salvando = true);
     try {
@@ -355,9 +492,600 @@ class _EditarObraWidgetState extends State<EditarObraWidget> {
     }
   }
 
+  Widget _rotuloCampo(String texto) => Padding(
+        padding: const EdgeInsets.only(bottom: 4, left: 2),
+        child: Text(texto.toUpperCase(), style: rdoColumnLabelStyle(context)),
+      );
+
+  List<TextInputFormatter> _formatadorPalavras() {
+    if (isAndroid || isiOS) return const [];
+    return [
+      TextInputFormatter.withFunction((oldValue, newValue) {
+        return TextEditingValue(
+          selection: newValue.selection,
+          text: newValue.text.toCapitalization(TextCapitalization.words),
+        );
+      }),
+    ];
+  }
+
+  Widget _campoTexto({
+    required String label,
+    required TextEditingController? controller,
+    required FocusNode? focusNode,
+    String? hint,
+    TextCapitalization textCapitalization = TextCapitalization.none,
+    TextInputAction textInputAction = TextInputAction.next,
+    String? Function(BuildContext, String?)? validator,
+    bool comFormatadorPalavras = false,
+    List<TextInputFormatter>? formatters,
+    TextInputType? keyboardType,
+    ValueChanged<String>? onChanged,
+  }) {
+    final theme = FlutterFlowTheme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _rotuloCampo(label),
+        TextFormField(
+          controller: controller,
+          focusNode: focusNode,
+          autofocus: false,
+          keyboardType: keyboardType,
+          textCapitalization: textCapitalization,
+          textInputAction: textInputAction,
+          obscureText: false,
+          decoration: rdoCompactFieldDecoration(context, hint: hint),
+          style: rdoCompactFieldTextStyle(context),
+          cursorColor: theme.primary,
+          validator: validator?.asValidator(context),
+          onChanged: onChanged,
+          inputFormatters: formatters ??
+              (comFormatadorPalavras ? _formatadorPalavras() : null),
+        ),
+      ],
+    );
+  }
+
+  Widget _loadingCampo() => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+
+  Widget _dropDownIcon(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    return Icon(
+      Icons.keyboard_arrow_down_rounded,
+      color: theme.secondaryText,
+      size: 18,
+    );
+  }
+
+  Widget _secaoIdentificacao(Map<String, dynamic> obra) {
+    final theme = FlutterFlowTheme.of(context);
+    return RdoSectionCard(
+      title: 'Identificação',
+      icon: Icons.business_outlined,
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _rotuloCampo('Grupo'),
+          FutureBuilder<ApiCallResponse>(
+            future: _gruposFuture,
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return _loadingCampo();
+              final grupos = _paginatedList(
+                snapshot.data!.jsonBody,
+                'grupoObras',
+              );
+              return FlutterFlowDropDown<int>(
+                key: ValueKey<String>(
+                  'grupo_${obra['uuid']}_${_model.dropDownGruposValue}',
+                ),
+                controller: _model.dropDownGruposValueController ??=
+                    FormFieldController<int>(_model.dropDownGruposValue),
+                options: List<int>.from(
+                  grupos.map((e) => _intFrom(e['id']) ?? 0).toList(),
+                ),
+                optionLabels: grupos.map((e) => _strFrom(e['nome'])).toList(),
+                onChanged: (val) async {
+                  safeSetState(() => _model.dropDownGruposValue = val);
+                  _model.grupoSelected = _model.dropDownGruposValue;
+                  _model.grupoUuidSelected = grupos
+                      .where((e) => _intFrom(e['id']) == val)
+                      .map((e) => e['uuid']?.toString())
+                      .firstOrNull;
+                  safeSetState(() {});
+                },
+                width: double.infinity,
+                height: 38,
+                textStyle: rdoCompactFieldTextStyle(context),
+                hintText: 'Selecione o grupo da obra',
+                icon: _dropDownIcon(context),
+                fillColor: theme.secondaryBackground,
+                elevation: 0,
+                borderColor: theme.alternate,
+                borderWidth: 1,
+                borderRadius: 8,
+                margin: const EdgeInsetsDirectional.fromSTEB(10, 0, 6, 0),
+                hidesUnderline: true,
+                isSearchable: false,
+                isMultiSelect: false,
+              );
+            },
+          ),
+          const SizedBox(height: _espacoCampo),
+          _rotuloCampo('Cliente'),
+          FutureBuilder<ApiCallResponse>(
+            future: _clientesFuture,
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return _loadingCampo();
+              final clientes = _paginatedList(
+                snapshot.data!.jsonBody,
+                'clientes',
+              );
+              return FlutterFlowDropDown<int>(
+                key: ValueKey<String>(
+                  'cli_${obra['uuid']}_${_model.dropDownClientesValue}',
+                ),
+                controller: _model.dropDownClientesValueController ??=
+                    FormFieldController<int>(_model.dropDownClientesValue),
+                options: List<int>.from(
+                  clientes.map((e) => _intFrom(e['id']) ?? 0).toList(),
+                ),
+                optionLabels:
+                    clientes.map((e) => _strFrom(e['nome'])).toList(),
+                onChanged: (val) async {
+                  safeSetState(() => _model.dropDownClientesValue = val);
+                  _model.clienteSelected = _model.dropDownClientesValue;
+                  _model.clienteUuidSelected = clientes
+                      .where((e) => _intFrom(e['id']) == val)
+                      .map((e) => e['uuid']?.toString())
+                      .firstOrNull;
+                  safeSetState(() {});
+                },
+                width: double.infinity,
+                height: 38,
+                searchHintTextStyle: rdoCompactFieldTextStyle(context),
+                searchTextStyle: rdoCompactFieldTextStyle(context),
+                textStyle: rdoCompactFieldTextStyle(context),
+                hintText: 'Selecione o cliente',
+                searchHintText: 'Buscar cliente...',
+                icon: _dropDownIcon(context),
+                fillColor: theme.secondaryBackground,
+                elevation: 0,
+                borderColor: theme.alternate,
+                borderWidth: 1,
+                borderRadius: 8,
+                margin: const EdgeInsetsDirectional.fromSTEB(10, 0, 6, 0),
+                hidesUnderline: true,
+                isSearchable: true,
+                isMultiSelect: false,
+              );
+            },
+          ),
+          const SizedBox(height: _espacoCampo),
+          _campoTexto(
+            label: 'Nome',
+            controller: _model.textFieldNomeTextController,
+            focusNode: _model.textFieldNomeFocusNode,
+            hint: 'Digite o nome da obra',
+            textCapitalization: TextCapitalization.words,
+            comFormatadorPalavras: true,
+            validator: _model.textFieldNomeTextControllerValidator,
+          ),
+          const SizedBox(height: _espacoCampo),
+          _rotuloCampo('Situação'),
+          FutureBuilder<ApiCallResponse>(
+            future: _situacoesFuture,
+            builder: (context, situSnap) {
+              if (!situSnap.hasData) return _loadingCampo();
+              final resp = situSnap.data!;
+              final body = resp.jsonBody;
+              final ids = <int>[];
+              final labels = <String>[];
+              if (body is List) {
+                for (final e in body) {
+                  if (e is! Map) continue;
+                  final idRaw = e['id'];
+                  final nome = e['nome']?.toString() ?? '';
+                  int? ii;
+                  if (idRaw is int) {
+                    ii = idRaw;
+                  } else if (idRaw != null) {
+                    ii = int.tryParse(idRaw.toString());
+                  }
+                  if (ii != null) {
+                    ids.add(ii);
+                    labels.add(nome);
+                  }
+                }
+              }
+              if (ids.isEmpty) {
+                return Text(
+                  'Não foi possível carregar as situações.',
+                  style: FlutterFlowTheme.of(context).bodySmall,
+                );
+              }
+              var val = _model.dropDownSituacaoValue;
+              if (val == null || !ids.contains(val)) {
+                val = ids.first;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  safeSetState(() {
+                    _model.dropDownSituacaoValue = val;
+                    _model.dropDownSituacaoValueController?.value = val;
+                  });
+                });
+              }
+              return FlutterFlowDropDown<int>(
+                controller: _model.dropDownSituacaoValueController ??=
+                    FormFieldController<int>(val),
+                options: ids,
+                optionLabels: labels,
+                onChanged: (v) async {
+                  safeSetState(() => _model.dropDownSituacaoValue = v);
+                },
+                width: double.infinity,
+                height: 38,
+                textStyle: rdoCompactFieldTextStyle(context),
+                hintText: 'Situação da obra',
+                icon: _dropDownIcon(context),
+                fillColor: theme.secondaryBackground,
+                elevation: 0,
+                borderColor: theme.alternate,
+                borderWidth: 1,
+                borderRadius: 8,
+                margin: const EdgeInsetsDirectional.fromSTEB(10, 0, 6, 0),
+                hidesUnderline: true,
+                isSearchable: false,
+                isMultiSelect: false,
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _secaoEndereco() {
+    final theme = FlutterFlowTheme.of(context);
+    return RdoSectionCard(
+      title: 'Endereço',
+      icon: Icons.place_outlined,
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _campoTexto(
+            label: 'Rua',
+            controller: _model.textFieldRuaTextController,
+            focusNode: _model.textFieldRuaFocusNode,
+            hint: 'Nome da rua',
+            textCapitalization: TextCapitalization.words,
+            comFormatadorPalavras: true,
+            validator: _model.textFieldRuaTextControllerValidator,
+          ),
+          const SizedBox(height: _espacoCampo),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 2,
+                child: _campoTexto(
+                  label: 'Número',
+                  controller: _model.textFieldNumeroTextController,
+                  focusNode: _model.textFieldNumeroFocusNode,
+                  hint: 'Número',
+                  validator: _model.textFieldNumeroTextControllerValidator,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 3,
+                child: _campoTexto(
+                  label: 'Complemento',
+                  controller: _model.textFieldComplementoTextController,
+                  focusNode: _model.textFieldComplementoFocusNode,
+                  hint: 'Complemento',
+                  textCapitalization: TextCapitalization.words,
+                  comFormatadorPalavras: true,
+                  validator: _model.textFieldComplementoTextControllerValidator,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: _espacoCampo),
+          _campoTexto(
+            label: 'Bairro',
+            controller: _model.textFieldBairroTextController,
+            focusNode: _model.textFieldBairroFocusNode,
+            hint: 'Bairro',
+            textCapitalization: TextCapitalization.words,
+            comFormatadorPalavras: true,
+            validator: _model.textFieldBairroTextControllerValidator,
+          ),
+          const SizedBox(height: _espacoCampo),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 3,
+                child: _campoTexto(
+                  label: 'Cidade',
+                  controller: _model.textFieldCidadeTextController,
+                  focusNode: _model.textFieldCidadeFocusNode,
+                  hint: 'Cidade',
+                  textCapitalization: TextCapitalization.words,
+                  comFormatadorPalavras: true,
+                  validator: _model.textFieldCidadeTextControllerValidator,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _rotuloCampo('Estado'),
+                    FlutterFlowDropDown<String>(
+                      controller: _model.dropDownEstadosValueController ??=
+                          FormFieldController<String>(null),
+                      options: _estadosBr,
+                      onChanged: (val) async {
+                        safeSetState(() => _model.dropDownEstadosValue = val);
+                        _model.estadoSelected = _model.dropDownEstadosValue;
+                        safeSetState(() {});
+                      },
+                      height: 38,
+                      searchHintTextStyle: rdoCompactFieldTextStyle(context),
+                      searchTextStyle: rdoCompactFieldTextStyle(context),
+                      textStyle: rdoCompactFieldTextStyle(context),
+                      hintText: 'Estado',
+                      searchHintText: 'Buscar estado...',
+                      icon: _dropDownIcon(context),
+                      fillColor: theme.secondaryBackground,
+                      elevation: 0,
+                      borderColor: theme.alternate,
+                      borderWidth: 1,
+                      borderRadius: 8,
+                      margin: const EdgeInsetsDirectional.fromSTEB(10, 0, 6, 0),
+                      hidesUnderline: true,
+                      isSearchable: true,
+                      isMultiSelect: false,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _secaoPrazoContrato() {
+    return RdoSectionCard(
+      title: 'Prazo e contrato',
+      icon: Icons.calendar_today_outlined,
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _campoTexto(
+                  label: 'Início',
+                  controller: _model.textFieldInicioTextController,
+                  focusNode: _model.textFieldInicioFocusNode,
+                  hint: 'dd/mm/aaaa',
+                  keyboardType: TextInputType.number,
+                  formatters: [_model.textFieldInicioMask],
+                  validator: _model.textFieldInicioTextControllerValidator,
+                  onChanged: (_) => _revalidarDatasPrazo(),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _campoTexto(
+                  label: 'Fim',
+                  controller: _model.textFieldFimTextController,
+                  focusNode: _model.textFieldFimFocusNode,
+                  hint: 'dd/mm/aaaa',
+                  keyboardType: TextInputType.number,
+                  formatters: [_model.textFieldFimMask],
+                  validator: _model.textFieldFimTextControllerValidator,
+                  onChanged: (_) => _revalidarDatasPrazo(),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: _espacoCampo),
+          _campoTexto(
+            label: 'Contrato',
+            controller: _model.textFieldContratoTextController,
+            focusNode: _model.textFieldContratoFocusNode,
+            hint: 'Número do contrato',
+            textInputAction: TextInputAction.done,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _secaoFotoCapa(Map<String, dynamic> obra) {
+    final theme = FlutterFlowTheme.of(context);
+    final fotoUrl = _strFrom(obra['foto_url']).trim();
+    final novaFoto = _model.novaFotoObra;
+
+    return RdoSectionCard(
+      title: 'Foto de capa',
+      icon: Icons.image_outlined,
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (fotoUrl.isNotEmpty && novaFoto == null) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                fotoUrl,
+                height: 120,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  height: 120,
+                  alignment: Alignment.center,
+                  color: theme.alternate.withValues(alpha: 0.3),
+                  child: Icon(
+                    Icons.broken_image_outlined,
+                    color: theme.secondaryText,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: _espacoCampo),
+          ],
+          OutlinedButton.icon(
+            onPressed: _model.salvando
+                ? null
+                : () async {
+                    final picker = ImagePicker();
+                    final x = await picker.pickImage(
+                      source: ImageSource.gallery,
+                      maxWidth: 2048,
+                      imageQuality: 85,
+                    );
+                    if (x == null || !mounted) return;
+                    final bytes = await x.readAsBytes();
+                    if (!mounted) return;
+                    safeSetState(() {
+                      _model.novaFotoObra = FFUploadedFile(
+                        name: x.name,
+                        bytes: bytes,
+                      );
+                    });
+                  },
+            icon: const Icon(Icons.photo_camera_outlined, size: 18),
+            label: Text(
+              novaFoto?.name != null
+                  ? 'Foto: ${novaFoto!.name}'
+                  : 'Selecionar imagem (JPG/PNG)',
+              style: GoogleFonts.inter(fontSize: 13),
+            ),
+          ),
+          if (novaFoto?.bytes != null) ...[
+            const SizedBox(height: _espacoCampo),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.memory(
+                novaFoto!.bytes!,
+                height: 120,
+                width: double.infinity,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton.icon(
+                onPressed: _model.salvando
+                    ? null
+                    : () => safeSetState(() => _model.novaFotoObra = null),
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('Remover foto selecionada'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _botoesAcao() {
+    final theme = FlutterFlowTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: _model.salvando ? null : () => context.safePop(),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 40),
+                side: BorderSide(color: theme.alternate),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text(
+                'Cancelar',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: theme.primaryText,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: FilledButton.icon(
+              onPressed: _model.salvando
+                  ? null
+                  : () async {
+                      if (_model.formKey.currentState?.validate() != true) {
+                        return;
+                      }
+                      await _salvarObraNaApiESincronizar(context);
+                    },
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 40),
+                backgroundColor: theme.primary,
+                disabledBackgroundColor: theme.primary.withValues(alpha: 0.5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              icon: _model.salvando
+                  ? SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: theme.info,
+                      ),
+                    )
+                  : const Icon(Icons.save_outlined, size: 18),
+              label: Text(
+                _model.salvando ? 'Salvando...' : 'Salvar',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: theme.info,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     context.watch<FFAppState>();
+    final theme = FlutterFlowTheme.of(context);
 
     return GestureDetector(
       onTap: () {
@@ -366,43 +1094,57 @@ class _EditarObraWidgetState extends State<EditarObraWidget> {
       },
       child: Scaffold(
         key: scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).secondaryBackground,
+        backgroundColor: theme.primaryBackground,
         appBar: AppBar(
-          backgroundColor: FlutterFlowTheme.of(context).secondaryBackground,
+          backgroundColor: theme.primary,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          centerTitle: false,
+          titleSpacing: 0,
+          toolbarHeight: 58,
           automaticallyImplyLeading: false,
-          leading: FlutterFlowIconButton(
-            borderColor: Colors.transparent,
-            borderRadius: 30.0,
-            borderWidth: 1.0,
-            buttonSize: 55.0,
-            icon: Icon(
-              Icons.chevron_left_rounded,
-              color: FlutterFlowTheme.of(context).primaryText,
-              size: 25.0,
-            ),
-            onPressed: () async {
-              context.safePop();
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: () => context.safePop(),
+          ),
+          title: FutureBuilder<ApiCallResponse>(
+            future: _obraFuture,
+            builder: (context, snap) {
+              final obraNome = snap.hasData
+                  ? _strFrom(
+                      _mapFrom(_mapFrom(snap.data!.jsonBody)?['obra'])?['nome'],
+                    )
+                  : '';
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Editar Obra',
+                      style: GoogleFonts.interTight(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                    if (obraNome.isNotEmpty)
+                      Text(
+                        obraNome,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          color: Colors.white.withValues(alpha: 0.85),
+                        ),
+                      ),
+                  ],
+                ),
+              );
             },
           ),
-          title: Text(
-            'Editar Obra',
-            style: FlutterFlowTheme.of(context).headlineMedium.override(
-                  font: GoogleFonts.interTight(
-                    fontWeight: FontWeight.w600,
-                    fontStyle:
-                        FlutterFlowTheme.of(context).headlineMedium.fontStyle,
-                  ),
-                  color: FlutterFlowTheme.of(context).primaryText,
-                  fontSize: 20.0,
-                  letterSpacing: 0.0,
-                  fontWeight: FontWeight.w600,
-                  fontStyle:
-                      FlutterFlowTheme.of(context).headlineMedium.fontStyle,
-                ),
-          ),
-          actions: [],
-          centerTitle: false,
-          elevation: 0.0,
         ),
         body: SafeArea(
           top: true,
@@ -411,20 +1153,18 @@ class _EditarObraWidgetState extends State<EditarObraWidget> {
             builder: (context, obraSnap) {
               if (!obraSnap.hasData) {
                 return Center(
-                  child: LinearProgressIndicator(
-                    color: FlutterFlowTheme.of(context).primary,
-                  ),
+                  child: CircularProgressIndicator(color: theme.primary),
                 );
               }
               final obra = _mapFrom(_mapFrom(obraSnap.data!.jsonBody)?['obra']);
               if (obra == null) {
                 return Center(
                   child: Padding(
-                    padding: const EdgeInsets.all(24.0),
+                    padding: const EdgeInsets.all(24),
                     child: Text(
                       'Obra não encontrada.',
                       textAlign: TextAlign.center,
-                      style: FlutterFlowTheme.of(context).bodyMedium,
+                      style: theme.bodyMedium,
                     ),
                   ),
                 );
@@ -437,2077 +1177,20 @@ class _EditarObraWidgetState extends State<EditarObraWidget> {
                   if (mounted) setState(() {});
                 });
               }
-              return Padding(
-                padding: EdgeInsetsDirectional.fromSTEB(24.0, 0.0, 24.0, 0.0),
-                child: SingleChildScrollView(
+              return SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(0, 0, 0, 24),
+                child: Form(
+                  key: _model.formKey,
+                  autovalidateMode: AutovalidateMode.disabled,
                   child: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Form(
-                        key: _model.formKey,
-                        autovalidateMode: AutovalidateMode.disabled,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.max,
-                          children: [
-                            Column(
-                              mainAxisSize: MainAxisSize.max,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Grupo da Obra',
-                                  style: FlutterFlowTheme.of(context)
-                                      .bodyMedium
-                                      .override(
-                                        font: GoogleFonts.inter(
-                                          fontWeight: FontWeight.w600,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontStyle,
-                                        ),
-                                        color: FlutterFlowTheme.of(context)
-                                            .primaryText,
-                                        fontSize: 16.0,
-                                        letterSpacing: 0.0,
-                                        fontWeight: FontWeight.w600,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontStyle,
-                                      ),
-                                ),
-                                FutureBuilder<ApiCallResponse>(
-                                  future: _gruposFuture,
-                                  builder: (context, snapshot) {
-                                    // Customize what your widget looks like when it's loading.
-                                    if (!snapshot.hasData) {
-                                      return Center(
-                                        child: LinearProgressIndicator(
-                                          color: FlutterFlowTheme.of(context)
-                                              .primary,
-                                        ),
-                                      );
-                                    }
-                                    final dropDownGruposGetGruposObrasRowList =
-                                        _paginatedList(
-                                      snapshot.data!.jsonBody,
-                                      'grupoObras',
-                                    );
-
-                                    return FlutterFlowDropDown<int>(
-                                      key: ValueKey<String>(
-                                        'grupo_${obra['uuid']}_${_model.dropDownGruposValue}',
-                                      ),
-                                      controller: _model
-                                              .dropDownGruposValueController ??=
-                                          FormFieldController<int>(
-                                        _model.dropDownGruposValue,
-                                      ),
-                                      options: List<int>.from(
-                                          dropDownGruposGetGruposObrasRowList
-                                              .map(
-                                                  (e) => _intFrom(e['id']) ?? 0)
-                                              .toList()),
-                                      optionLabels:
-                                          dropDownGruposGetGruposObrasRowList
-                                              .map((e) => _strFrom(e['nome']))
-                                              .toList(),
-                                      onChanged: (val) async {
-                                        safeSetState(() =>
-                                            _model.dropDownGruposValue = val);
-                                        _model.grupoSelected =
-                                            _model.dropDownGruposValue;
-                                        _model.grupoUuidSelected =
-                                            dropDownGruposGetGruposObrasRowList
-                                                .where((e) =>
-                                                    _intFrom(e['id']) == val)
-                                                .map((e) =>
-                                                    e['uuid']?.toString())
-                                                .firstOrNull;
-                                        safeSetState(() {});
-                                      },
-                                      width: double.infinity,
-                                      height: 56.0,
-                                      textStyle: FlutterFlowTheme.of(context)
-                                          .bodyMedium
-                                          .override(
-                                            font: GoogleFonts.inter(
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                            color: FlutterFlowTheme.of(context)
-                                                .primaryText,
-                                            letterSpacing: 0.0,
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontStyle,
-                                          ),
-                                      hintText: 'Selecione o grupo da obra',
-                                      icon: Icon(
-                                        Icons.keyboard_arrow_down_rounded,
-                                        color: FlutterFlowTheme.of(context)
-                                            .secondaryText,
-                                        size: 24.0,
-                                      ),
-                                      fillColor: FlutterFlowTheme.of(context)
-                                          .primaryBackground,
-                                      elevation: 0.0,
-                                      borderColor: FlutterFlowTheme.of(context)
-                                          .alternate,
-                                      borderWidth: 1.0,
-                                      borderRadius: 12.0,
-                                      margin: EdgeInsets.all(0.0),
-                                      hidesUnderline: true,
-                                      isSearchable: false,
-                                      isMultiSelect: false,
-                                    );
-                                  },
-                                ),
-                              ].divide(SizedBox(height: 8.0)),
-                            ),
-                            Column(
-                              mainAxisSize: MainAxisSize.max,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Cliente',
-                                  style: FlutterFlowTheme.of(context)
-                                      .bodyMedium
-                                      .override(
-                                        font: GoogleFonts.inter(
-                                          fontWeight: FontWeight.w600,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontStyle,
-                                        ),
-                                        color: FlutterFlowTheme.of(context)
-                                            .primaryText,
-                                        fontSize: 16.0,
-                                        letterSpacing: 0.0,
-                                        fontWeight: FontWeight.w600,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontStyle,
-                                      ),
-                                ),
-                                FutureBuilder<ApiCallResponse>(
-                                  future: _clientesFuture,
-                                  builder: (context, snapshot) {
-                                    // Customize what your widget looks like when it's loading.
-                                    if (!snapshot.hasData) {
-                                      return Center(
-                                        child: LinearProgressIndicator(
-                                          color: FlutterFlowTheme.of(context)
-                                              .primary,
-                                        ),
-                                      );
-                                    }
-                                    final dropDownClientesGetClientesRowList =
-                                        _paginatedList(
-                                      snapshot.data!.jsonBody,
-                                      'clientes',
-                                    );
-
-                                    return FlutterFlowDropDown<int>(
-                                      key: ValueKey<String>(
-                                        'cli_${obra['uuid']}_${_model.dropDownClientesValue}',
-                                      ),
-                                      controller: _model
-                                              .dropDownClientesValueController ??=
-                                          FormFieldController<int>(
-                                        _model.dropDownClientesValue,
-                                      ),
-                                      options: List<int>.from(
-                                          dropDownClientesGetClientesRowList
-                                              .map(
-                                                  (e) => _intFrom(e['id']) ?? 0)
-                                              .toList()),
-                                      optionLabels:
-                                          dropDownClientesGetClientesRowList
-                                              .map((e) => _strFrom(e['nome']))
-                                              .toList(),
-                                      onChanged: (val) async {
-                                        safeSetState(() =>
-                                            _model.dropDownClientesValue = val);
-                                        _model.clienteSelected =
-                                            _model.dropDownClientesValue;
-                                        _model.clienteUuidSelected =
-                                            dropDownClientesGetClientesRowList
-                                                .where((e) =>
-                                                    _intFrom(e['id']) == val)
-                                                .map((e) =>
-                                                    e['uuid']?.toString())
-                                                .firstOrNull;
-                                        safeSetState(() {});
-                                      },
-                                      width: double.infinity,
-                                      height: 56.0,
-                                      searchHintTextStyle: FlutterFlowTheme.of(
-                                              context)
-                                          .labelMedium
-                                          .override(
-                                            font: GoogleFonts.inter(
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelMedium
-                                                      .fontStyle,
-                                            ),
-                                            letterSpacing: 0.0,
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .labelMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .labelMedium
-                                                    .fontStyle,
-                                          ),
-                                      searchTextStyle: FlutterFlowTheme.of(
-                                              context)
-                                          .bodyMedium
-                                          .override(
-                                            font: GoogleFonts.inter(
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                            letterSpacing: 0.0,
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontStyle,
-                                          ),
-                                      textStyle: FlutterFlowTheme.of(context)
-                                          .bodyMedium
-                                          .override(
-                                            font: GoogleFonts.inter(
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                            color: FlutterFlowTheme.of(context)
-                                                .primaryText,
-                                            letterSpacing: 0.0,
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontStyle,
-                                          ),
-                                      hintText: 'Selecione o cliente',
-                                      searchHintText: 'Buscar cliente...',
-                                      icon: Icon(
-                                        Icons.keyboard_arrow_down_rounded,
-                                        color: FlutterFlowTheme.of(context)
-                                            .secondaryText,
-                                        size: 24.0,
-                                      ),
-                                      fillColor: FlutterFlowTheme.of(context)
-                                          .primaryBackground,
-                                      elevation: 0.0,
-                                      borderColor: FlutterFlowTheme.of(context)
-                                          .alternate,
-                                      borderWidth: 1.0,
-                                      borderRadius: 12.0,
-                                      margin: EdgeInsets.all(0.0),
-                                      hidesUnderline: true,
-                                      isSearchable: true,
-                                      isMultiSelect: false,
-                                    );
-                                  },
-                                ),
-                              ].divide(SizedBox(height: 8.0)),
-                            ),
-                            Column(
-                              mainAxisSize: MainAxisSize.max,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Nome da Obra',
-                                  style: FlutterFlowTheme.of(context)
-                                      .bodyMedium
-                                      .override(
-                                        font: GoogleFonts.inter(
-                                          fontWeight: FontWeight.w600,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontStyle,
-                                        ),
-                                        color: FlutterFlowTheme.of(context)
-                                            .primaryText,
-                                        fontSize: 16.0,
-                                        letterSpacing: 0.0,
-                                        fontWeight: FontWeight.w600,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontStyle,
-                                      ),
-                                ),
-                                Container(
-                                  width: double.infinity,
-                                  child: TextFormField(
-                                    controller:
-                                        _model.textFieldNomeTextController,
-                                    focusNode: _model.textFieldNomeFocusNode,
-                                    autofocus: false,
-                                    textCapitalization:
-                                        TextCapitalization.words,
-                                    textInputAction: TextInputAction.next,
-                                    obscureText: false,
-                                    decoration: InputDecoration(
-                                      hintText: 'Digite o nome da obra',
-                                      hintStyle: FlutterFlowTheme.of(context)
-                                          .bodyMedium
-                                          .override(
-                                            font: GoogleFonts.inter(
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                            color: FlutterFlowTheme.of(context)
-                                                .secondaryText,
-                                            letterSpacing: 0.0,
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontStyle,
-                                          ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderSide: BorderSide(
-                                          color: FlutterFlowTheme.of(context)
-                                              .alternate,
-                                          width: 1.0,
-                                        ),
-                                        borderRadius:
-                                            BorderRadius.circular(12.0),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderSide: BorderSide(
-                                          color: FlutterFlowTheme.of(context)
-                                              .primary,
-                                          width: 1.0,
-                                        ),
-                                        borderRadius:
-                                            BorderRadius.circular(12.0),
-                                      ),
-                                      errorBorder: OutlineInputBorder(
-                                        borderSide: BorderSide(
-                                          color: FlutterFlowTheme.of(context)
-                                              .error,
-                                          width: 1.0,
-                                        ),
-                                        borderRadius:
-                                            BorderRadius.circular(12.0),
-                                      ),
-                                      focusedErrorBorder: OutlineInputBorder(
-                                        borderSide: BorderSide(
-                                          color: FlutterFlowTheme.of(context)
-                                              .error,
-                                          width: 1.0,
-                                        ),
-                                        borderRadius:
-                                            BorderRadius.circular(12.0),
-                                      ),
-                                      filled: true,
-                                      fillColor: FlutterFlowTheme.of(context)
-                                          .primaryBackground,
-                                      contentPadding:
-                                          EdgeInsetsDirectional.fromSTEB(
-                                              16.0, 16.0, 16.0, 16.0),
-                                    ),
-                                    style: FlutterFlowTheme.of(context)
-                                        .bodyMedium
-                                        .override(
-                                          font: GoogleFonts.inter(
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontStyle,
-                                          ),
-                                          color: FlutterFlowTheme.of(context)
-                                              .primaryText,
-                                          letterSpacing: 0.0,
-                                          fontWeight:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontWeight,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontStyle,
-                                        ),
-                                    cursorColor:
-                                        FlutterFlowTheme.of(context).primary,
-                                    validator: _model
-                                        .textFieldNomeTextControllerValidator
-                                        .asValidator(context),
-                                    inputFormatters: [
-                                      if (!isAndroid && !isiOS)
-                                        TextInputFormatter.withFunction(
-                                            (oldValue, newValue) {
-                                          return TextEditingValue(
-                                            selection: newValue.selection,
-                                            text: newValue.text
-                                                .toCapitalization(
-                                                    TextCapitalization.words),
-                                          );
-                                        }),
-                                    ],
-                                  ),
-                                ),
-                              ].divide(SizedBox(height: 8.0)),
-                            ),
-                            Column(
-                              mainAxisSize: MainAxisSize.max,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Situação',
-                                  style: FlutterFlowTheme.of(context)
-                                      .bodyMedium
-                                      .override(
-                                        font: GoogleFonts.inter(
-                                          fontWeight: FontWeight.w600,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontStyle,
-                                        ),
-                                        color: FlutterFlowTheme.of(context)
-                                            .primaryText,
-                                        fontSize: 16.0,
-                                        letterSpacing: 0.0,
-                                        fontWeight: FontWeight.w600,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontStyle,
-                                      ),
-                                ),
-                                FutureBuilder<ApiCallResponse>(
-                                  future: _situacoesFuture,
-                                  builder: (context, situSnap) {
-                                    if (!situSnap.hasData) {
-                                      return Center(
-                                        child: LinearProgressIndicator(
-                                          color: FlutterFlowTheme.of(context)
-                                              .primary,
-                                        ),
-                                      );
-                                    }
-                                    final resp = situSnap.data!;
-                                    final body = resp.jsonBody;
-                                    final ids = <int>[];
-                                    final labels = <String>[];
-                                    if (body is List) {
-                                      for (final e in body) {
-                                        if (e is! Map) continue;
-                                        final idRaw = e['id'];
-                                        final nome =
-                                            e['nome']?.toString() ?? '';
-                                        int? ii;
-                                        if (idRaw is int) {
-                                          ii = idRaw;
-                                        } else if (idRaw != null) {
-                                          ii = int.tryParse(idRaw.toString());
-                                        }
-                                        if (ii != null) {
-                                          ids.add(ii);
-                                          labels.add(nome);
-                                        }
-                                      }
-                                    }
-                                    if (ids.isEmpty) {
-                                      return Text(
-                                        'Não foi possível carregar as situações.',
-                                        style: FlutterFlowTheme.of(context)
-                                            .bodySmall,
-                                      );
-                                    }
-                                    var val = _model.dropDownSituacaoValue;
-                                    if (val == null || !ids.contains(val)) {
-                                      val = ids.first;
-                                      WidgetsBinding.instance
-                                          .addPostFrameCallback((_) {
-                                        if (!mounted) return;
-                                        safeSetState(() {
-                                          _model.dropDownSituacaoValue = val;
-                                          _model.dropDownSituacaoValueController
-                                              ?.value = val;
-                                        });
-                                      });
-                                    }
-                                    return FlutterFlowDropDown<int>(
-                                      controller: _model
-                                              .dropDownSituacaoValueController ??=
-                                          FormFieldController<int>(val),
-                                      options: ids,
-                                      optionLabels: labels,
-                                      onChanged: (v) async {
-                                        safeSetState(() =>
-                                            _model.dropDownSituacaoValue = v);
-                                      },
-                                      width: double.infinity,
-                                      height: 56.0,
-                                      textStyle: FlutterFlowTheme.of(context)
-                                          .bodyMedium,
-                                      hintText: 'Situação da obra',
-                                      icon: Icon(
-                                        Icons.keyboard_arrow_down_rounded,
-                                        color: FlutterFlowTheme.of(context)
-                                            .secondaryText,
-                                        size: 24.0,
-                                      ),
-                                      fillColor: FlutterFlowTheme.of(context)
-                                          .primaryBackground,
-                                      elevation: 0.0,
-                                      borderColor: FlutterFlowTheme.of(context)
-                                          .alternate,
-                                      borderWidth: 1.0,
-                                      borderRadius: 12.0,
-                                      margin: EdgeInsets.all(0.0),
-                                      hidesUnderline: true,
-                                      isSearchable: false,
-                                      isMultiSelect: false,
-                                    );
-                                  },
-                                ),
-                              ].divide(SizedBox(height: 8.0)),
-                            ),
-                            Column(
-                              mainAxisSize: MainAxisSize.max,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Endereço',
-                                  style: FlutterFlowTheme.of(context)
-                                      .bodyMedium
-                                      .override(
-                                        font: GoogleFonts.inter(
-                                          fontWeight: FontWeight.w600,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontStyle,
-                                        ),
-                                        color: FlutterFlowTheme.of(context)
-                                            .primaryText,
-                                        fontSize: 16.0,
-                                        letterSpacing: 0.0,
-                                        fontWeight: FontWeight.w600,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontStyle,
-                                      ),
-                                ),
-                                Container(
-                                  width: double.infinity,
-                                  child: TextFormField(
-                                    controller:
-                                        _model.textFieldRuaTextController,
-                                    focusNode: _model.textFieldRuaFocusNode,
-                                    autofocus: false,
-                                    textCapitalization:
-                                        TextCapitalization.words,
-                                    textInputAction: TextInputAction.next,
-                                    obscureText: false,
-                                    decoration: InputDecoration(
-                                      hintText: 'Nome da rua',
-                                      hintStyle: FlutterFlowTheme.of(context)
-                                          .bodyMedium
-                                          .override(
-                                            font: GoogleFonts.inter(
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                            color: FlutterFlowTheme.of(context)
-                                                .secondaryText,
-                                            letterSpacing: 0.0,
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontStyle,
-                                          ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderSide: BorderSide(
-                                          color: FlutterFlowTheme.of(context)
-                                              .alternate,
-                                          width: 1.0,
-                                        ),
-                                        borderRadius:
-                                            BorderRadius.circular(12.0),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderSide: BorderSide(
-                                          color: FlutterFlowTheme.of(context)
-                                              .primary,
-                                          width: 1.0,
-                                        ),
-                                        borderRadius:
-                                            BorderRadius.circular(12.0),
-                                      ),
-                                      errorBorder: OutlineInputBorder(
-                                        borderSide: BorderSide(
-                                          color: FlutterFlowTheme.of(context)
-                                              .error,
-                                          width: 1.0,
-                                        ),
-                                        borderRadius:
-                                            BorderRadius.circular(12.0),
-                                      ),
-                                      focusedErrorBorder: OutlineInputBorder(
-                                        borderSide: BorderSide(
-                                          color: FlutterFlowTheme.of(context)
-                                              .error,
-                                          width: 1.0,
-                                        ),
-                                        borderRadius:
-                                            BorderRadius.circular(12.0),
-                                      ),
-                                      filled: true,
-                                      fillColor: FlutterFlowTheme.of(context)
-                                          .primaryBackground,
-                                      contentPadding:
-                                          EdgeInsetsDirectional.fromSTEB(
-                                              16.0, 16.0, 16.0, 16.0),
-                                    ),
-                                    style: FlutterFlowTheme.of(context)
-                                        .bodyMedium
-                                        .override(
-                                          font: GoogleFonts.inter(
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontStyle,
-                                          ),
-                                          color: FlutterFlowTheme.of(context)
-                                              .primaryText,
-                                          letterSpacing: 0.0,
-                                          fontWeight:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontWeight,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontStyle,
-                                        ),
-                                    cursorColor:
-                                        FlutterFlowTheme.of(context).primary,
-                                    validator: _model
-                                        .textFieldRuaTextControllerValidator
-                                        .asValidator(context),
-                                    inputFormatters: [
-                                      if (!isAndroid && !isiOS)
-                                        TextInputFormatter.withFunction(
-                                            (oldValue, newValue) {
-                                          return TextEditingValue(
-                                            selection: newValue.selection,
-                                            text: newValue.text
-                                                .toCapitalization(
-                                                    TextCapitalization.words),
-                                          );
-                                        }),
-                                    ],
-                                  ),
-                                ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.max,
-                                  children: [
-                                    Expanded(
-                                      flex: 2,
-                                      child: TextFormField(
-                                        controller: _model
-                                            .textFieldNumeroTextController,
-                                        focusNode:
-                                            _model.textFieldNumeroFocusNode,
-                                        autofocus: false,
-                                        textInputAction: TextInputAction.next,
-                                        obscureText: false,
-                                        decoration: InputDecoration(
-                                          hintText: 'Número',
-                                          hintStyle: FlutterFlowTheme.of(
-                                                  context)
-                                              .bodyMedium
-                                              .override(
-                                                font: GoogleFonts.inter(
-                                                  fontWeight:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .bodyMedium
-                                                          .fontWeight,
-                                                  fontStyle:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .bodyMedium
-                                                          .fontStyle,
-                                                ),
-                                                color:
-                                                    FlutterFlowTheme.of(context)
-                                                        .secondaryText,
-                                                letterSpacing: 0.0,
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontStyle,
-                                              ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderSide: BorderSide(
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .alternate,
-                                              width: 1.0,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(12.0),
-                                          ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderSide: BorderSide(
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .primary,
-                                              width: 1.0,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(12.0),
-                                          ),
-                                          errorBorder: OutlineInputBorder(
-                                            borderSide: BorderSide(
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .error,
-                                              width: 1.0,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(12.0),
-                                          ),
-                                          focusedErrorBorder:
-                                              OutlineInputBorder(
-                                            borderSide: BorderSide(
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .error,
-                                              width: 1.0,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(12.0),
-                                          ),
-                                          filled: true,
-                                          fillColor:
-                                              FlutterFlowTheme.of(context)
-                                                  .primaryBackground,
-                                          contentPadding:
-                                              EdgeInsetsDirectional.fromSTEB(
-                                                  16.0, 16.0, 16.0, 16.0),
-                                        ),
-                                        style: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontStyle,
-                                              ),
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .primaryText,
-                                              letterSpacing: 0.0,
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                        keyboardType: TextInputType.number,
-                                        cursorColor:
-                                            FlutterFlowTheme.of(context)
-                                                .primary,
-                                        validator: _model
-                                            .textFieldNumeroTextControllerValidator
-                                            .asValidator(context),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 3,
-                                      child: TextFormField(
-                                        controller: _model
-                                            .textFieldComplementoTextController,
-                                        focusNode: _model
-                                            .textFieldComplementoFocusNode,
-                                        autofocus: false,
-                                        textCapitalization:
-                                            TextCapitalization.words,
-                                        textInputAction: TextInputAction.next,
-                                        obscureText: false,
-                                        decoration: InputDecoration(
-                                          hintText: 'Complemento',
-                                          hintStyle: FlutterFlowTheme.of(
-                                                  context)
-                                              .bodyMedium
-                                              .override(
-                                                font: GoogleFonts.inter(
-                                                  fontWeight:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .bodyMedium
-                                                          .fontWeight,
-                                                  fontStyle:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .bodyMedium
-                                                          .fontStyle,
-                                                ),
-                                                color:
-                                                    FlutterFlowTheme.of(context)
-                                                        .secondaryText,
-                                                letterSpacing: 0.0,
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontStyle,
-                                              ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderSide: BorderSide(
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .alternate,
-                                              width: 1.0,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(12.0),
-                                          ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderSide: BorderSide(
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .primary,
-                                              width: 1.0,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(12.0),
-                                          ),
-                                          errorBorder: OutlineInputBorder(
-                                            borderSide: BorderSide(
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .error,
-                                              width: 1.0,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(12.0),
-                                          ),
-                                          focusedErrorBorder:
-                                              OutlineInputBorder(
-                                            borderSide: BorderSide(
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .error,
-                                              width: 1.0,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(12.0),
-                                          ),
-                                          filled: true,
-                                          fillColor:
-                                              FlutterFlowTheme.of(context)
-                                                  .primaryBackground,
-                                          contentPadding:
-                                              EdgeInsetsDirectional.fromSTEB(
-                                                  16.0, 16.0, 16.0, 16.0),
-                                        ),
-                                        style: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontStyle,
-                                              ),
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .primaryText,
-                                              letterSpacing: 0.0,
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                        cursorColor:
-                                            FlutterFlowTheme.of(context)
-                                                .primary,
-                                        validator: _model
-                                            .textFieldComplementoTextControllerValidator
-                                            .asValidator(context),
-                                        inputFormatters: [
-                                          if (!isAndroid && !isiOS)
-                                            TextInputFormatter.withFunction(
-                                                (oldValue, newValue) {
-                                              return TextEditingValue(
-                                                selection: newValue.selection,
-                                                text: newValue.text
-                                                    .toCapitalization(
-                                                        TextCapitalization
-                                                            .words),
-                                              );
-                                            }),
-                                        ],
-                                      ),
-                                    ),
-                                  ].divide(SizedBox(width: 12.0)),
-                                ),
-                                Container(
-                                  width: double.infinity,
-                                  child: TextFormField(
-                                    controller:
-                                        _model.textFieldBairroTextController,
-                                    focusNode: _model.textFieldBairroFocusNode,
-                                    autofocus: false,
-                                    textCapitalization:
-                                        TextCapitalization.words,
-                                    textInputAction: TextInputAction.next,
-                                    obscureText: false,
-                                    decoration: InputDecoration(
-                                      hintText: 'Bairro',
-                                      hintStyle: FlutterFlowTheme.of(context)
-                                          .bodyMedium
-                                          .override(
-                                            font: GoogleFonts.inter(
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                            color: FlutterFlowTheme.of(context)
-                                                .secondaryText,
-                                            letterSpacing: 0.0,
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontStyle,
-                                          ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderSide: BorderSide(
-                                          color: FlutterFlowTheme.of(context)
-                                              .alternate,
-                                          width: 1.0,
-                                        ),
-                                        borderRadius:
-                                            BorderRadius.circular(12.0),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderSide: BorderSide(
-                                          color: FlutterFlowTheme.of(context)
-                                              .primary,
-                                          width: 1.0,
-                                        ),
-                                        borderRadius:
-                                            BorderRadius.circular(12.0),
-                                      ),
-                                      errorBorder: OutlineInputBorder(
-                                        borderSide: BorderSide(
-                                          color: FlutterFlowTheme.of(context)
-                                              .error,
-                                          width: 1.0,
-                                        ),
-                                        borderRadius:
-                                            BorderRadius.circular(12.0),
-                                      ),
-                                      focusedErrorBorder: OutlineInputBorder(
-                                        borderSide: BorderSide(
-                                          color: FlutterFlowTheme.of(context)
-                                              .error,
-                                          width: 1.0,
-                                        ),
-                                        borderRadius:
-                                            BorderRadius.circular(12.0),
-                                      ),
-                                      filled: true,
-                                      fillColor: FlutterFlowTheme.of(context)
-                                          .primaryBackground,
-                                      contentPadding:
-                                          EdgeInsetsDirectional.fromSTEB(
-                                              16.0, 16.0, 16.0, 16.0),
-                                    ),
-                                    style: FlutterFlowTheme.of(context)
-                                        .bodyMedium
-                                        .override(
-                                          font: GoogleFonts.inter(
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontStyle,
-                                          ),
-                                          color: FlutterFlowTheme.of(context)
-                                              .primaryText,
-                                          letterSpacing: 0.0,
-                                          fontWeight:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontWeight,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontStyle,
-                                        ),
-                                    cursorColor:
-                                        FlutterFlowTheme.of(context).primary,
-                                    validator: _model
-                                        .textFieldBairroTextControllerValidator
-                                        .asValidator(context),
-                                    inputFormatters: [
-                                      if (!isAndroid && !isiOS)
-                                        TextInputFormatter.withFunction(
-                                            (oldValue, newValue) {
-                                          return TextEditingValue(
-                                            selection: newValue.selection,
-                                            text: newValue.text
-                                                .toCapitalization(
-                                                    TextCapitalization.words),
-                                          );
-                                        }),
-                                    ],
-                                  ),
-                                ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.max,
-                                  children: [
-                                    Expanded(
-                                      flex: 3,
-                                      child: TextFormField(
-                                        controller: _model
-                                            .textFieldCidadeTextController,
-                                        focusNode:
-                                            _model.textFieldCidadeFocusNode,
-                                        autofocus: false,
-                                        textCapitalization:
-                                            TextCapitalization.words,
-                                        textInputAction: TextInputAction.next,
-                                        obscureText: false,
-                                        decoration: InputDecoration(
-                                          hintText: 'Cidade',
-                                          hintStyle: FlutterFlowTheme.of(
-                                                  context)
-                                              .bodyMedium
-                                              .override(
-                                                font: GoogleFonts.inter(
-                                                  fontWeight:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .bodyMedium
-                                                          .fontWeight,
-                                                  fontStyle:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .bodyMedium
-                                                          .fontStyle,
-                                                ),
-                                                color:
-                                                    FlutterFlowTheme.of(context)
-                                                        .secondaryText,
-                                                letterSpacing: 0.0,
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontStyle,
-                                              ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderSide: BorderSide(
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .alternate,
-                                              width: 1.0,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(12.0),
-                                          ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderSide: BorderSide(
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .primary,
-                                              width: 1.0,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(12.0),
-                                          ),
-                                          errorBorder: OutlineInputBorder(
-                                            borderSide: BorderSide(
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .error,
-                                              width: 1.0,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(12.0),
-                                          ),
-                                          focusedErrorBorder:
-                                              OutlineInputBorder(
-                                            borderSide: BorderSide(
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .error,
-                                              width: 1.0,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(12.0),
-                                          ),
-                                          filled: true,
-                                          fillColor:
-                                              FlutterFlowTheme.of(context)
-                                                  .primaryBackground,
-                                          contentPadding:
-                                              EdgeInsetsDirectional.fromSTEB(
-                                                  16.0, 16.0, 16.0, 16.0),
-                                        ),
-                                        style: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontStyle,
-                                              ),
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .primaryText,
-                                              letterSpacing: 0.0,
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                        cursorColor:
-                                            FlutterFlowTheme.of(context)
-                                                .primary,
-                                        validator: _model
-                                            .textFieldCidadeTextControllerValidator
-                                            .asValidator(context),
-                                        inputFormatters: [
-                                          if (!isAndroid && !isiOS)
-                                            TextInputFormatter.withFunction(
-                                                (oldValue, newValue) {
-                                              return TextEditingValue(
-                                                selection: newValue.selection,
-                                                text: newValue.text
-                                                    .toCapitalization(
-                                                        TextCapitalization
-                                                            .words),
-                                              );
-                                            }),
-                                        ],
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 2,
-                                      child: FlutterFlowDropDown<String>(
-                                        controller: _model
-                                                .dropDownEstadosValueController ??=
-                                            FormFieldController<String>(null),
-                                        options: [
-                                          'AC',
-                                          'AL',
-                                          'AP',
-                                          'AM',
-                                          'BA',
-                                          'CE',
-                                          'DF',
-                                          'ES',
-                                          'GO',
-                                          'MA',
-                                          'MT',
-                                          'MS',
-                                          'MG',
-                                          'PA',
-                                          'PB',
-                                          'PR',
-                                          'PE',
-                                          'PI',
-                                          'RJ',
-                                          'RN',
-                                          'RS',
-                                          'RO',
-                                          'RR',
-                                          'SC',
-                                          'SP',
-                                          'SE',
-                                          'TO'
-                                        ],
-                                        onChanged: (val) async {
-                                          safeSetState(() => _model
-                                              .dropDownEstadosValue = val);
-                                          _model.estadoSelected =
-                                              _model.dropDownEstadosValue;
-                                          safeSetState(() {});
-                                        },
-                                        height: 56.0,
-                                        searchHintTextStyle: FlutterFlowTheme
-                                                .of(context)
-                                            .labelMedium
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .labelMedium
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .labelMedium
-                                                        .fontStyle,
-                                              ),
-                                              letterSpacing: 0.0,
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelMedium
-                                                      .fontStyle,
-                                            ),
-                                        searchTextStyle: FlutterFlowTheme.of(
-                                                context)
-                                            .bodyMedium
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontStyle,
-                                              ),
-                                              letterSpacing: 0.0,
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                        textStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontStyle,
-                                              ),
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .primaryText,
-                                              letterSpacing: 0.0,
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                        hintText: 'Estado',
-                                        searchHintText: 'Buscar estado...',
-                                        icon: Icon(
-                                          Icons.keyboard_arrow_down_rounded,
-                                          color: FlutterFlowTheme.of(context)
-                                              .secondaryText,
-                                          size: 24.0,
-                                        ),
-                                        fillColor: FlutterFlowTheme.of(context)
-                                            .primaryBackground,
-                                        elevation: 0.0,
-                                        borderColor:
-                                            FlutterFlowTheme.of(context)
-                                                .alternate,
-                                        borderWidth: 1.0,
-                                        borderRadius: 12.0,
-                                        margin: EdgeInsets.all(0.0),
-                                        hidesUnderline: true,
-                                        isSearchable: true,
-                                        isMultiSelect: false,
-                                      ),
-                                    ),
-                                  ].divide(SizedBox(width: 12.0)),
-                                ),
-                              ].divide(SizedBox(height: 8.0)),
-                            ),
-                            Column(
-                              mainAxisSize: MainAxisSize.max,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Informações do Contrato',
-                                  style: FlutterFlowTheme.of(context)
-                                      .bodyMedium
-                                      .override(
-                                        font: GoogleFonts.inter(
-                                          fontWeight: FontWeight.w600,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontStyle,
-                                        ),
-                                        color: FlutterFlowTheme.of(context)
-                                            .primaryText,
-                                        fontSize: 16.0,
-                                        letterSpacing: 0.0,
-                                        fontWeight: FontWeight.w600,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontStyle,
-                                      ),
-                                ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.max,
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.max,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Padding(
-                                            padding:
-                                                EdgeInsetsDirectional.fromSTEB(
-                                                    0.0, 0.0, 0.0, 4.0),
-                                            child: Text(
-                                              'Data Início',
-                                              style: FlutterFlowTheme.of(
-                                                      context)
-                                                  .bodySmall
-                                                  .override(
-                                                    font: GoogleFonts.inter(
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                      fontStyle:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .bodySmall
-                                                              .fontStyle,
-                                                    ),
-                                                    color: FlutterFlowTheme.of(
-                                                            context)
-                                                        .secondaryText,
-                                                    fontSize: 14.0,
-                                                    letterSpacing: 0.0,
-                                                    fontWeight: FontWeight.w500,
-                                                    fontStyle:
-                                                        FlutterFlowTheme.of(
-                                                                context)
-                                                            .bodySmall
-                                                            .fontStyle,
-                                                  ),
-                                            ),
-                                          ),
-                                          TextFormField(
-                                            controller: _model
-                                                .textFieldInicioTextController,
-                                            focusNode:
-                                                _model.textFieldInicioFocusNode,
-                                            autofocus: false,
-                                            textInputAction:
-                                                TextInputAction.next,
-                                            obscureText: false,
-                                            decoration: InputDecoration(
-                                              hintText: 'dd-mm-aaaa',
-                                              hintStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .override(
-                                                        font: GoogleFonts.inter(
-                                                          fontWeight:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .bodyMedium
-                                                                  .fontWeight,
-                                                          fontStyle:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .bodyMedium
-                                                                  .fontStyle,
-                                                        ),
-                                                        color:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .secondaryText,
-                                                        letterSpacing: 0.0,
-                                                        fontWeight:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .bodyMedium
-                                                                .fontWeight,
-                                                        fontStyle:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .bodyMedium
-                                                                .fontStyle,
-                                                      ),
-                                              enabledBorder: OutlineInputBorder(
-                                                borderSide: BorderSide(
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .alternate,
-                                                  width: 1.0,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(12.0),
-                                              ),
-                                              focusedBorder: OutlineInputBorder(
-                                                borderSide: BorderSide(
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .primary,
-                                                  width: 1.0,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(12.0),
-                                              ),
-                                              errorBorder: OutlineInputBorder(
-                                                borderSide: BorderSide(
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .error,
-                                                  width: 1.0,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(12.0),
-                                              ),
-                                              focusedErrorBorder:
-                                                  OutlineInputBorder(
-                                                borderSide: BorderSide(
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .error,
-                                                  width: 1.0,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(12.0),
-                                              ),
-                                              filled: true,
-                                              fillColor:
-                                                  FlutterFlowTheme.of(context)
-                                                      .primaryBackground,
-                                              contentPadding:
-                                                  EdgeInsetsDirectional
-                                                      .fromSTEB(16.0, 16.0,
-                                                          16.0, 16.0),
-                                              suffixIcon: Icon(
-                                                Icons.calendar_today,
-                                                color:
-                                                    FlutterFlowTheme.of(context)
-                                                        .secondaryText,
-                                                size: 20.0,
-                                              ),
-                                            ),
-                                            style: FlutterFlowTheme.of(context)
-                                                .bodyMedium
-                                                .override(
-                                                  font: GoogleFonts.inter(
-                                                    fontWeight:
-                                                        FlutterFlowTheme.of(
-                                                                context)
-                                                            .bodyMedium
-                                                            .fontWeight,
-                                                    fontStyle:
-                                                        FlutterFlowTheme.of(
-                                                                context)
-                                                            .bodyMedium
-                                                            .fontStyle,
-                                                  ),
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .primaryText,
-                                                  letterSpacing: 0.0,
-                                                  fontWeight:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .bodyMedium
-                                                          .fontWeight,
-                                                  fontStyle:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .bodyMedium
-                                                          .fontStyle,
-                                                ),
-                                            keyboardType:
-                                                TextInputType.datetime,
-                                            cursorColor:
-                                                FlutterFlowTheme.of(context)
-                                                    .primary,
-                                            validator: _model
-                                                .textFieldInicioTextControllerValidator
-                                                .asValidator(context),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.max,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Padding(
-                                            padding:
-                                                EdgeInsetsDirectional.fromSTEB(
-                                                    0.0, 0.0, 0.0, 4.0),
-                                            child: Text(
-                                              'Data Fim',
-                                              style: FlutterFlowTheme.of(
-                                                      context)
-                                                  .bodySmall
-                                                  .override(
-                                                    font: GoogleFonts.inter(
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                      fontStyle:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .bodySmall
-                                                              .fontStyle,
-                                                    ),
-                                                    color: FlutterFlowTheme.of(
-                                                            context)
-                                                        .secondaryText,
-                                                    fontSize: 14.0,
-                                                    letterSpacing: 0.0,
-                                                    fontWeight: FontWeight.w500,
-                                                    fontStyle:
-                                                        FlutterFlowTheme.of(
-                                                                context)
-                                                            .bodySmall
-                                                            .fontStyle,
-                                                  ),
-                                            ),
-                                          ),
-                                          TextFormField(
-                                            controller: _model
-                                                .textFieldFimTextController,
-                                            focusNode:
-                                                _model.textFieldFimFocusNode,
-                                            autofocus: false,
-                                            textInputAction:
-                                                TextInputAction.next,
-                                            obscureText: false,
-                                            decoration: InputDecoration(
-                                              hintText: 'dd-mm-aaaa',
-                                              hintStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .override(
-                                                        font: GoogleFonts.inter(
-                                                          fontWeight:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .bodyMedium
-                                                                  .fontWeight,
-                                                          fontStyle:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .bodyMedium
-                                                                  .fontStyle,
-                                                        ),
-                                                        color:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .secondaryText,
-                                                        letterSpacing: 0.0,
-                                                        fontWeight:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .bodyMedium
-                                                                .fontWeight,
-                                                        fontStyle:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .bodyMedium
-                                                                .fontStyle,
-                                                      ),
-                                              enabledBorder: OutlineInputBorder(
-                                                borderSide: BorderSide(
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .alternate,
-                                                  width: 1.0,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(12.0),
-                                              ),
-                                              focusedBorder: OutlineInputBorder(
-                                                borderSide: BorderSide(
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .primary,
-                                                  width: 1.0,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(12.0),
-                                              ),
-                                              errorBorder: OutlineInputBorder(
-                                                borderSide: BorderSide(
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .error,
-                                                  width: 1.0,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(12.0),
-                                              ),
-                                              focusedErrorBorder:
-                                                  OutlineInputBorder(
-                                                borderSide: BorderSide(
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .error,
-                                                  width: 1.0,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(12.0),
-                                              ),
-                                              filled: true,
-                                              fillColor:
-                                                  FlutterFlowTheme.of(context)
-                                                      .primaryBackground,
-                                              contentPadding:
-                                                  EdgeInsetsDirectional
-                                                      .fromSTEB(16.0, 16.0,
-                                                          16.0, 16.0),
-                                              suffixIcon: Icon(
-                                                Icons.calendar_today,
-                                                color:
-                                                    FlutterFlowTheme.of(context)
-                                                        .secondaryText,
-                                                size: 20.0,
-                                              ),
-                                            ),
-                                            style: FlutterFlowTheme.of(context)
-                                                .bodyMedium
-                                                .override(
-                                                  font: GoogleFonts.inter(
-                                                    fontWeight:
-                                                        FlutterFlowTheme.of(
-                                                                context)
-                                                            .bodyMedium
-                                                            .fontWeight,
-                                                    fontStyle:
-                                                        FlutterFlowTheme.of(
-                                                                context)
-                                                            .bodyMedium
-                                                            .fontStyle,
-                                                  ),
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .primaryText,
-                                                  letterSpacing: 0.0,
-                                                  fontWeight:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .bodyMedium
-                                                          .fontWeight,
-                                                  fontStyle:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .bodyMedium
-                                                          .fontStyle,
-                                                ),
-                                            keyboardType:
-                                                TextInputType.datetime,
-                                            cursorColor:
-                                                FlutterFlowTheme.of(context)
-                                                    .primary,
-                                            validator: _model
-                                                .textFieldFimTextControllerValidator
-                                                .asValidator(context),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ].divide(SizedBox(width: 12.0)),
-                                ),
-                              ].divide(SizedBox(height: 8.0)),
-                            ),
-                            Column(
-                              mainAxisSize: MainAxisSize.max,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Contrato',
-                                  style: FlutterFlowTheme.of(context)
-                                      .bodyMedium
-                                      .override(
-                                        font: GoogleFonts.inter(
-                                          fontWeight: FontWeight.w600,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontStyle,
-                                        ),
-                                        color: FlutterFlowTheme.of(context)
-                                            .primaryText,
-                                        fontSize: 16.0,
-                                        letterSpacing: 0.0,
-                                        fontWeight: FontWeight.w600,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontStyle,
-                                      ),
-                                ),
-                                TextFormField(
-                                  controller:
-                                      _model.textFieldContratoTextController,
-                                  focusNode: _model.textFieldContratoFocusNode,
-                                  autofocus: false,
-                                  textInputAction: TextInputAction.next,
-                                  obscureText: false,
-                                  decoration: InputDecoration(
-                                    hintText: 'Número do contrato',
-                                    enabledBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: FlutterFlowTheme.of(context)
-                                            .alternate,
-                                        width: 1.0,
-                                      ),
-                                      borderRadius: BorderRadius.circular(12.0),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderSide: BorderSide(
-                                        color: FlutterFlowTheme.of(context)
-                                            .primary,
-                                        width: 1.0,
-                                      ),
-                                      borderRadius: BorderRadius.circular(12.0),
-                                    ),
-                                    filled: true,
-                                    fillColor: FlutterFlowTheme.of(context)
-                                        .primaryBackground,
-                                    contentPadding:
-                                        EdgeInsetsDirectional.fromSTEB(
-                                            16.0, 16.0, 16.0, 16.0),
-                                  ),
-                                  style:
-                                      FlutterFlowTheme.of(context).bodyMedium,
-                                  cursorColor:
-                                      FlutterFlowTheme.of(context).primary,
-                                ),
-                              ].divide(SizedBox(height: 8.0)),
-                            ),
-                            Column(
-                              mainAxisSize: MainAxisSize.max,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Nova foto (opcional)',
-                                  style: FlutterFlowTheme.of(context)
-                                      .bodyMedium
-                                      .override(
-                                        font: GoogleFonts.inter(
-                                          fontWeight: FontWeight.w600,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontStyle,
-                                        ),
-                                        color: FlutterFlowTheme.of(context)
-                                            .primaryText,
-                                        fontSize: 16.0,
-                                        letterSpacing: 0.0,
-                                        fontWeight: FontWeight.w600,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontStyle,
-                                      ),
-                                ),
-                                OutlinedButton.icon(
-                                  onPressed: _model.salvando
-                                      ? null
-                                      : () async {
-                                          final picker = ImagePicker();
-                                          final x = await picker.pickImage(
-                                            source: ImageSource.gallery,
-                                            maxWidth: 2048,
-                                            imageQuality: 85,
-                                          );
-                                          if (x == null || !mounted) return;
-                                          final bytes = await x.readAsBytes();
-                                          if (!mounted) return;
-                                          safeSetState(() {
-                                            _model.novaFotoObra =
-                                                FFUploadedFile(
-                                              name: x.name,
-                                              bytes: bytes,
-                                            );
-                                          });
-                                        },
-                                  icon: const Icon(Icons.photo_camera_outlined),
-                                  label: Text(
-                                    _model.novaFotoObra?.name != null
-                                        ? 'Foto: ${_model.novaFotoObra!.name}'
-                                        : 'Selecionar imagem (JPG/PNG)',
-                                  ),
-                                ),
-                                if (_model.novaFotoObra != null)
-                                  Align(
-                                    alignment: AlignmentDirectional.centerStart,
-                                    child: TextButton(
-                                      onPressed: _model.salvando
-                                          ? null
-                                          : () => safeSetState(
-                                              () => _model.novaFotoObra = null),
-                                      child: const Text(
-                                          'Remover foto selecionada'),
-                                    ),
-                                  ),
-                              ].divide(SizedBox(height: 8.0)),
-                            ),
-                            Padding(
-                              padding: EdgeInsetsDirectional.fromSTEB(
-                                  0.0, 16.0, 0.0, 0.0),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.max,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisSize: MainAxisSize.max,
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      FFButtonWidget(
-                                        onPressed: () async {
-                                          context.safePop();
-                                        },
-                                        text: 'Cancelar',
-                                        options: FFButtonOptions(
-                                          height: 40.0,
-                                          padding:
-                                              EdgeInsetsDirectional.fromSTEB(
-                                                  16.0, 0.0, 16.0, 0.0),
-                                          iconPadding:
-                                              EdgeInsetsDirectional.fromSTEB(
-                                                  0.0, 0.0, 0.0, 0.0),
-                                          color: FlutterFlowTheme.of(context)
-                                              .alternate,
-                                          textStyle: FlutterFlowTheme.of(
-                                                  context)
-                                              .titleSmall
-                                              .override(
-                                                font: GoogleFonts.interTight(
-                                                  fontWeight:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .titleSmall
-                                                          .fontWeight,
-                                                  fontStyle:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .titleSmall
-                                                          .fontStyle,
-                                                ),
-                                                color:
-                                                    FlutterFlowTheme.of(context)
-                                                        .primary,
-                                                letterSpacing: 0.0,
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .titleSmall
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .titleSmall
-                                                        .fontStyle,
-                                              ),
-                                          elevation: 0.0,
-                                          borderRadius:
-                                              BorderRadius.circular(8.0),
-                                        ),
-                                      ),
-                                      FFButtonWidget(
-                                        onPressed: _model.salvando
-                                            ? null
-                                            : () async {
-                                                if (_model.formKey.currentState
-                                                        ?.validate() !=
-                                                    true) {
-                                                  return;
-                                                }
-                                                await _salvarObraNaApiESincronizar(
-                                                    context);
-                                              },
-                                        text: _model.salvando
-                                            ? 'Salvando...'
-                                            : 'Salvar',
-                                        options: FFButtonOptions(
-                                          height: 40.0,
-                                          padding:
-                                              EdgeInsetsDirectional.fromSTEB(
-                                                  16.0, 0.0, 16.0, 0.0),
-                                          iconPadding:
-                                              EdgeInsetsDirectional.fromSTEB(
-                                                  0.0, 0.0, 0.0, 0.0),
-                                          color: FlutterFlowTheme.of(context)
-                                              .primary,
-                                          textStyle: FlutterFlowTheme.of(
-                                                  context)
-                                              .titleSmall
-                                              .override(
-                                                font: GoogleFonts.interTight(
-                                                  fontWeight:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .titleSmall
-                                                          .fontWeight,
-                                                  fontStyle:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .titleSmall
-                                                          .fontStyle,
-                                                ),
-                                                color: Colors.white,
-                                                letterSpacing: 0.0,
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .titleSmall
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .titleSmall
-                                                        .fontStyle,
-                                              ),
-                                          elevation: 0.0,
-                                          borderRadius:
-                                              BorderRadius.circular(8.0),
-                                        ),
-                                      ),
-                                    ].divide(SizedBox(width: 12.0)),
-                                  ),
-                                ].divide(SizedBox(height: 8.0)),
-                              ),
-                            ),
-                          ].divide(SizedBox(height: 20.0)),
-                        ),
-                      ),
-                    ]
-                        .divide(SizedBox(height: 20.0))
-                        .addToStart(SizedBox(height: 24.0))
-                        .addToEnd(SizedBox(height: 32.0)),
+                      _secaoIdentificacao(obra),
+                      _secaoEndereco(),
+                      _secaoPrazoContrato(),
+                      _secaoFotoCapa(obra),
+                      _botoesAcao(),
+                    ],
                   ),
                 ),
               );

@@ -1,12 +1,11 @@
 import '/auth/membership_access.dart';
 import '/backend/api_requests/api_calls.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/custom_code/actions/index.dart' as actions;
 import '/flutter_flow/brazilian_currency_input_formatter.dart';
 import '/flutter_flow/flutter_flow_drop_down.dart';
-import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import '/flutter_flow/form_field_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -327,41 +326,34 @@ class _ObraAddTarefaWidgetState extends State<ObraAddTarefaWidget> {
       },
       child: Scaffold(
         backgroundColor: theme.primaryBackground,
-        appBar: AppBar(
-          backgroundColor: theme.secondaryBackground,
-          elevation: 0,
-          leading: FlutterFlowIconButton(
-            borderColor: Colors.transparent,
-            borderRadius: 30,
-            buttonSize: 48,
-            icon: Icon(Icons.chevron_left_rounded,
-                color: theme.primaryText, size: 28),
-            onPressed: () => context.safePop(),
-          ),
-          title: Text(
-            'Nova tarefa',
-            style: theme.titleLarge.override(
-              font: GoogleFonts.interTight(fontWeight: FontWeight.w600),
-              color: theme.primaryText,
-            ),
-          ),
-        ),
+        appBar: _buildAppBar(theme),
         body: SafeArea(
           child: FutureBuilder<List<ListaEtapasObraRow>>(
             future: _etapasFuture,
             builder: (context, snap) {
               if (!snap.hasData) {
                 return Center(
-                    child: LinearProgressIndicator(color: theme.primary));
+                  child: CircularProgressIndicator(color: theme.primary),
+                );
               }
               final etapas = snap.data!;
               if (etapas.isEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    'Não há etapas nesta obra. Cadastre uma etapa antes de adicionar tarefas.',
-                    style: theme.bodyMedium,
-                  ),
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                  children: [
+                    RdoSectionCard(
+                      title: 'Vínculo',
+                      icon: Icons.link_rounded,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: Text(
+                        'Não há etapas nesta obra. Cadastre uma etapa antes de adicionar tarefas.',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          color: theme.secondaryText,
+                        ),
+                      ),
+                    ),
+                  ],
                 );
               }
               final uuids = etapas.map((e) => e.uuid).toList();
@@ -390,249 +382,349 @@ class _ObraAddTarefaWidgetState extends State<ObraAddTarefaWidget> {
 
               return Form(
                 key: _model.formKey,
-                child: ListView(
-                  padding: const EdgeInsets.all(24),
+                child: Column(
                   children: [
-                    Text(
-                      'A tarefa é criada no servidor e depois baixada para o app.',
-                      style: theme.bodySmall.override(
-                        font: GoogleFonts.inter(),
-                        color: theme.secondaryText,
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                        children: [
+                          RdoSectionCard(
+                            title: 'Vínculo',
+                            icon: Icons.link_rounded,
+                            margin: const EdgeInsets.only(bottom: 10),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                FlutterFlowDropDown<String>(
+                                  controller:
+                                      _model.dropDownEtapaUuidValueController ??=
+                                          FormFieldController<String>(
+                                              _model.dropDownEtapaUuidValue),
+                                  options: uuids,
+                                  optionLabels: labels,
+                                  onChanged: (val) async {
+                                    safeSetState(
+                                        () => _model.dropDownEtapaUuidValue =
+                                            val);
+                                    if (val != null && val.isNotEmpty) {
+                                      await _atualizarItemParaEtapa(val);
+                                    }
+                                  },
+                                  width: double.infinity,
+                                  height: 48,
+                                  textStyle: rdoFormFieldTextStyle(context),
+                                  hintText: 'Selecione a etapa',
+                                  icon: Icon(Icons.keyboard_arrow_down_rounded,
+                                      color: theme.secondaryText),
+                                  fillColor: theme.secondaryBackground,
+                                  elevation: 0,
+                                  borderColor: theme.alternate,
+                                  borderWidth: 1,
+                                  borderRadius: 8,
+                                  margin: EdgeInsets.zero,
+                                  hidesUnderline: true,
+                                  isSearchable: true,
+                                  isMultiSelect: false,
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: _model.itemTextController,
+                                  focusNode: _model.itemFocusNode,
+                                  readOnly: true,
+                                  style: rdoFormFieldTextStyle(context),
+                                  decoration: rdoFormFieldDecoration(
+                                    context,
+                                    label: 'Nº item (próximo sugerido)',
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                FutureBuilder<List<String>>(
+                                  future: _locaisFuture,
+                                  builder: (context, locSnap) {
+                                    if (locSnap.connectionState !=
+                                        ConnectionState.done) {
+                                      return const Padding(
+                                        padding:
+                                            EdgeInsets.symmetric(vertical: 12),
+                                        child: Center(
+                                          child: SizedBox(
+                                            width: 24,
+                                            height: 24,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    final locais = locSnap.data ?? [];
+                                    if (locais.isEmpty) {
+                                      return Text(
+                                        'Nenhum local cadastrado nesta obra. Cadastre locais em Locais da obra.',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 13,
+                                          color: theme.secondaryText,
+                                        ),
+                                      );
+                                    }
+                                    return FlutterFlowDropDown<String>(
+                                      key: ValueKey<String>(
+                                          locais.join('\u0001')),
+                                      controller: _model
+                                              .dropDownLocalNomeValueController ??=
+                                          FormFieldController<String>(
+                                              _model.dropDownLocalNomeValue),
+                                      options: locais,
+                                      optionLabels: locais,
+                                      onChanged: (val) => safeSetState(() =>
+                                          _model.dropDownLocalNomeValue = val),
+                                      width: double.infinity,
+                                      height: 48,
+                                      textStyle:
+                                          rdoFormFieldTextStyle(context),
+                                      hintText: 'Selecione o local',
+                                      icon: Icon(
+                                          Icons.keyboard_arrow_down_rounded,
+                                          color: theme.secondaryText),
+                                      fillColor: theme.secondaryBackground,
+                                      elevation: 0,
+                                      borderColor: theme.alternate,
+                                      borderWidth: 1,
+                                      borderRadius: 8,
+                                      margin: EdgeInsets.zero,
+                                      hidesUnderline: true,
+                                      isSearchable: true,
+                                      isMultiSelect: false,
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          RdoSectionCard(
+                            title: 'Dados da tarefa',
+                            icon: Icons.add_task_rounded,
+                            subtitle:
+                                'Criada no servidor e sincronizada para o app',
+                            margin: EdgeInsets.zero,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                TextFormField(
+                                  controller: _model.descricaoTextController,
+                                  focusNode: _model.descricaoFocusNode,
+                                  textCapitalization:
+                                      TextCapitalization.sentences,
+                                  style: rdoFormFieldTextStyle(context),
+                                  decoration: rdoFormFieldDecoration(
+                                    context,
+                                    label: 'Descrição',
+                                  ),
+                                  validator: (v) =>
+                                      (v == null || v.trim().isEmpty)
+                                          ? 'Informe a descrição'
+                                          : null,
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller: _model.qtdTextController,
+                                        focusNode: _model.qtdFocusNode,
+                                        keyboardType: const TextInputType
+                                            .numberWithOptions(decimal: true),
+                                        style: rdoFormFieldTextStyle(context),
+                                        decoration: rdoFormFieldDecoration(
+                                          context,
+                                          label: 'Quantidade',
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller:
+                                            _model.unidadeTextController,
+                                        focusNode: _model.unidadeFocusNode,
+                                        style: rdoFormFieldTextStyle(context),
+                                        decoration: rdoFormFieldDecoration(
+                                          context,
+                                          label: 'Unidade',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: _model.valorUnitTextController,
+                                  focusNode: _model.valorUnitFocusNode,
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [_valorUnitarioMask],
+                                  style: rdoFormFieldTextStyle(context),
+                                  decoration: rdoFormFieldDecoration(
+                                    context,
+                                    label: 'Valor unitário (opcional)',
+                                    prefixText: 'R\$ ',
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller: _model.metaTextController,
+                                        focusNode: _model.metaFocusNode,
+                                        keyboardType: const TextInputType
+                                            .numberWithOptions(decimal: true),
+                                        style: rdoFormFieldTextStyle(context),
+                                        decoration: rdoFormFieldDecoration(
+                                          context,
+                                          label: 'Meta (opcional)',
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller:
+                                            _model.metaUnidadeTextController,
+                                        focusNode: _model.metaUnidadeFocusNode,
+                                        style: rdoFormFieldTextStyle(context),
+                                        decoration: rdoFormFieldDecoration(
+                                          context,
+                                          label: 'Meta unidade',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    Text('Etapa', style: theme.labelMedium),
-                    const SizedBox(height: 6),
-                    FlutterFlowDropDown<String>(
-                      controller: _model.dropDownEtapaUuidValueController ??=
-                          FormFieldController<String>(
-                              _model.dropDownEtapaUuidValue),
-                      options: uuids,
-                      optionLabels: labels,
-                      onChanged: (val) async {
-                        safeSetState(() => _model.dropDownEtapaUuidValue = val);
-                        if (val != null && val.isNotEmpty) {
-                          await _atualizarItemParaEtapa(val);
-                        }
-                      },
-                      width: double.infinity,
-                      height: 56,
-                      textStyle: theme.bodyMedium,
-                      hintText: 'Selecione a etapa',
-                      icon: Icon(Icons.keyboard_arrow_down_rounded,
-                          color: theme.secondaryText),
-                      fillColor: theme.primaryBackground,
-                      elevation: 0,
-                      borderColor: theme.alternate,
-                      borderWidth: 1,
-                      borderRadius: 12,
-                      margin: EdgeInsets.zero,
-                      hidesUnderline: true,
-                      isSearchable: true,
-                      isMultiSelect: false,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _model.itemTextController,
-                      focusNode: _model.itemFocusNode,
-                      readOnly: true,
-                      decoration: InputDecoration(
-                        labelText: 'Nº item (próximo sugerido)',
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    FutureBuilder<List<String>>(
-                      future: _locaisFuture,
-                      builder: (context, locSnap) {
-                        if (locSnap.connectionState != ConnectionState.done) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child:
-                                LinearProgressIndicator(color: theme.primary),
-                          );
-                        }
-                        final locais = locSnap.data ?? [];
-                        if (locais.isEmpty) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Text(
-                              'Nenhum local cadastrado nesta obra. Cadastre locais em Locais da obra.',
-                              style: theme.bodySmall.override(
-                                font: GoogleFonts.inter(),
-                                color: theme.secondaryText,
-                              ),
-                            ),
-                          );
-                        }
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Local', style: theme.labelMedium),
-                            const SizedBox(height: 6),
-                            FlutterFlowDropDown<String>(
-                              key: ValueKey<String>(locais.join('\u0001')),
-                              controller:
-                                  _model.dropDownLocalNomeValueController ??=
-                                      FormFieldController<String>(
-                                          _model.dropDownLocalNomeValue),
-                              options: locais,
-                              optionLabels: locais,
-                              onChanged: (val) => safeSetState(
-                                  () => _model.dropDownLocalNomeValue = val),
-                              width: double.infinity,
-                              height: 56,
-                              textStyle: theme.bodyMedium,
-                              hintText: 'Selecione o local',
-                              icon: Icon(Icons.keyboard_arrow_down_rounded,
-                                  color: theme.secondaryText),
-                              fillColor: theme.primaryBackground,
-                              elevation: 0,
-                              borderColor: theme.alternate,
-                              borderWidth: 1,
-                              borderRadius: 12,
-                              margin: EdgeInsets.zero,
-                              hidesUnderline: true,
-                              isSearchable: true,
-                              isMultiSelect: false,
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _model.descricaoTextController,
-                      focusNode: _model.descricaoFocusNode,
-                      decoration: InputDecoration(
-                        labelText: 'Descrição',
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Informe a descrição'
-                          : null,
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _model.qtdTextController,
-                            focusNode: _model.qtdFocusNode,
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
-                            decoration: InputDecoration(
-                              labelText: 'Quantidade',
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _model.unidadeTextController,
-                            focusNode: _model.unidadeFocusNode,
-                            decoration: InputDecoration(
-                              labelText: 'Unidade',
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _model.valorUnitTextController,
-                      focusNode: _model.valorUnitFocusNode,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [_valorUnitarioMask],
-                      decoration: InputDecoration(
-                        labelText: 'Valor unitário (opcional)',
-                        prefixText: 'R\$ ',
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _model.metaTextController,
-                            focusNode: _model.metaFocusNode,
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
-                            decoration: InputDecoration(
-                              labelText: 'Meta (opcional)',
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _model.metaUnidadeTextController,
-                            focusNode: _model.metaUnidadeFocusNode,
-                            decoration: InputDecoration(
-                              labelText: 'Meta unidade',
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 28),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: FFButtonWidget(
-                            onPressed: _model.salvando
-                                ? null
-                                : () => context.safePop(),
-                            text: 'Cancelar',
-                            options: FFButtonOptions(
-                              height: 48,
-                              color: theme.alternate,
-                              textStyle: theme.titleSmall.override(
-                                font: GoogleFonts.interTight(),
-                                color: theme.primary,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: FFButtonWidget(
-                            onPressed: (etapas.isEmpty || _model.salvando)
-                                ? null
-                                : _salvar,
-                            text: _model.salvando ? 'Salvando…' : 'Salvar',
-                            options: FFButtonOptions(
-                              height: 48,
-                              color: theme.primary,
-                              textStyle: theme.titleSmall.override(
-                                font:
-                                    GoogleFonts.interTight(color: Colors.white),
-                                color: Colors.white,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                    _buildBarraAcoes(theme, etapasVazias: false),
                   ],
                 ),
               );
             },
           ),
+        ),
+      ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(FlutterFlowTheme theme) {
+    return AppBar(
+      backgroundColor: theme.primary,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      surfaceTintColor: Colors.transparent,
+      centerTitle: false,
+      titleSpacing: 0,
+      toolbarHeight: 58,
+      iconTheme: const IconThemeData(color: Colors.white),
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+        onPressed: () => context.safePop(),
+      ),
+      title: Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Nova tarefa',
+              style: GoogleFonts.interTight(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+            Text(
+              'Planejamento da obra',
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBarraAcoes(
+    FlutterFlowTheme theme, {
+    required bool etapasVazias,
+  }) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      decoration: BoxDecoration(
+        color: theme.secondaryBackground,
+        border: Border(top: BorderSide(color: theme.alternate)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _model.salvando ? null : () => context.safePop(),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: theme.primaryText,
+                  side: BorderSide(color: theme.alternate),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Text(
+                  'Cancelar',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              flex: 2,
+              child: FilledButton.icon(
+                onPressed: (etapasVazias || _model.salvando) ? null : _salvar,
+                icon: _model.salvando
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.check_rounded, size: 18),
+                label: Text(
+                  _model.salvando ? 'Salvando…' : 'Salvar tarefa',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: theme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

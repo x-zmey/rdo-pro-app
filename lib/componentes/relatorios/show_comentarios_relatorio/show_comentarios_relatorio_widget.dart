@@ -135,6 +135,7 @@ class _ShowComentariosRelatorioWidgetState
                   return ListView.builder(
                     padding: EdgeInsets.zero,
                     shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
                     scrollDirection: Axis.vertical,
                     itemCount: listViewListaComentariosRelatoriosRowList.length,
                     itemBuilder: (context, listViewIndex) {

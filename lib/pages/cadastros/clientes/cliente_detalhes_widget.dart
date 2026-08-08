@@ -1,7 +1,9 @@
+import '/auth/membership_access.dart';
 import '/backend/api_requests/api_calls.dart';
+import '/componentes/navegacao/barra_navegacao_principal.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import '/pages/cadastros/cadastrar_cliente/cadastrar_cliente_widget.dart';
 import '/pages/obra/detalhes_obra/detalhes_obra_widget.dart';
 import 'package:flutter/material.dart';
@@ -45,7 +47,19 @@ class _ClienteDetalhesWidgetState extends State<ClienteDetalhesWidget> {
     super.initState();
     _model = createModel(context, () => ClienteDetalhesModel());
     _buscaObra.addListener(() => setState(() {}));
-    WidgetsBinding.instance.addPostFrameCallback((_) => _carregar());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!MembershipAccess.canPermission('view_clientes')) {
+        MembershipAccess.showDenied(
+          context,
+          'Sem permissão para visualizar clientes.',
+        );
+        if (context.mounted && context.canPop()) {
+          context.pop();
+        }
+        return;
+      }
+      _carregar();
+    });
   }
 
   @override
@@ -244,6 +258,13 @@ class _ClienteDetalhesWidgetState extends State<ClienteDetalhesWidget> {
   }
 
   Future<void> _abrirEditar() async {
+    if (!MembershipAccess.canPermission('edit_clientes')) {
+      MembershipAccess.showDenied(
+        context,
+        'Sem permissão para editar clientes.',
+      );
+      return;
+    }
     final uuid = _cliente?['uuid']?.toString();
     if (uuid == null || uuid.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -284,6 +305,9 @@ class _ClienteDetalhesWidgetState extends State<ClienteDetalhesWidget> {
   @override
   Widget build(BuildContext context) {
     context.watch<FFAppState>();
+    final theme = FlutterFlowTheme.of(context);
+    final nome = '${_cliente?['nome'] ?? ''}'.trim();
+    final canEdit = MembershipAccess.canPermission('edit_clientes');
 
     return GestureDetector(
       onTap: () {
@@ -291,37 +315,94 @@ class _ClienteDetalhesWidgetState extends State<ClienteDetalhesWidget> {
         FocusManager.instance.primaryFocus?.unfocus();
       },
       child: Scaffold(
-        backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
+        backgroundColor: theme.primaryBackground,
         appBar: AppBar(
-          backgroundColor: FlutterFlowTheme.of(context).primary,
-          automaticallyImplyLeading: true,
-          title: Text(
-            'Detalhes do cliente',
-            style: FlutterFlowTheme.of(context).titleLarge.override(
-                  font: GoogleFonts.interTight(fontWeight: FontWeight.w600),
-                  color: Colors.white,
-                  fontSize: 20,
-                ),
-          ),
+          backgroundColor: theme.primary,
           elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          centerTitle: false,
+          titleSpacing: 0,
+          toolbarHeight: 58,
+          iconTheme: const IconThemeData(color: Colors.white),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: () => context.safePop(),
+          ),
+          title: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Detalhes do cliente',
+                  style: GoogleFonts.interTight(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  nome.isEmpty ? 'Cadastro geral do sistema' : nome,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            IconButton(
+              tooltip: 'Atualizar',
+              icon: const Icon(Icons.refresh_rounded,
+                  color: Colors.white, size: 21),
+              onPressed: _carregando ? null : _carregar,
+            ),
+            if (canEdit && _cliente != null)
+              IconButton(
+                tooltip: 'Editar',
+                icon: const Icon(Icons.edit_outlined,
+                    color: Colors.white, size: 21),
+                onPressed: _abrirEditar,
+              ),
+            const SizedBox(width: 4),
+          ],
         ),
-        body: _corpo(context),
+        body: Column(
+          children: [
+            Expanded(child: _corpo(theme, canEdit)),
+            const BarraNavegacaoPrincipal(),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _corpo(BuildContext context) {
+  Widget _corpo(FlutterFlowTheme theme, bool canEdit) {
     if (_carregando) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(
-                color: FlutterFlowTheme.of(context).primary),
+            SizedBox(
+              width: 32,
+              height: 32,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: theme.primary,
+              ),
+            ),
             const SizedBox(height: 16),
             Text(
-              'Carregando dados do cliente...',
-              style: FlutterFlowTheme.of(context).titleMedium,
+              'Carregando dados do cliente…',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: theme.secondaryText,
+              ),
             ),
           ],
         ),
@@ -335,23 +416,34 @@ class _ClienteDetalhesWidgetState extends State<ClienteDetalhesWidget> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.error_outline,
-                  size: 56, color: FlutterFlowTheme.of(context).error),
+              Icon(Icons.error_outline_rounded, size: 48, color: theme.error),
               const SizedBox(height: 12),
               Text(
                 _erro!,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: FlutterFlowTheme.of(context).error),
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: theme.error,
+                ),
               ),
               const SizedBox(height: 16),
-              FFButtonWidget(
+              FilledButton.icon(
                 onPressed: _carregar,
-                text: 'Tentar novamente',
-                options: FFButtonOptions(
-                  color: FlutterFlowTheme.of(context).primary,
-                  textStyle: FlutterFlowTheme.of(context).titleSmall.override(
-                        color: FlutterFlowTheme.of(context).info,
-                      ),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: Text(
+                  'Tentar novamente',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: theme.primary,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(180, 42),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
               ),
             ],
@@ -364,486 +456,192 @@ class _ClienteDetalhesWidgetState extends State<ClienteDetalhesWidget> {
     final juridica = _int(c['juridica']);
     final situacao = _int(c['situacao']);
     final ativo = situacao == 1;
+    final obrasFiltradas = _obrasFiltradas;
 
     return RefreshIndicator(
+      color: theme.primary,
       onRefresh: _carregar,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Clientes',
-                    style: TextStyle(
-                      color: FlutterFlowTheme.of(context).primary,
-                      fontWeight: FontWeight.w600,
-                    ),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.fromLTRB(
+          16,
+          10,
+          16,
+          kBarraNavegacaoPrincipalReservaScroll,
+        ),
+        children: [
+          _buildResumoCard(theme, c, juridica, ativo),
+          const SizedBox(height: 10),
+          if (canEdit)
+            RdoSectionCard(
+              title: 'Ações',
+              icon: Icons.tune_rounded,
+              margin: const EdgeInsets.only(bottom: 10),
+              child: FilledButton.icon(
+                onPressed: _abrirEditar,
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: Text(
+                  'Editar cliente',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: () => context.safePop(),
-                  icon: const Icon(Icons.arrow_back, size: 18),
-                  label: const Text('Voltar à lista'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: theme.primary,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 42),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          RdoSectionCard(
+            title: 'Dados pessoais',
+            icon: Icons.badge_outlined,
+            margin: const EdgeInsets.only(bottom: 10),
+            child: Column(
+              children: [
+                _infoRow(
+                  theme,
+                  juridica == 1 ? 'CNPJ' : 'CPF',
+                  _formatDocumento(c['documento']?.toString(), juridica),
+                ),
+                if (juridica != 1)
+                  _infoRow(theme, 'Sexo', _formatSexo(c['sexo']?.toString())),
+                _infoRow(
+                  theme,
+                  'Telefone',
+                  _formatTelefone(c['telefone']?.toString()),
+                ),
+                _infoRow(
+                  theme,
+                  'E-mail',
+                  (c['email']?.toString().trim().isNotEmpty ?? false)
+                      ? c['email'].toString()
+                      : 'Não informado',
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Row(
+          ),
+          RdoSectionCard(
+            title: 'Endereço e observações',
+            icon: Icons.place_outlined,
+            margin: const EdgeInsets.only(bottom: 10),
+            child: Column(
               children: [
-                Expanded(
-                  child: Text(
-                    'Detalhes do Cliente',
-                    style: FlutterFlowTheme.of(context).headlineSmall.override(
-                          font: GoogleFonts.interTight(
-                              fontWeight: FontWeight.bold),
-                        ),
-                  ),
+                _infoRow(theme, 'Endereço', _formatEndereco(c)),
+                _infoRow(
+                  theme,
+                  'Observações',
+                  (c['observacoes']?.toString().trim().isNotEmpty ?? false)
+                      ? c['observacoes'].toString()
+                      : 'Sem observações',
                 ),
-                FilledButton.icon(
-                  onPressed: _abrirEditar,
-                  icon: const Icon(Icons.edit_outlined, size: 20),
-                  label: const Text('Editar'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: FlutterFlowTheme.of(context).primary,
-                    foregroundColor: FlutterFlowTheme.of(context).info,
-                  ),
+                _infoRow(
+                  theme,
+                  'Cadastrado em',
+                  _formatDate(c['created_at']),
+                ),
+                _infoRow(
+                  theme,
+                  'Atualizado em',
+                  _formatDate(c['updated_at']),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            LayoutBuilder(
-              builder: (context, bc) {
-                final w = bc.maxWidth;
-                final cols = w >= 900 ? 4 : (w >= 520 ? 2 : 1);
-                final tileW = (w - (cols - 1) * 12) / cols;
-                Widget stat(String titulo, int valor, IconData icon) {
-                  return SizedBox(
-                    width: tileW,
-                    child: Card(
-                      elevation: 2,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              backgroundColor: FlutterFlowTheme.of(context)
-                                  .primary
-                                  .withValues(alpha: 0.12),
-                              child: Icon(icon,
-                                  color: FlutterFlowTheme.of(context).primary),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    titulo,
-                                    style: FlutterFlowTheme.of(context)
-                                        .labelSmall
-                                        .override(
-                                          color: FlutterFlowTheme.of(context)
-                                              .secondaryText,
-                                          letterSpacing: 0.5,
-                                        ),
-                                  ),
-                                  Text(
-                                    '$valor',
-                                    style: FlutterFlowTheme.of(context)
-                                        .headlineMedium
-                                        .override(
-                                          font: GoogleFonts.interTight(
-                                              fontWeight: FontWeight.bold),
-                                          color: FlutterFlowTheme.of(context)
-                                              .primary,
-                                        ),
-                                  ),
-                                ],
+          ),
+          RdoSectionCard(
+            title: 'Obras do cliente',
+            icon: Icons.apartment_outlined,
+            subtitle: _buscaObra.text.trim().isEmpty
+                ? (_obras.isEmpty
+                    ? 'Nenhuma obra vinculada'
+                    : 'Toque para abrir a obra')
+                : '${obrasFiltradas.length} de ${_obras.length}',
+            margin: EdgeInsets.zero,
+            trailing: _obras.isEmpty ? null : RdoContadorChip('${_obras.length}'),
+            contentPadding: EdgeInsets.zero,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                  child: TextField(
+                    controller: _buscaObra,
+                    style: rdoFormFieldTextStyle(context),
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Buscar obra',
+                      hint: 'Nome, cidade, engenheiro ou contrato',
+                      suffixIcon: _buscaObra.text.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: 'Limpar',
+                              icon: Icon(
+                                Icons.close_rounded,
+                                size: 18,
+                                color: theme.secondaryText,
                               ),
+                              onPressed: () {
+                                _buscaObra.clear();
+                                setState(() {});
+                              },
                             ),
-                          ],
-                        ),
-                      ),
                     ),
-                  );
-                }
-
-                return Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    stat('TOTAL DE OBRAS', _obras.length,
-                        Icons.business_outlined),
-                    stat('OBRAS ATIVAS', _countObras(1),
-                        Icons.check_circle_outline),
-                    stat('EM ANDAMENTO', _countObras(2),
-                        Icons.schedule_outlined),
-                    stat('CONCLUÍDAS', _countObras(3), Icons.task_alt_outlined),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-            Card(
-              elevation: 2,
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    color: FlutterFlowTheme.of(context).primary,
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (obrasFiltradas.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 28),
+                    child: Column(
                       children: [
-                        CircleAvatar(
-                          radius: 22,
-                          backgroundColor: Colors.white,
-                          child: Text(
-                            _iniciais(c['nome']?.toString()),
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: FlutterFlowTheme.of(context).primary,
-                            ),
+                        Icon(
+                          Icons.business_center_outlined,
+                          size: 40,
+                          color: theme.secondaryText.withValues(alpha: 0.4),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Nenhuma obra encontrada',
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: theme.primaryText,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${c['nome'] ?? ''}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 4,
-                                children: [
-                                  Chip(
-                                    label: Text(
-                                      ativo ? 'ATIVO' : 'INATIVO',
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    backgroundColor: ativo
-                                        ? Colors.green.shade700
-                                        : Colors.red.shade700,
-                                    padding: EdgeInsets.zero,
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                  Chip(
-                                    avatar: Icon(
-                                      juridica == 1
-                                          ? Icons.domain
-                                          : Icons.person_outline,
-                                      size: 16,
-                                      color:
-                                          FlutterFlowTheme.of(context).primary,
-                                    ),
-                                    label: Text(
-                                      juridica == 1 ? 'PJ' : 'PF',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: FlutterFlowTheme.of(context)
-                                            .primary,
-                                      ),
-                                    ),
-                                    backgroundColor: Colors.white,
-                                    padding: EdgeInsets.zero,
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                ],
-                              ),
-                            ],
+                        const SizedBox(height: 4),
+                        Text(
+                          _buscaObra.text.trim().isEmpty
+                              ? 'Este cliente ainda não possui obras cadastradas.'
+                              : 'Nenhuma obra corresponde à busca.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(
+                            fontSize: 12.5,
+                            color: theme.secondaryText,
                           ),
                         ),
                       ],
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: LayoutBuilder(
-                      builder: (context, box) {
-                        final narrow = box.maxWidth < 560;
-                        final cols = [
-                          _colInfo(context, c, juridica),
-                          _colInfo2(context, c),
-                        ];
-                        if (narrow) {
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              cols[0],
-                              const SizedBox(height: 8),
-                              cols[1],
-                            ],
-                          );
-                        }
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: cols[0]),
-                            Expanded(child: cols[1]),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Obras do cliente',
-              style: FlutterFlowTheme.of(context).titleLarge.override(
-                    font: GoogleFonts.interTight(fontWeight: FontWeight.bold),
-                  ),
-            ),
-            Text(
-              '${_obras.length} ${_obras.length == 1 ? 'obra encontrada' : 'obras encontradas'}',
-              style: FlutterFlowTheme.of(context).bodySmall.override(
-                    color: FlutterFlowTheme.of(context).secondaryText,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _buscaObra,
-              decoration: InputDecoration(
-                hintText: 'Buscar obra por nome, cidade, engenheiro...',
-                prefixIcon: Icon(Icons.search,
-                    color: FlutterFlowTheme.of(context).secondaryText),
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (_obrasFiltradas.isEmpty)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Column(
+                  )
+                else
+                  Column(
                     children: [
-                      Icon(Icons.business_center_outlined,
-                          size: 56, color: Colors.grey.shade400),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Nenhuma obra encontrada',
-                        style: FlutterFlowTheme.of(context).titleMedium,
-                      ),
-                      Text(
-                        _buscaObra.text.trim().isEmpty
-                            ? 'Este cliente ainda não possui obras cadastradas'
-                            : 'Nenhuma obra corresponde à busca',
-                        textAlign: TextAlign.center,
-                        style: FlutterFlowTheme.of(context).bodySmall,
-                      ),
+                      for (var i = 0; i < obrasFiltradas.length; i++) ...[
+                        if (i > 0)
+                          Divider(
+                            height: 1,
+                            thickness: 1,
+                            color: theme.alternate,
+                          ),
+                        _buildObraItem(theme, obrasFiltradas[i]),
+                      ],
                     ],
                   ),
-                ),
-              )
-            else
-              LayoutBuilder(
-                builder: (context, bc) {
-                  final w = bc.maxWidth;
-                  final cross = w >= 900 ? 3 : (w >= 520 ? 2 : 1);
-                  return GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: cross,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 0.72,
-                    ),
-                    itemCount: _obrasFiltradas.length,
-                    itemBuilder: (context, i) {
-                      final obra = _obrasFiltradas[i];
-                      final sid = _int(obra['situacao_id']);
-                      final foto = obra['foto_url']?.toString();
-                      return Card(
-                        clipBehavior: Clip.antiAlias,
-                        elevation: 2,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Stack(
-                              children: [
-                                SizedBox(
-                                  height: 140,
-                                  child: foto != null && foto.isNotEmpty
-                                      ? Image.network(
-                                          foto,
-                                          fit: BoxFit.cover,
-                                          width: double.infinity,
-                                          errorBuilder: (_, __, ___) =>
-                                              _placeholderObra(context),
-                                        )
-                                      : _placeholderObra(context),
-                                ),
-                                Positioned(
-                                  top: 8,
-                                  right: 8,
-                                  child: Chip(
-                                    label: Text(
-                                      _labelSituacaoObra(sid),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    backgroundColor: _corSituacaoObra(sid),
-                                    padding: EdgeInsets.zero,
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                ),
-                                Positioned(
-                                  left: 0,
-                                  right: 0,
-                                  bottom: 0,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        colors: [
-                                          Colors.transparent,
-                                          Colors.black.withValues(alpha: 0.65),
-                                        ],
-                                      ),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          '${obra['nome'] ?? ''}',
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                        Row(
-                                          children: [
-                                            const Icon(Icons.place_outlined,
-                                                size: 14,
-                                                color: Colors.white70),
-                                            const SizedBox(width: 4),
-                                            Expanded(
-                                              child: Text(
-                                                '${obra['cidade'] ?? 'Local não informado'}/${obra['estado'] ?? ''}',
-                                                style: const TextStyle(
-                                                  color: Colors.white70,
-                                                  fontSize: 12,
-                                                ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _miniLinha(
-                                      context,
-                                      Icons.event_outlined,
-                                      'Início',
-                                      '${obra['data_inicio'] ?? '—'}'),
-                                  _miniLinha(
-                                      context,
-                                      Icons.event_outlined,
-                                      'Término',
-                                      '${obra['data_final'] ?? '—'}'),
-                                  _miniLinha(
-                                      context,
-                                      Icons.engineering_outlined,
-                                      'Engenheiro',
-                                      obra['engenheiro']?.toString() ??
-                                          'Não informado'),
-                                  _miniLinha(
-                                      context,
-                                      Icons.description_outlined,
-                                      'Contrato',
-                                      obra['contrato']?.toString() ??
-                                          'Não informado'),
-                                ],
-                              ),
-                            ),
-                            const Divider(height: 1),
-                            TextButton.icon(
-                              onPressed: () => _abrirObra(obra),
-                              icon: const Icon(Icons.visibility_outlined,
-                                  size: 18),
-                              label: const Text('Detalhes'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _placeholderObra(BuildContext context) {
-    return Container(
-      color: FlutterFlowTheme.of(context).alternate,
-      child: Center(
-        child: Icon(Icons.image_not_supported_outlined,
-            size: 48, color: Colors.grey.shade400),
-      ),
-    );
-  }
-
-  Widget _miniLinha(
-      BuildContext context, IconData icon, String leg, String valor) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon,
-              size: 14, color: FlutterFlowTheme.of(context).secondaryText),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(leg, style: FlutterFlowTheme.of(context).labelSmall),
-                Text(valor, style: FlutterFlowTheme.of(context).bodySmall),
               ],
             ),
           ),
@@ -852,74 +650,288 @@ class _ClienteDetalhesWidgetState extends State<ClienteDetalhesWidget> {
     );
   }
 
-  Widget _colInfo(BuildContext context, Map<String, dynamic> c, int juridica) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _infoRow(context, Icons.badge_outlined, 'DOCUMENTO',
-            _formatDocumento(c['documento']?.toString(), juridica)),
-        _infoRow(context, Icons.wc_outlined, 'SEXO',
-            _formatSexo(c['sexo']?.toString())),
-        _infoRow(context, Icons.phone_outlined, 'TELEFONE',
-            _formatTelefone(c['telefone']?.toString())),
-        _infoRow(
-          context,
-          Icons.email_outlined,
-          'E-MAIL',
-          (c['email']?.toString().trim().isNotEmpty ?? false)
-              ? c['email'].toString()
-              : 'Não informado',
-        ),
-      ],
-    );
-  }
-
-  Widget _colInfo2(BuildContext context, Map<String, dynamic> c) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _infoRow(context, Icons.place_outlined, 'ENDEREÇO', _formatEndereco(c)),
-        _infoRow(
-          context,
-          Icons.notes_outlined,
-          'OBSERVAÇÕES',
-          (c['observacoes']?.toString().trim().isNotEmpty ?? false)
-              ? c['observacoes'].toString()
-              : 'Sem observações',
-        ),
-        _infoRow(context, Icons.calendar_today_outlined, 'CADASTRADO EM',
-            _formatDate(c['created_at'])),
-        _infoRow(context, Icons.update_outlined, 'ÚLTIMA ATUALIZAÇÃO',
-            _formatDate(c['updated_at'])),
-      ],
-    );
-  }
-
-  Widget _infoRow(
-      BuildContext context, IconData icon, String titulo, String valor) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+  Widget _buildResumoCard(
+    FlutterFlowTheme theme,
+    Map<String, dynamic> c,
+    int juridica,
+    bool ativo,
+  ) {
+    final nome = '${c['nome'] ?? ''}'.trim();
+    return RdoSectionCard(
+      title: nome.isEmpty ? 'Cliente' : nome,
+      subtitle: juridica == 1 ? 'Pessoa jurídica' : 'Pessoa física',
+      icon: juridica == 1 ? Icons.domain_outlined : Icons.person_outline,
+      margin: EdgeInsets.zero,
+      trailing: _statusChip(theme, ativo, juridica),
+      contentPadding: EdgeInsets.zero,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icon, size: 18, color: FlutterFlowTheme.of(context).primary),
-              const SizedBox(width: 6),
-              Text(
-                titulo,
-                style: FlutterFlowTheme.of(context).labelMedium.override(
-                      fontWeight: FontWeight.bold,
-                      color: FlutterFlowTheme.of(context).secondaryText,
+          RdoKpiStrip(
+            itens: [
+              RdoKpiData(label: 'Obras', value: '${_obras.length}'),
+              RdoKpiData(
+                label: 'Ativas',
+                value: '${_countObras(1)}',
+                destaque: true,
+              ),
+              RdoKpiData(label: 'Andamento', value: '${_countObras(2)}'),
+              RdoKpiData(label: 'Concluídas', value: '${_countObras(3)}'),
+            ],
+          ),
+          Divider(height: 1, color: theme.alternate),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: theme.primary.withValues(alpha: 0.12),
+                  child: Text(
+                    _iniciais(nome),
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: theme.primary,
                     ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _formatDocumento(c['documento']?.toString(), juridica),
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: theme.primaryText,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _formatTelefone(c['telefone']?.toString()),
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: theme.secondaryText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusChip(FlutterFlowTheme theme, bool ativo, int juridica) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: (ativo ? Colors.green.shade700 : Colors.red.shade700)
+                  .withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              ativo ? 'Ativo' : 'Inativo',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: ativo ? Colors.green.shade700 : Colors.red.shade700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: theme.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              juridica == 1 ? 'PJ' : 'PF',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: theme.primary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildObraItem(FlutterFlowTheme theme, Map<String, dynamic> obra) {
+    final sid = _int(obra['situacao_id']);
+    final foto = obra['foto_url']?.toString();
+    final nome = '${obra['nome'] ?? ''}'.trim();
+    final cidade = '${obra['cidade'] ?? ''}'.trim();
+    final estado = '${obra['estado'] ?? ''}'.trim();
+    final local = [
+      if (cidade.isNotEmpty) cidade,
+      if (estado.isNotEmpty) estado,
+    ].join('/');
+    final engenheiro = obra['engenheiro']?.toString().trim() ?? '';
+    final contrato = obra['contrato']?.toString().trim() ?? '';
+
+    return Material(
+      color: theme.secondaryBackground,
+      child: InkWell(
+        onTap: () => _abrirObra(obra),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(width: 3, color: _corSituacaoObra(sid)),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox(
+                          width: 56,
+                          height: 56,
+                          child: foto != null && foto.isNotEmpty
+                              ? Image.network(
+                                  foto,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      _placeholderObra(theme),
+                                )
+                              : _placeholderObra(theme),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    nome.isEmpty ? 'Obra sem nome' : nome,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: theme.primaryText,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _corSituacaoObra(sid)
+                                        .withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    _labelSituacaoObra(sid),
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: _corSituacaoObra(sid),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              local.isEmpty ? 'Local não informado' : local,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: theme.secondaryText,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              [
+                                if (engenheiro.isNotEmpty) engenheiro,
+                                if (contrato.isNotEmpty) 'Contrato $contrato',
+                                'Início ${obra['data_inicio'] ?? '—'}',
+                              ].join(' · '),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 11.5,
+                                color: theme.secondaryText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: theme.secondaryText,
+                        size: 20,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
-          Padding(
-            padding: const EdgeInsets.only(left: 24, top: 4),
+        ),
+      ),
+    );
+  }
+
+  Widget _placeholderObra(FlutterFlowTheme theme) {
+    return Container(
+      color: theme.primaryBackground,
+      child: Icon(
+        Icons.apartment_outlined,
+        size: 24,
+        color: theme.secondaryText.withValues(alpha: 0.45),
+      ),
+    );
+  }
+
+  Widget _infoRow(FlutterFlowTheme theme, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
             child: Text(
-              valor,
-              style: FlutterFlowTheme.of(context).bodyMedium,
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: theme.secondaryText,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: theme.primaryText,
+              ),
             ),
           ),
         ],

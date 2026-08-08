@@ -2,6 +2,7 @@ import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/form_field_controller.dart';
 import 'editar_obra_widget.dart' show EditarObraWidget;
 import 'package:flutter/material.dart';
+import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 
 class EditarObraModel extends FlutterFlowModel<EditarObraWidget> {
   ///  Local state fields for this page.
@@ -69,11 +70,13 @@ class EditarObraModel extends FlutterFlowModel<EditarObraWidget> {
   // State field(s) for TextFieldInicio widget.
   FocusNode? textFieldInicioFocusNode;
   TextEditingController? textFieldInicioTextController;
+  late MaskTextInputFormatter textFieldInicioMask;
   String? Function(BuildContext, String?)?
       textFieldInicioTextControllerValidator;
   // State field(s) for TextFieldFim widget.
   FocusNode? textFieldFimFocusNode;
   TextEditingController? textFieldFimTextController;
+  late MaskTextInputFormatter textFieldFimMask;
   String? Function(BuildContext, String?)? textFieldFimTextControllerValidator;
   // State field(s) for TextFieldContrato widget.
   FocusNode? textFieldContratoFocusNode;

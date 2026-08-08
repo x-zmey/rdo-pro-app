@@ -3,6 +3,7 @@ import '/componentes/atividades_relatorios/show_equipamentos_atividade_relatorio
 import '/componentes/atividades_relatorios/show_fotos_atividade/show_fotos_atividade_widget.dart';
 import '/componentes/atividades_relatorios/show_insumos_atividade_relatorio/show_insumos_atividade_relatorio_widget.dart';
 import '/componentes/atividades_relatorios/show_mao_obra_atividade_relatorio/show_mao_obra_atividade_relatorio_widget.dart';
+import '/flutter_flow/custom_functions.dart';
 import '/flutter_flow/flutter_flow_drop_down.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
@@ -16,6 +17,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'show_atividade_relatorio_model.dart';
 export 'show_atividade_relatorio_model.dart';
+
+String _qtdRealizadaTexto(num? q) =>
+    q == null ? '' : formatQuantidadeRelatorio(q);
 
 class ShowAtividadeRelatorioWidget extends StatefulWidget {
   const ShowAtividadeRelatorioWidget({
@@ -468,10 +472,10 @@ class _ShowAtividadeRelatorioWidgetState
                                       controller: _model
                                               .textFieldQtdRealizadaTextController ??=
                                           TextEditingController(
-                                        text:
-                                            showAtividadeRelatorioGetDadosAtividadeRowList
-                                                .firstOrNull?.qtdRealizada
-                                                ?.toString(),
+                                        text: _qtdRealizadaTexto(
+                                          showAtividadeRelatorioGetDadosAtividadeRowList
+                                              .firstOrNull?.qtdRealizada,
+                                        ),
                                       ),
                                       focusNode:
                                           _model.textFieldQtdRealizadaFocusNode,

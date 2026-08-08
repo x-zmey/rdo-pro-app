@@ -37,6 +37,7 @@ Future<Database> initializeDatabaseFromDbFile(
   await _ensureRelatorioAtividadesItensCreatedByColumn(database);
   await _ensureRelatorioAtividadesItensQtdProduzidaColumn(database);
   await _migrateObrasLegacyBlobColumnsIfNeeded(database);
+  await _ensureObrasFotoLocalColumn(database);
   await _ensureMotivoSaidaCedoMaoObraPresenca(database);
   await _ensureRelatorioAtividadesOrdemColumns(database);
   await _ensureOrdensServicoStatusIdColumn(database);
@@ -300,6 +301,7 @@ CREATE TABLE obras_new (
   data_final TEXT,
   contrato TEXT,
   foto TEXT,
+  foto_local TEXT,
   created_by TEXT,
   situacao_id INTEGER,
   synced INTEGER NOT NULL DEFAULT 0,
@@ -314,7 +316,7 @@ CREATE TABLE obras_new (
 INSERT INTO obras_new (
   id, uuid_pai, uuid, user_id, user_uuid, cliente_id, cliente_uuid,
   grupo_id, grupo_uuid, nome, rua, numero, complemento, bairro, cidade, estado,
-  engenheiro, data_inicio, data_final, contrato, foto, created_by,
+  engenheiro, data_inicio, data_final, contrato, foto, foto_local, created_by,
   situacao_id, synced, sync_try_count, last_sync_date, created_at, updated_at, situacao
 )
 SELECT
@@ -339,6 +341,7 @@ SELECT
   data_final,
   contrato,
   foto,
+  NULL,
   created_by,
   CAST(situacao_id AS INTEGER),
   CAST(COALESCE(synced, 0) AS INTEGER),
@@ -368,6 +371,21 @@ FROM obras
         );
       }
     } catch (_) {}
+  } catch (_) {}
+}
+
+/// Caminho local do arquivo da foto da obra (download offline).
+/// [obras.foto] continua com o path relativo do S3 vindo do servidor.
+Future<void> _ensureObrasFotoLocalColumn(Database database) async {
+  try {
+    final info = await database.rawQuery('PRAGMA table_info(obras)');
+    if (info.isEmpty) return;
+    final has =
+        info.any((row) => (row['name'] as String?) == 'foto_local');
+    if (has) return;
+    await database.execute(
+      'ALTER TABLE obras ADD COLUMN foto_local TEXT',
+    );
   } catch (_) {}
 }
 

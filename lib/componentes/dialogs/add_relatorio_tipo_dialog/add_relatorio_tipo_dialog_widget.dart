@@ -139,6 +139,10 @@ class _AddRelatorioTipoDialogWidgetState
                             relDet?.obraUuid ?? widget!.obraUuid,
                             ParamType.String,
                           ),
+                          'novaAtividade': serializeParam(
+                            true,
+                            ParamType.bool,
+                          ),
                         }.withoutNulls,
                         extra: <String, dynamic>{
                           '__transition_info__': TransitionInfo(

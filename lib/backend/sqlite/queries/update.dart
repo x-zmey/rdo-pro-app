@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import '/backend/sqlite/situacao_soft_delete.dart';
+import '/flutter_flow/flutter_flow_util.dart';
 
 /// Atualiza `updated_at` e `synced = 0` no relatório pai (edição local / LWW).
 Future<void> _touchRelatorioModificadoLocal(
@@ -13,6 +14,86 @@ Future<void> _touchRelatorioModificadoLocal(
     'UPDATE relatorios SET updated_at = ?, synced = ? WHERE id = ?',
     [ts, 0, relatorioId],
   );
+}
+
+String _activeTenantOwner() => FFAppState().creatorUuid.trim();
+
+Future<bool> _obraUuidOwnedByActiveTenant(
+  Database database,
+  String? obraUuid,
+) async {
+  final owner = _activeTenantOwner();
+  final u = (obraUuid ?? '').trim();
+  if (owner.isEmpty || u.isEmpty) return false;
+  final rows = await database.rawQuery(
+    'SELECT 1 FROM obras WHERE uuid = ? AND user_uuid = ? LIMIT 1',
+    [u, owner],
+  );
+  return rows.isNotEmpty;
+}
+
+Future<bool> _relatorioUuidOwnedByActiveTenant(
+  Database database,
+  String? relatorioUuid,
+) async {
+  final owner = _activeTenantOwner();
+  final u = (relatorioUuid ?? '').trim();
+  if (owner.isEmpty || u.isEmpty) return false;
+  final rows = await database.rawQuery(
+    '''
+SELECT 1
+FROM relatorios AS r
+INNER JOIN obras AS o ON o.uuid = r.obra_uuid AND o.user_uuid = ?
+WHERE r.uuid = ?
+LIMIT 1
+''',
+    [owner, u],
+  );
+  return rows.isNotEmpty;
+}
+
+Future<bool> _relatorioIdOwnedByActiveTenant(
+  Database database,
+  int? relatorioId,
+) async {
+  final owner = _activeTenantOwner();
+  if (owner.isEmpty || relatorioId == null || relatorioId < 1) return false;
+  final rows = await database.rawQuery(
+    '''
+SELECT 1
+FROM relatorios AS r
+INNER JOIN obras AS o ON o.uuid = r.obra_uuid AND o.user_uuid = ?
+WHERE r.id = ?
+LIMIT 1
+''',
+    [owner, relatorioId],
+  );
+  return rows.isNotEmpty;
+}
+
+/// Filho com `relatorio_id` / `relatorio_uuid` — só muta se o RDO for do tenant.
+Future<bool> _childRowOwnedByActiveTenant(
+  Database database, {
+  required String table,
+  required String? uuid,
+}) async {
+  final owner = _activeTenantOwner();
+  final u = (uuid ?? '').trim();
+  if (owner.isEmpty || u.isEmpty) return false;
+  final rows = await database.rawQuery(
+    '''
+SELECT 1
+FROM $table AS c
+INNER JOIN relatorios AS r
+  ON r.id = c.relatorio_id
+  OR (c.relatorio_uuid IS NOT NULL AND TRIM(c.relatorio_uuid) != '' AND r.uuid = c.relatorio_uuid)
+INNER JOIN obras AS o ON o.uuid = r.obra_uuid AND o.user_uuid = ?
+WHERE c.uuid = ?
+LIMIT 1
+''',
+    [owner, u],
+  );
+  return rows.isNotEmpty;
 }
 
 String _sqlNowUtcEscaped() =>
@@ -70,6 +151,8 @@ Future performCadastrarRelatorio(
   int? obraId,
   int? modeloId,
   String? dataexecutado,
+  String? dataInicio,
+  String? dataFinal,
   String? criador,
   int? numero,
   String? uuid,
@@ -80,6 +163,10 @@ Future performCadastrarRelatorio(
 }) {
   String esc(String? s) => (s ?? '').replaceAll("'", "''");
   final now = esc(DateTime.now().toUtc().toIso8601String());
+  final di = (dataInicio ?? '').trim();
+  final df = (dataFinal ?? '').trim();
+  final dataInicioSql = di.isEmpty ? 'NULL' : "'${esc(di)}'";
+  final dataFinalSql = df.isEmpty ? 'NULL' : "'${esc(df)}'";
   final query = '''
 INSERT INTO relatorios (
 uuid,
@@ -90,7 +177,9 @@ obra_uuid,
 modelo_id,
 modelo_uuid,
 numero, 
-data_executado, 
+data_executado,
+data_inicio,
+data_final,
 horas_trabalhadas, 
 entrada_manha,
 saida_manha,
@@ -104,7 +193,7 @@ created_by,
 situacao,
 updated_at,
 synced) VALUES 
-('${esc(uuid)}', ${userId}, '${esc(userUuid)}',  ${obraId}, '${esc(obraUuid)}', ${modeloId}, '${esc(modeloUuid)}',${numero}, '${esc(dataexecutado)}',  0, '08:00',  '11:00', '11:00', '13:00', '13:00',  '17:00', '${esc(criador)}', 1, '${esc(creatorUuid)}', 0, '$now', 0)
+('${esc(uuid)}', ${userId}, '${esc(userUuid)}',  ${obraId}, '${esc(obraUuid)}', ${modeloId}, '${esc(modeloUuid)}',${numero}, '${esc(dataexecutado)}', $dataInicioSql, $dataFinalSql,  0, '08:00',  '11:00', '11:00', '13:00', '13:00',  '17:00', '${esc(criador)}', 1, '${esc(creatorUuid)}', 0, '$now', 0)
 
 ''';
   return database.rawQuery(query);
@@ -131,8 +220,10 @@ Future performUpdateObra(
   String? dataInicio,
   String? dataFinal,
   String? contrato,
-}) {
+}) async {
+  if (!await _obraUuidOwnedByActiveTenant(database, uuid)) return;
   String esc(String? v) => (v ?? '').replaceAll("'", "''");
+  final owner = esc(_activeTenantOwner());
   final gid = grupoId ?? 0;
   final cid = clienteId ?? 0;
   final gu = esc(grupoUuid);
@@ -158,6 +249,7 @@ UPDATE obras SET
   synced = 0,
   updated_at = '$now'
 WHERE uuid = '${esc(uuid)}'
+  AND user_uuid = '$owner'
 ''';
   return database.rawQuery(query);
 }
@@ -174,6 +266,10 @@ Future performAddComentarioRelatorio(
   String? relatorioUuid,
   String? uuid,
 }) async {
+  final owned = (relatorioUuid ?? '').trim().isNotEmpty
+      ? await _relatorioUuidOwnedByActiveTenant(database, relatorioUuid)
+      : await _relatorioIdOwnedByActiveTenant(database, relatorioId);
+  if (!owned) return;
   final ts = _sqlNowUtcEscaped();
   final query = '''
 INSERT INTO relatorio_comentarios (uuid, relatorio_id, relatorio_uuid, texto, created_by, situacao, created_at, updated_at, synced) VALUES 
@@ -200,6 +296,10 @@ Future performAddOcorrenciaRelatorio(
   String? tipoUuid,
   int? situacao,
 }) async {
+  final owned = (relatorioUuid ?? '').trim().isNotEmpty
+      ? await _relatorioUuidOwnedByActiveTenant(database, relatorioUuid)
+      : await _relatorioIdOwnedByActiveTenant(database, relatorioId);
+  if (!owned) return;
   final sit = situacao ?? kSituacaoAtivo;
   final ts = _sqlNowUtcEscaped();
   final query = '''
@@ -223,6 +323,10 @@ Future performAddAnexoRelatorio(
   String? relatorioUuid,
   String? uuid,
 }) async {
+  final owned = (relatorioUuid ?? '').trim().isNotEmpty
+      ? await _relatorioUuidOwnedByActiveTenant(database, relatorioUuid)
+      : await _relatorioIdOwnedByActiveTenant(database, relatorioId);
+  if (!owned) return;
   final now = DateTime.now().toUtc().toIso8601String();
   final rid = relatorioId ?? 0;
   await database.insert(
@@ -308,7 +412,7 @@ Future performInsertAtividadeRelatorio(
   String? local,
   String? descricao,
   int? quantidade,
-  int? qtdRealizada,
+  num? qtdRealizada,
   String? unidade,
   String? item,
   int? tarefaId,
@@ -448,9 +552,9 @@ INSERT INTO relatorio_atividades_itens (uuid, relatorio_atividade_id,  relatorio
 /// BEGIN UPDATEITEMATIVIDADE
 Future performUpdateItemAtividade(
   Database database, {
-  int? qtdRealizada,
+  num? qtdRealizada,
   String? uuid,
-  int? qtdUtilizada,
+  num? qtdUtilizada,
   num? qtdProduzida,
 }) async {
   if (uuid == null || uuid.trim().isEmpty) return;
@@ -465,8 +569,8 @@ Future performUpdateItemAtividade(
   if (current.isEmpty) return;
 
   final row = current.first;
-  final util = qtdUtilizada ?? _asIntQtdItem(row['qtd_utilizada']) ?? 0;
-  final real = qtdRealizada ?? _asIntQtdItem(row['qtd_realizada']) ?? 0;
+  final util = qtdUtilizada ?? _asNumQtdItem(row['qtd_utilizada']) ?? 0;
+  final real = qtdRealizada ?? _asNumQtdItem(row['qtd_realizada']) ?? 0;
   final prod = qtdProduzida ?? _asNumQtdItem(row['qtd_produzida']) ?? 0;
   final ts = DateTime.now().toUtc().toIso8601String();
 
@@ -540,7 +644,7 @@ Future performUpdateAtividade(
   required String uuid,
   String? local,
   String? descricao,
-  int? qtdRealizada,
+  num? qtdRealizada,
   String? unidade,
   int? situacao,
   int? ordemId,
@@ -646,7 +750,9 @@ Future performUpdateRelatorio(
   String? inicioIntervalo,
   String? fimIntervalo,
   String? saidaTarde,
-}) {
+}) async {
+  final relatorioId = int.tryParse((id ?? '').trim()) ?? 0;
+  if (!await _relatorioIdOwnedByActiveTenant(database, relatorioId)) return;
   final ts = _sqlNowUtcEscaped();
   final query = '''
 UPDATE relatorios set 
@@ -687,6 +793,10 @@ Future performSetMaoObraRelatorio(
   String? companyUuid,
   String? obraItemUuid,
 }) async {
+  final owned = (relatorioUuid ?? '').trim().isNotEmpty
+      ? await _relatorioUuidOwnedByActiveTenant(database, relatorioUuid)
+      : await _relatorioIdOwnedByActiveTenant(database, relatorioId);
+  if (!owned) return;
   final ts = _sqlNowUtcEscaped();
   final horasSql = _sqlNullableHoras(horasTrabalhadas);
   final query = '''
@@ -1119,6 +1229,7 @@ Future performSoftDeleteRelatorio(
   String? uuid,
 }) async {
   if (uuid == null || uuid.isEmpty) return;
+  if (!await _relatorioUuidOwnedByActiveTenant(database, uuid)) return;
 
   final ts = _sqlNowUtcEscaped();
   const ex = kSituacaoExcluidoLogico;
@@ -1199,6 +1310,13 @@ Future performUpdateComentario(
   String? uuid,
   String? texto,
 }) async {
+  if (!await _childRowOwnedByActiveTenant(
+    database,
+    table: 'relatorio_comentarios',
+    uuid: uuid,
+  )) {
+    return;
+  }
   final ts = _sqlNowUtcEscaped();
   final query = '''
 UPDATE relatorio_comentarios SET texto = '${texto}', updated_at = '$ts', synced = 0 WHERE uuid = '${uuid}'
@@ -1223,6 +1341,13 @@ Future performUpdateOcorrencia(
   String? horaFim,
   int? situacao,
 }) async {
+  if (!await _childRowOwnedByActiveTenant(
+    database,
+    table: 'relatorio_ocorrencias',
+    uuid: uuid,
+  )) {
+    return;
+  }
   final sit = situacao ?? kSituacaoAtivo;
   final ts = _sqlNowUtcEscaped();
   final query = '''
@@ -1251,7 +1376,9 @@ Future performAlterarStatusRelatorio(
   Database database, {
   String? id,
   int? status,
-}) {
+}) async {
+  final relatorioId = int.tryParse((id ?? '').trim()) ?? 0;
+  if (!await _relatorioIdOwnedByActiveTenant(database, relatorioId)) return;
   final ts = _sqlNowUtcEscaped();
   final query = '''
 UPDATE relatorios set status_id = ${status}, updated_at = '$ts', synced = 0 WHERE id = ${id};

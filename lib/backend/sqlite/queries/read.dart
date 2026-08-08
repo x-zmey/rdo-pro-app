@@ -9,6 +9,119 @@ Future<List<T>> _readQuery<T>(
 ) =>
     database.rawQuery(query).then((r) => r.map((e) => create(e)).toList());
 
+/// Colunas de quantidade têm afinidade INTEGER mas guardam REAL quando o valor
+/// tem casas decimais; um cast direto para `int` estoura em runtime.
+num? _asNumColuna(dynamic v) {
+  if (v == null) return null;
+  if (v is num) return v;
+  final t = v.toString().trim().replaceAll(',', '.');
+  if (t.isEmpty) return null;
+  return num.tryParse(t);
+}
+
+/// SQLite/JSON podem devolver int como `double` (ex.: 1.0) — nunca use `as int?`.
+int? _asIntColuna(dynamic v) {
+  if (v == null) return null;
+  if (v is int) return v;
+  if (v is num) return v.toInt();
+  final t = v.toString().trim();
+  if (t.isEmpty) return null;
+  return int.tryParse(t) ?? num.tryParse(t.replaceAll(',', '.'))?.toInt();
+}
+
+String _escSql(String? v) => (v ?? '').replaceAll("'", "''");
+
+/// Dono SaaS do tenant ativo. Vazio → leituras devem retornar lista vazia.
+String _ownerOrEmpty(String? accountOwnerUuid) =>
+    (accountOwnerUuid ?? '').trim();
+
+/// Escopo: obra pertence ao tenant (`obras.user_uuid`).
+String _sqlJoinObraTenant({
+  required String obraUuidExpr,
+  required String ownerEscaped,
+  String obraAlias = 'ob_tenant',
+}) =>
+    '''INNER JOIN obras AS $obraAlias
+  ON $obraAlias.uuid = $obraUuidExpr
+  AND $obraAlias.user_uuid = '$ownerEscaped'
+  AND ($obraAlias.situacao IS NULL OR CAST($obraAlias.situacao AS INTEGER) != $kSituacaoExcluidoLogico)''';
+
+/// Escopo: relatório → obra do tenant.
+String _sqlJoinRelatorioTenant({
+  required String relatorioUuidExpr,
+  required String ownerEscaped,
+  String relAlias = 'r_tenant',
+  String obraAlias = 'ob_tenant',
+}) =>
+    '''INNER JOIN relatorios AS $relAlias
+  ON $relAlias.uuid = $relatorioUuidExpr
+  AND ($relAlias.situacao IS NULL OR CAST($relAlias.situacao AS INTEGER) != $kSituacaoExcluidoLogico)
+${_sqlJoinObraTenant(obraUuidExpr: '$relAlias.obra_uuid', ownerEscaped: ownerEscaped, obraAlias: obraAlias)}''';
+
+/// Nome para exibição (igual API: nome+sobrenome → razao_social → email).
+String _sqlNomeExibicaoUser(String alias) => '''
+COALESCE(
+  NULLIF(TRIM(
+    TRIM(COALESCE($alias.nome, '')) ||
+    CASE
+      WHEN TRIM(COALESCE($alias.sobrenome, '')) != ''
+      THEN ' ' || TRIM($alias.sobrenome)
+      ELSE ''
+    END
+  ), ''),
+  NULLIF(TRIM(COALESCE($alias.razao_social, '')), ''),
+  NULLIF(TRIM(COALESCE($alias.email, '')), '')
+)
+''';
+
+/// JOINs para resolver quem preencheu o RDO (`r.criador` / `r.created_by`).
+/// Cobre UUID, id local, `id_server` e `sync_id_mapping`.
+String get _sqlJoinsCriadorRelatorio => '''
+LEFT JOIN users AS u_criador_uuid
+  ON LOWER(TRIM(COALESCE(u_criador_uuid.uuid, ''))) = LOWER(TRIM(COALESCE(r.criador, '')))
+LEFT JOIN users AS u_criador_id
+  ON CAST(u_criador_id.id AS TEXT) = TRIM(CAST(r.criador AS TEXT))
+LEFT JOIN users AS u_criador_id_server
+  ON u_criador_id_server.id_server IS NOT NULL
+  AND CAST(u_criador_id_server.id_server AS TEXT) = TRIM(CAST(r.criador AS TEXT))
+LEFT JOIN sync_id_mapping AS map_criador
+  ON map_criador.tabela = 'users'
+  AND (
+    LOWER(TRIM(map_criador.uuid)) = LOWER(TRIM(COALESCE(r.criador, '')))
+    OR CAST(map_criador.id_servidor AS TEXT) = TRIM(CAST(r.criador AS TEXT))
+  )
+LEFT JOIN users AS u_criador_map
+  ON LOWER(TRIM(COALESCE(u_criador_map.uuid, ''))) = LOWER(TRIM(map_criador.uuid))
+LEFT JOIN users AS u_created_by_uuid
+  ON LOWER(TRIM(COALESCE(u_created_by_uuid.uuid, ''))) = LOWER(TRIM(COALESCE(r.created_by, '')))
+LEFT JOIN users AS u_created_by_id
+  ON CAST(u_created_by_id.id AS TEXT) = TRIM(CAST(r.created_by AS TEXT))
+LEFT JOIN users AS u_created_by_id_server
+  ON u_created_by_id_server.id_server IS NOT NULL
+  AND CAST(u_created_by_id_server.id_server AS TEXT) = TRIM(CAST(r.created_by AS TEXT))
+LEFT JOIN sync_id_mapping AS map_created_by
+  ON map_created_by.tabela = 'users'
+  AND (
+    LOWER(TRIM(map_created_by.uuid)) = LOWER(TRIM(COALESCE(r.created_by, '')))
+    OR CAST(map_created_by.id_servidor AS TEXT) = TRIM(CAST(r.created_by AS TEXT))
+  )
+LEFT JOIN users AS u_created_by_map
+  ON LOWER(TRIM(COALESCE(u_created_by_map.uuid, ''))) = LOWER(TRIM(map_created_by.uuid))
+''';
+
+String get _sqlExprCriadorNomeRelatorio => '''
+COALESCE(
+  ${_sqlNomeExibicaoUser('u_criador_uuid')},
+  ${_sqlNomeExibicaoUser('u_criador_id')},
+  ${_sqlNomeExibicaoUser('u_criador_id_server')},
+  ${_sqlNomeExibicaoUser('u_criador_map')},
+  ${_sqlNomeExibicaoUser('u_created_by_uuid')},
+  ${_sqlNomeExibicaoUser('u_created_by_id')},
+  ${_sqlNomeExibicaoUser('u_created_by_id_server')},
+  ${_sqlNomeExibicaoUser('u_created_by_map')}
+) AS criador_nome
+''';
+
 /// BEGIN CARREGAOBRAS
 Future<List<CarregaObrasRow>> performCarregaObras(
   Database database, {
@@ -135,6 +248,12 @@ class CarregaObrasRow extends SqliteRow {
   String? get dataInicio => data['data_inicio'] as String?;
   String? get dataFinal => data['data_final'] as String?;
 
+  /// Path relativo no S3 (ex.: `obras/arquivo.jpg`) vindo do servidor.
+  String? get foto => data['foto'] as String?;
+
+  /// Arquivo da capa baixado no dispositivo; preferir na UI (offline).
+  String? get fotoLocal => data['foto_local'] as String?;
+
   int? get situacaoId {
     final v = data['situacao_id'];
     if (v == null) return null;
@@ -223,6 +342,12 @@ class ObraDetalhesRow extends SqliteRow {
   String? get dataFinal => data['data_final'] as String?;
   String? get contrato => data['contrato'] as String?;
   String? get engenheiro => data['engenheiro'] as String?;
+
+  /// Path relativo no S3 (ex.: `obras/uuid.jpg`), vindo do servidor.
+  String? get foto => data['foto'] as String?;
+
+  /// Caminho do arquivo baixado no dispositivo (offline). Preferir na UI.
+  String? get fotoLocal => data['foto_local'] as String?;
 }
 
 /// END OBRADETALHES
@@ -250,25 +375,13 @@ Future<List<RelatoriosObraRow>> performRelatoriosObra(
 SELECT
   r.*,
   sr.nome AS status_nome,
-  COALESCE(
-    u_criador_uuid.nome,
-    u_criador_id.nome,
-    u_created_by_uuid.nome,
-    u_created_by_id.nome
-  ) AS criador_nome
+  $_sqlExprCriadorNomeRelatorio
 FROM relatorios AS r
 INNER JOIN obras AS ob ON ob.uuid = r.obra_uuid AND ob.user_uuid = '${esc(owner)}'
   AND (ob.situacao IS NULL OR CAST(ob.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
 LEFT JOIN status_relatorios AS sr
   ON sr.id = r.status_id
-LEFT JOIN users AS u_criador_uuid
-  ON u_criador_uuid.uuid = r.criador
-LEFT JOIN users AS u_criador_id
-  ON CAST(u_criador_id.id AS TEXT) = CAST(r.criador AS TEXT)
-LEFT JOIN users AS u_created_by_uuid
-  ON u_created_by_uuid.uuid = r.created_by
-LEFT JOIN users AS u_created_by_id
-  ON CAST(u_created_by_id.id AS TEXT) = CAST(r.created_by AS TEXT)
+$_sqlJoinsCriadorRelatorio
 WHERE r.obra_uuid = '${esc(obraUuid)}'
   AND (r.situacao IS NULL OR CAST(r.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
 ORDER BY COALESCE(NULLIF(trim(r.updated_at), ''), r.created_at) DESC, r.numero DESC, r.id DESC$limitOffset;
@@ -324,26 +437,14 @@ Future<List<RelatoriosGeraisRow>> performRelatoriosGerais(
 SELECT
   r.*,
   sr.nome AS status_nome,
-  COALESCE(
-    u_criador_uuid.nome,
-    u_criador_id.nome,
-    u_created_by_uuid.nome,
-    u_created_by_id.nome
-  ) AS criador_nome,
+  $_sqlExprCriadorNomeRelatorio,
   o.nome AS obra_nome
 FROM relatorios AS r
 INNER JOIN obras AS o ON o.uuid = r.obra_uuid AND o.user_uuid = '${esc(owner)}'
   AND (o.situacao IS NULL OR CAST(o.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
 LEFT JOIN status_relatorios AS sr
   ON sr.id = r.status_id
-LEFT JOIN users AS u_criador_uuid
-  ON u_criador_uuid.uuid = r.criador
-LEFT JOIN users AS u_criador_id
-  ON CAST(u_criador_id.id AS TEXT) = CAST(r.criador AS TEXT)
-LEFT JOIN users AS u_created_by_uuid
-  ON u_created_by_uuid.uuid = r.created_by
-LEFT JOIN users AS u_created_by_id
-  ON CAST(u_created_by_id.id AS TEXT) = CAST(r.created_by AS TEXT)
+$_sqlJoinsCriadorRelatorio
 WHERE (r.situacao IS NULL OR CAST(r.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
 $allowedFilter
 ORDER BY COALESCE(r.data_executado, ''), r.id DESC
@@ -445,6 +546,16 @@ class ModelosRelatoriosRow extends SqliteRow {
   String get nome => data['nome'] as String;
   String get uuid => data['uuid'] as String;
   String? get logomarcaFotos => data['logomarca_fotos'] as String?;
+
+  /// 1 = data única, 2 = período (igual à web / API).
+  int get tipoData {
+    final v = data['tipo_data'];
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v?.toString() ?? '') ?? 1;
+  }
+
+  bool get isPeriodo => tipoData == 2;
 }
 
 /// END MODELOSRELATORIOS
@@ -453,19 +564,25 @@ class ModelosRelatoriosRow extends SqliteRow {
 Future<List<CarregaUltimoRelatorioRow>> performCarregaUltimoRelatorio(
   Database database, {
   String? accountOwnerUuid,
+  String? obraUuid,
 }) {
   String esc(String? v) => (v ?? '').replaceAll("'", "''");
   final owner = (accountOwnerUuid ?? '').trim();
   if (owner.isEmpty) {
     return Future.value(<CarregaUltimoRelatorioRow>[]);
   }
+  final obra = (obraUuid ?? '').trim();
+  final obraFilter = obra.isEmpty
+      ? ''
+      : "AND r.obra_uuid = '${esc(obra)}'";
   final query = '''
 SELECT r.*
 FROM relatorios r
 INNER JOIN obras AS o ON o.uuid = r.obra_uuid AND o.user_uuid = '${esc(owner)}'
   AND (o.situacao IS NULL OR CAST(o.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
 WHERE (r.situacao IS NULL OR CAST(r.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
-ORDER BY r.numero DESC
+$obraFilter
+ORDER BY r.numero DESC, r.id DESC
 LIMIT 1
 ''';
   return _readQuery(database, query, (d) => CarregaUltimoRelatorioRow(d));
@@ -486,10 +603,18 @@ class CarregaUltimoRelatorioRow extends SqliteRow {
 Future<List<ListaComentariosRelatoriosRow>> performListaComentariosRelatorios(
   Database database, {
   String? relatorioUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<ListaComentariosRelatoriosRow>[]);
+  }
   final query = '''
-SELECT * FROM relatorio_comentarios WHERE relatorio_uuid = '${relatorioUuid}'
-  AND (situacao IS NULL OR CAST(situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
+SELECT c.*
+FROM relatorio_comentarios AS c
+${_sqlJoinRelatorioTenant(relatorioUuidExpr: "c.relatorio_uuid", ownerEscaped: _escSql(owner))}
+WHERE c.relatorio_uuid = '${_escSql(relatorioUuid)}'
+  AND (c.situacao IS NULL OR CAST(c.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
 ''';
   return _readQuery(database, query, (d) => ListaComentariosRelatoriosRow(d));
 }
@@ -510,16 +635,22 @@ class ListaComentariosRelatoriosRow extends SqliteRow {
 Future<List<CarregaOcorrenciasRelatorioRow>> performCarregaOcorrenciasRelatorio(
   Database database, {
   String? relatorioUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<CarregaOcorrenciasRelatorioRow>[]);
+  }
   final query = '''
 SELECT
   o.*,
   tp.nome AS tipo_nome,
   u.nome AS autor_nome
 FROM relatorio_ocorrencias AS o
+${_sqlJoinRelatorioTenant(relatorioUuidExpr: "o.relatorio_uuid", ownerEscaped: _escSql(owner))}
 LEFT JOIN tipo_ocorrencias AS tp ON tp.uuid = o.tipo_uuid
 LEFT JOIN users AS u ON u.uuid = o.created_by
-WHERE o.relatorio_uuid = '${relatorioUuid}'
+WHERE o.relatorio_uuid = '${_escSql(relatorioUuid)}'
   AND ${sqlNaoExcluidoPorSituacao('o')}
 ORDER BY o.id ASC
 ''';
@@ -554,11 +685,18 @@ Future<List<CarregaItensObraRow>> performCarregaItensObra(
   String? tipo,
   int? obraId,
   String? obraUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<CarregaItensObraRow>[]);
+  }
   final query = '''
-SELECT * FROM obra_itens
-WHERE obra_uuid = '${obraUuid}' AND tipo = '${tipo}'
-  AND ${sqlNaoExcluidoPorSituacao()}
+SELECT oi.*
+FROM obra_itens AS oi
+${_sqlJoinObraTenant(obraUuidExpr: "oi.obra_uuid", ownerEscaped: _escSql(owner))}
+WHERE oi.obra_uuid = '${_escSql(obraUuid)}' AND oi.tipo = '${_escSql(tipo)}'
+  AND ${sqlNaoExcluidoPorSituacao('oi')}
 ''';
   return _readQuery(database, query, (d) => CarregaItensObraRow(d));
 }
@@ -604,7 +742,12 @@ class CarregaItensObraRow extends SqliteRow {
 Future<List<CarregaComentariosObraRow>> performCarregaComentariosObra(
   Database database, {
   String? obraUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<CarregaComentariosObraRow>[]);
+  }
   final query = '''
 SELECT
   oco.*,
@@ -617,13 +760,14 @@ SELECT
   ) AS autor_nome
 FROM relatorio_comentarios AS oco
 JOIN relatorios AS rel ON rel.uuid = oco.relatorio_uuid
+${_sqlJoinObraTenant(obraUuidExpr: "rel.obra_uuid", ownerEscaped: _escSql(owner))}
 LEFT JOIN users AS u_criador_uuid
   ON u_criador_uuid.uuid = rel.criador
 LEFT JOIN users AS u_criador_id
   ON CAST(u_criador_id.id AS TEXT) = CAST(rel.criador AS TEXT)
 LEFT JOIN users AS u_comentario
   ON u_comentario.uuid = oco.created_by
-WHERE rel.obra_uuid = '${obraUuid}'
+WHERE rel.obra_uuid = '${_escSql(obraUuid)}'
   AND ${sqlNaoExcluidoPorSituacao('rel')}
   AND ${sqlNaoExcluidoPorSituacao('oco')}
 ORDER BY oco.created_at DESC
@@ -662,7 +806,12 @@ class CarregaComentariosObraRow extends SqliteRow {
 Future<List<CarregaOcorrenciasObraRow>> performCarregaOcorrenciasObra(
   Database database, {
   String? obraUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<CarregaOcorrenciasObraRow>[]);
+  }
   final query = '''
 SELECT
   oco.*,
@@ -677,6 +826,7 @@ SELECT
   ) AS autor_nome
 FROM relatorio_ocorrencias AS oco
 JOIN relatorios AS rel ON rel.uuid = oco.relatorio_uuid
+${_sqlJoinObraTenant(obraUuidExpr: "rel.obra_uuid", ownerEscaped: _escSql(owner))}
 LEFT JOIN tipo_ocorrencias AS tp ON tp.uuid = oco.tipo_uuid
 LEFT JOIN users AS u_criador_uuid
   ON u_criador_uuid.uuid = rel.criador
@@ -685,7 +835,7 @@ LEFT JOIN users AS u_criador_id
 LEFT JOIN users AS u_ocorrencia
   ON u_ocorrencia.uuid = oco.created_by
   OR CAST(u_ocorrencia.id AS TEXT) = TRIM(CAST(oco.created_by AS TEXT))
-WHERE rel.obra_uuid = '${obraUuid}'
+WHERE rel.obra_uuid = '${_escSql(obraUuid)}'
   AND ${sqlNaoExcluidoPorSituacao('rel')}
   AND ${sqlNaoExcluidoPorSituacao('oco')}
 ORDER BY oco.id DESC
@@ -722,11 +872,18 @@ class CarregaOcorrenciasObraRow extends SqliteRow {
 Future<List<ListaEtapasObraRow>> performListaEtapasObra(
   Database database, {
   String? obraUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<ListaEtapasObraRow>[]);
+  }
   final query = '''
-SELECT * FROM obra_etapas
-WHERE obra_uuid = '${obraUuid}'
-  AND ${sqlNaoExcluidoPorSituacao()}
+SELECT e.*
+FROM obra_etapas AS e
+${_sqlJoinObraTenant(obraUuidExpr: "e.obra_uuid", ownerEscaped: _escSql(owner))}
+WHERE e.obra_uuid = '${_escSql(obraUuid)}'
+  AND ${sqlNaoExcluidoPorSituacao('e')}
 ''';
   return _readQuery(database, query, (d) => ListaEtapasObraRow(d));
 }
@@ -746,11 +903,20 @@ class ListaEtapasObraRow extends SqliteRow {
 Future<List<ListaTarefasEtapasObraRow>> performListaTarefasEtapasObra(
   Database database, {
   String? etapaUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<ListaTarefasEtapasObraRow>[]);
+  }
   final query = '''
-SELECT * FROM obra_etapa_tarefas
-WHERE etapa_uuid = '${etapaUuid}' AND tipo = 'tarefa'
-  AND ${sqlNaoExcluidoPorSituacao()}
+SELECT t.*
+FROM obra_etapa_tarefas AS t
+INNER JOIN obra_etapas AS e ON e.uuid = t.etapa_uuid
+${_sqlJoinObraTenant(obraUuidExpr: "e.obra_uuid", ownerEscaped: _escSql(owner))}
+WHERE t.etapa_uuid = '${_escSql(etapaUuid)}' AND t.tipo = 'tarefa'
+  AND ${sqlNaoExcluidoPorSituacao('t')}
+  AND ${sqlNaoExcluidoPorSituacao('e')}
 ''';
   return _readQuery(database, query, (d) => ListaTarefasEtapasObraRow(d));
 }
@@ -827,12 +993,21 @@ class ListaTarefasEtapasObraRow extends SqliteRow {
 Future<List<ListaTarefasEtapasObraRow>> performListaPlanejamentoEtapasObra(
   Database database, {
   String? etapaUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<ListaTarefasEtapasObraRow>[]);
+  }
   final query = '''
-SELECT * FROM obra_etapa_tarefas
-WHERE etapa_uuid = '${etapaUuid}'
-AND (situacao IS NULL OR situacao != ${kSituacaoExcluidoLogico})
-ORDER BY item
+SELECT t.*
+FROM obra_etapa_tarefas AS t
+INNER JOIN obra_etapas AS e ON e.uuid = t.etapa_uuid
+${_sqlJoinObraTenant(obraUuidExpr: "e.obra_uuid", ownerEscaped: _escSql(owner))}
+WHERE t.etapa_uuid = '${_escSql(etapaUuid)}'
+AND (t.situacao IS NULL OR t.situacao != ${kSituacaoExcluidoLogico})
+AND ${sqlNaoExcluidoPorSituacao('e')}
+ORDER BY t.item
 ''';
   return _readQuery(database, query, (d) => ListaTarefasEtapasObraRow(d));
 }
@@ -844,13 +1019,23 @@ Future<List<UltimosRelatoriosObraRow>> performUltimosRelatoriosObra(
   Database database, {
   int? obraId,
   int? userId,
+  String? obraUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<UltimosRelatoriosObraRow>[]);
+  }
+  final obraFilter = (obraUuid ?? '').trim().isNotEmpty
+      ? "r.obra_uuid = '${_escSql(obraUuid)}'"
+      : "r.obra_id = ${obraId ?? 0}";
   final query = '''
-SELECT *
-FROM relatorios
-WHERE obra_id = ${obraId} AND user_id = ${userId}
-  AND (situacao IS NULL OR CAST(situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
-ORDER BY COALESCE(NULLIF(trim(updated_at), ''), created_at) DESC, numero DESC, id DESC
+SELECT r.*
+FROM relatorios AS r
+${_sqlJoinObraTenant(obraUuidExpr: "r.obra_uuid", ownerEscaped: _escSql(owner))}
+WHERE $obraFilter
+  AND (r.situacao IS NULL OR CAST(r.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
+ORDER BY COALESCE(NULLIF(trim(r.updated_at), ''), r.created_at) DESC, r.numero DESC, r.id DESC
 LIMIT 7 OFFSET 0;
 ''';
   return _readQuery(database, query, (d) => UltimosRelatoriosObraRow(d));
@@ -872,10 +1057,18 @@ class UltimosRelatoriosObraRow extends SqliteRow {
 Future<List<CarregaAnexosRelatorioRow>> performCarregaAnexosRelatorio(
   Database database, {
   String? relatorioUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<CarregaAnexosRelatorioRow>[]);
+  }
   final query = '''
-SELECT * FROM relatorio_anexos WHERE relatorio_uuid = '${relatorioUuid}'
-  AND (situacao IS NULL OR CAST(situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
+SELECT a.*
+FROM relatorio_anexos AS a
+${_sqlJoinRelatorioTenant(relatorioUuidExpr: "a.relatorio_uuid", ownerEscaped: _escSql(owner))}
+WHERE a.relatorio_uuid = '${_escSql(relatorioUuid)}'
+  AND (a.situacao IS NULL OR CAST(a.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
 ''';
   return _readQuery(database, query, (d) => CarregaAnexosRelatorioRow(d));
 }
@@ -895,7 +1088,12 @@ class CarregaAnexosRelatorioRow extends SqliteRow {
 Future<List<EquipamentosRecebidosObraRow>> performEquipamentosRecebidosObra(
   Database database, {
   String? relatorioUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<EquipamentosRecebidosObraRow>[]);
+  }
   final query = '''
 SELECT 
   rer.id,
@@ -906,9 +1104,10 @@ SELECT
   oi.descricao,
   oi.unidade
 FROM relatorio_equipamento_recebido AS rer
+${_sqlJoinRelatorioTenant(relatorioUuidExpr: "rer.relatorio_uuid", ownerEscaped: _escSql(owner))}
 JOIN obra_itens AS oi 
   ON oi.uuid = rer.equipamento_uuid
-WHERE rer.relatorio_uuid = '${relatorioUuid}'
+WHERE rer.relatorio_uuid = '${_escSql(relatorioUuid)}'
   AND ${sqlNaoExcluidoPorSituacao('rer')}
   AND ${sqlNaoExcluidoPorSituacao('oi')};
 ''';
@@ -933,11 +1132,18 @@ class EquipamentosRecebidosObraRow extends SqliteRow {
 Future<List<DetalhesMaterialRecebidoRow>> performDetalhesMaterialRecebido(
   Database database, {
   String? uuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<DetalhesMaterialRecebidoRow>[]);
+  }
   final query = '''
-SELECT * FROM obra_itens
-WHERE uuid = '${uuid}'
-  AND ${sqlNaoExcluidoPorSituacao()}
+SELECT oi.*
+FROM obra_itens AS oi
+${_sqlJoinObraTenant(obraUuidExpr: "oi.obra_uuid", ownerEscaped: _escSql(owner))}
+WHERE oi.uuid = '${_escSql(uuid)}'
+  AND ${sqlNaoExcluidoPorSituacao('oi')}
 LIMIT 1;
 ''';
   return _readQuery(database, query, (d) => DetalhesMaterialRecebidoRow(d));
@@ -979,15 +1185,21 @@ class CarregaUltimaAtividadeRelatorioRow extends SqliteRow {
 Future<List<GetitensdaobraRow>> performGetitensdaobra(
   Database database, {
   String? relatorioUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetitensdaobraRow>[]);
+  }
   final query = '''
 SELECT 
   r.equipamento_id AS id,
   r.equipamento_uuid AS uuid,
   o.descricao AS nome
 FROM relatorio_equipamento_recebido r
+${_sqlJoinRelatorioTenant(relatorioUuidExpr: "r.relatorio_uuid", ownerEscaped: _escSql(owner))}
 JOIN obra_itens o ON o.uuid = r.equipamento_uuid
-WHERE r.relatorio_uuid = '${relatorioUuid}'
+WHERE r.relatorio_uuid = '${_escSql(relatorioUuid)}'
   AND ${sqlNaoExcluidoPorSituacao('r')}
   AND ${sqlNaoExcluidoPorSituacao('o')}
 ORDER BY o.descricao;
@@ -1011,7 +1223,12 @@ Future<List<GetItensAtividadeRow>> performGetItensAtividade(
   Database database, {
   String? atividadeUuid,
   String? tipo,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetItensAtividadeRow>[]);
+  }
   final query = '''
 SELECT 
   rai.id,
@@ -1031,9 +1248,10 @@ SELECT
 FROM relatorio_atividades_itens AS rai
 INNER JOIN relatorio_atividades AS ra
   ON ra.uuid = rai.relatorio_atividade_uuid
+${_sqlJoinRelatorioTenant(relatorioUuidExpr: "ra.relatorio_uuid", ownerEscaped: _escSql(owner))}
 JOIN obra_itens AS oi 
   ON oi.uuid = rai.obra_item_uuid
-WHERE rai.relatorio_atividade_uuid = '${atividadeUuid}' AND rai.tipo = '${tipo}'
+WHERE rai.relatorio_atividade_uuid = '${_escSql(atividadeUuid)}' AND rai.tipo = '${_escSql(tipo)}'
   AND ${sqlNaoExcluidoPorSituacao('rai')}
   AND ${sqlNaoExcluidoPorSituacao('ra')}
   AND ${sqlNaoExcluidoPorSituacao('oi')};
@@ -1047,8 +1265,8 @@ class GetItensAtividadeRow extends SqliteRow {
 
   int get id => data['id'] as int;
   int? get obraItemId => data['obra_item_id'] as int?;
-  int? get qtdUtilizada => data['qtd_utilizada'] as int?;
-  int? get qtdRealizada => data['qtd_realizada'] as int?;
+  num? get qtdUtilizada => _asNumColuna(data['qtd_utilizada']);
+  num? get qtdRealizada => _asNumColuna(data['qtd_realizada']);
   num? get qtdProduzida {
     final v = data['qtd_produzida'];
     if (v == null) return null;
@@ -1079,10 +1297,19 @@ class GetItensAtividadeRow extends SqliteRow {
 Future<List<CarregaFotosAtividadeRow>> performCarregaFotosAtividade(
   Database database, {
   int? atividadeId,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<CarregaFotosAtividadeRow>[]);
+  }
   final query = '''
-SELECT * FROM relatorio_atividade_fotos WHERE relatorio_atividade_id = ${atividadeId}
-  AND (situacao IS NULL OR CAST(situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
+SELECT f.*
+FROM relatorio_atividade_fotos AS f
+INNER JOIN relatorio_atividades AS ra ON ra.id = f.relatorio_atividade_id
+${_sqlJoinRelatorioTenant(relatorioUuidExpr: "ra.relatorio_uuid", ownerEscaped: _escSql(owner))}
+WHERE f.relatorio_atividade_id = ${atividadeId ?? 0}
+  AND (f.situacao IS NULL OR CAST(f.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
 ''';
   return _readQuery(database, query, (d) => CarregaFotosAtividadeRow(d));
 }
@@ -1100,14 +1327,27 @@ class CarregaFotosAtividadeRow extends SqliteRow {
 
 /// BEGIN GETFOTOSATIVIDADE
 Future<List<GetFotosAtividadeRow>> performGetFotosAtividade(
-  Database database,
-) {
-  // Query genérica sem filtro de atividade (placeholder FlutterFlow): não liste fotos excluídas.
+  Database database, {
+  String? atividadeUuid,
+  int? atividadeId,
+  String? accountOwnerUuid,
+}) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetFotosAtividadeRow>[]);
+  }
+  final atividadeFilter = (atividadeUuid ?? '').trim().isNotEmpty
+      ? "ra.uuid = '${_escSql(atividadeUuid)}'"
+      : "ra.id = ${atividadeId ?? 0}";
+  // Sempre escopado ao tenant; exige atividade (uuid ou id).
   final query = '''
-SELECT arquivo
-FROM relatorio_atividade_fotos
-WHERE (situacao IS NULL OR CAST(situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
-ORDER BY id DESC
+SELECT f.arquivo, f.id, f.nome
+FROM relatorio_atividade_fotos AS f
+INNER JOIN relatorio_atividades AS ra ON ra.id = f.relatorio_atividade_id
+${_sqlJoinRelatorioTenant(relatorioUuidExpr: "ra.relatorio_uuid", ownerEscaped: _escSql(owner))}
+WHERE $atividadeFilter
+  AND (f.situacao IS NULL OR CAST(f.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
+ORDER BY f.id DESC
 ''';
   return _readQuery(database, query, (d) => GetFotosAtividadeRow(d));
 }
@@ -1126,10 +1366,18 @@ class GetFotosAtividadeRow extends SqliteRow {
 Future<List<GetDadosAtividadeRow>> performGetDadosAtividade(
   Database database, {
   String? uuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetDadosAtividadeRow>[]);
+  }
   final query = '''
-SELECT * FROM relatorio_atividades WHERE uuid = '${uuid}'
-  AND (situacao IS NULL OR CAST(situacao AS INTEGER) != ${kSituacaoExcluidoLogico});
+SELECT ra.*
+FROM relatorio_atividades AS ra
+${_sqlJoinRelatorioTenant(relatorioUuidExpr: "ra.relatorio_uuid", ownerEscaped: _escSql(owner))}
+WHERE ra.uuid = '${_escSql(uuid)}'
+  AND (ra.situacao IS NULL OR CAST(ra.situacao AS INTEGER) != ${kSituacaoExcluidoLogico});
 ''';
   return _readQuery(database, query, (d) => GetDadosAtividadeRow(d));
 }
@@ -1157,7 +1405,7 @@ class GetDadosAtividadeRow extends SqliteRow {
   String? get descricao => data['descricao'] as String?;
   int? get quantidade => data['quantidade'] as int?;
   String? get unidade => data['unidade'] as String?;
-  int? get qtdRealizada => data['qtd_realizada'] as int?;
+  num? get qtdRealizada => _asNumColuna(data['qtd_realizada']);
   int? get situacao => data['situacao'] as int?;
   String get uuid => data['uuid'] as String;
 
@@ -1192,12 +1440,19 @@ class GetDadosAtividadeRow extends SqliteRow {
 Future<List<GetAtividadesRelatorioRow>> performGetAtividadesRelatorio(
   Database database, {
   String? relatorioUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetAtividadesRelatorioRow>[]);
+  }
   final query = '''
-SELECT * FROM relatorio_atividades
-WHERE relatorio_uuid = '${relatorioUuid}'
-  AND (situacao IS NULL OR (CAST(situacao AS INTEGER) != ${kSituacaoExcluidoLogico} AND CAST(situacao AS INTEGER) != -1))
-ORDER BY id DESC
+SELECT ra.*
+FROM relatorio_atividades AS ra
+${_sqlJoinRelatorioTenant(relatorioUuidExpr: "ra.relatorio_uuid", ownerEscaped: _escSql(owner))}
+WHERE ra.relatorio_uuid = '${_escSql(relatorioUuid)}'
+  AND (ra.situacao IS NULL OR (CAST(ra.situacao AS INTEGER) != ${kSituacaoExcluidoLogico} AND CAST(ra.situacao AS INTEGER) != -1))
+ORDER BY ra.id DESC
 ''';
   return _readQuery(database, query, (d) => GetAtividadesRelatorioRow(d));
 }
@@ -1212,7 +1467,7 @@ class GetAtividadesRelatorioRow extends SqliteRow {
   String? get local => data['local'] as String?;
   String? get descricao => data['descricao'] as String?;
   String? get unidade => data['unidade'] as String?;
-  int? get qtdRealizada => data['qtd_realizada'] as int?;
+  num? get qtdRealizada => _asNumColuna(data['qtd_realizada']);
   int get situacao => data['situacao'] as int;
   String? get uuid => data['uuid'] as String?;
 }
@@ -1224,12 +1479,19 @@ Future<List<GetOrdensServicoRow>> performGetOrdensServico(
   Database database, {
   String? obraUuid,
   int? userId,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetOrdensServicoRow>[]);
+  }
   final query = '''
-SELECT * FROM ordens_servico
-WHERE obra_uuid = '${obraUuid}'
-  AND ${sqlNaoExcluidoPorSituacao()}
-ORDER BY id DESC;
+SELECT os.*
+FROM ordens_servico AS os
+${_sqlJoinObraTenant(obraUuidExpr: "os.obra_uuid", ownerEscaped: _escSql(owner))}
+WHERE os.obra_uuid = '${_escSql(obraUuid)}'
+  AND ${sqlNaoExcluidoPorSituacao('os')}
+ORDER BY os.id DESC;
 ''';
   return _readQuery(database, query, (d) => GetOrdensServicoRow(d));
 }
@@ -1237,21 +1499,16 @@ ORDER BY id DESC;
 class GetOrdensServicoRow extends SqliteRow {
   GetOrdensServicoRow(Map<String, dynamic> data) : super(data);
 
-  int get id => data['id'] as int;
+  int get id => _asIntColuna(data['id']) ?? 0;
   String get codigo => data['codigo'] as String;
   String? get nome => data['nome'] as String?;
   String get dataEmissao => data['data_emissao'] as String;
   String get dataInicio => data['data_inicio'] as String;
   String get dataFim => data['data_fim'] as String;
-  int get situacao => data['situacao'] as int;
+  int get situacao => _asIntColuna(data['situacao']) ?? 0;
 
   /// Fluxo igual ao endpoint `/show` (`status_id`). Não confundir com [situacao] (legado).
-  int get statusId {
-    final v = data['status_id'];
-    if (v is int) return v;
-    if (v is num) return v.toInt();
-    return 1;
-  }
+  int get statusId => _asIntColuna(data['status_id']) ?? 1;
 
   String? get observacoes => data['observacoes'] as String?;
   String get uuid => data['uuid'] as String;
@@ -1263,7 +1520,12 @@ class GetOrdensServicoRow extends SqliteRow {
 Future<List<GetTarefasOrdemRow>> performGetTarefasOrdem(
   Database database, {
   String? ordemUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetTarefasOrdemRow>[]);
+  }
   final query = '''
 SELECT 
   ost.obra_etapa_tarefa_uuid AS uuid,
@@ -1272,10 +1534,13 @@ SELECT
   ost.unidade,
   o.descricao AS nome
 FROM ordem_servico_tarefas AS ost
+INNER JOIN ordens_servico AS os ON os.uuid = ost.ordem_servico_uuid
+${_sqlJoinObraTenant(obraUuidExpr: "os.obra_uuid", ownerEscaped: _escSql(owner))}
 JOIN obra_etapa_tarefas AS o  ON o.uuid = ost.obra_etapa_tarefa_uuid
-WHERE ost.ordem_servico_uuid = '${ordemUuid}'
+WHERE ost.ordem_servico_uuid = '${_escSql(ordemUuid)}'
   AND ${sqlNaoExcluidoPorSituacao('ost')}
   AND ${sqlNaoExcluidoPorSituacao('o')}
+  AND ${sqlNaoExcluidoPorSituacao('os')}
 ORDER BY o.descricao;
 ''';
   return _readQuery(database, query, (d) => GetTarefasOrdemRow(d));
@@ -1284,11 +1549,12 @@ ORDER BY o.descricao;
 class GetTarefasOrdemRow extends SqliteRow {
   GetTarefasOrdemRow(Map<String, dynamic> data) : super(data);
 
-  int get id => data['id'] as int;
+  int get id => _asIntColuna(data['id']) ?? 0;
   String? get nome => data['nome'] as String?;
   String? get uuid => data['uuid'] as String?;
-  int? get qtdProgramada => data['qtd_programada'] as int?;
-  int? get qtdRealizada => data['qtd_realizada'] as int?;
+  /// Pode ser REAL no SQLite (ex.: 12.5) — usar [num], não `as int?`.
+  num? get qtdProgramada => _asNumColuna(data['qtd_programada']);
+  num? get qtdRealizada => _asNumColuna(data['qtd_realizada']);
   String? get unidade => data['unidade'] as String?;
 }
 
@@ -1298,11 +1564,20 @@ class GetTarefasOrdemRow extends SqliteRow {
 Future<List<GetDetalhesTarefaRow>> performGetDetalhesTarefa(
   Database database, {
   String? uuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetDetalhesTarefaRow>[]);
+  }
   final query = '''
-SELECT * FROM obra_etapa_tarefas
-WHERE uuid = '${uuid}'
-  AND ${sqlNaoExcluidoPorSituacao()};
+SELECT t.*
+FROM obra_etapa_tarefas AS t
+INNER JOIN obra_etapas AS e ON e.uuid = t.etapa_uuid
+${_sqlJoinObraTenant(obraUuidExpr: "e.obra_uuid", ownerEscaped: _escSql(owner))}
+WHERE t.uuid = '${_escSql(uuid)}'
+  AND ${sqlNaoExcluidoPorSituacao('t')}
+  AND ${sqlNaoExcluidoPorSituacao('e')};
 ''';
   return _readQuery(database, query, (d) => GetDetalhesTarefaRow(d));
 }
@@ -1508,7 +1783,15 @@ class GetClientesRow extends SqliteRow {
 Future<List<GetModelosChecklistRow>> performGetModelosChecklist(
   Database database, {
   int? obraId,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetModelosChecklistRow>[]);
+  }
+  final obraFilter = (obraId != null && obraId > 0)
+      ? 'AND (cto.obra_id = ${obraId} OR ob_tenant.id = ${obraId})'
+      : '';
   final query = '''
 SELECT 
     ct.id,
@@ -1521,6 +1804,15 @@ SELECT
     cto.obra_id
 FROM checklists_templates ct
 INNER JOIN checklists_template_obras cto ON ct.id = cto.checklist_template_id
+INNER JOIN obras AS ob_tenant
+  ON (
+    (cto.obra_uuid IS NOT NULL AND TRIM(cto.obra_uuid) != '' AND ob_tenant.uuid = cto.obra_uuid)
+    OR ob_tenant.id = cto.obra_id
+  )
+  AND ob_tenant.user_uuid = '${_escSql(owner)}'
+  AND (ob_tenant.situacao IS NULL OR CAST(ob_tenant.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
+WHERE 1 = 1
+$obraFilter
 ''';
   return _readQuery(database, query, (d) => GetModelosChecklistRow(d));
 }
@@ -1539,7 +1831,12 @@ class GetModelosChecklistRow extends SqliteRow {
 Future<List<GetMaoObraRelatorioRow>> performGetMaoObraRelatorio(
   Database database, {
   String? relatorioUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetMaoObraRelatorioRow>[]);
+  }
   final query = '''
 SELECT 
   rmo.id,
@@ -1558,9 +1855,10 @@ SELECT
   oi.descricao,
   oi.cargo_funcao
 FROM relatorio_mao_obra_presenca AS rmo
+${_sqlJoinRelatorioTenant(relatorioUuidExpr: "rmo.relatorio_uuid", ownerEscaped: _escSql(owner))}
 JOIN obra_itens AS oi 
   ON oi.uuid = rmo.obra_item_uuid
-WHERE rmo.relatorio_uuid = '${relatorioUuid}'
+WHERE rmo.relatorio_uuid = '${_escSql(relatorioUuid)}'
   AND ${sqlNaoExcluidoPorSituacao('rmo')}
   AND ${sqlNaoExcluidoPorSituacao('oi')};
 ''';
@@ -1592,7 +1890,12 @@ class GetMaoObraRelatorioRow extends SqliteRow {
 Future<List<GetMaoObraRelatorioDetalhesRow>> performGetMaoObraRelatorioDetalhes(
   Database database, {
   String? uuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetMaoObraRelatorioDetalhesRow>[]);
+  }
   final query = '''
 SELECT 
   rmo.id,
@@ -1610,9 +1913,10 @@ SELECT
   rmo.motivo_atraso,
   oi.descricao
 FROM relatorio_mao_obra_presenca AS rmo
+${_sqlJoinRelatorioTenant(relatorioUuidExpr: "rmo.relatorio_uuid", ownerEscaped: _escSql(owner))}
 JOIN obra_itens AS oi 
   ON oi.uuid = rmo.obra_item_uuid
-WHERE rmo.uuid = '${uuid}'
+WHERE rmo.uuid = '${_escSql(uuid)}'
   AND ${sqlNaoExcluidoPorSituacao('rmo')}
   AND ${sqlNaoExcluidoPorSituacao('oi')};
 ''';
@@ -1644,7 +1948,12 @@ class GetMaoObraRelatorioDetalhesRow extends SqliteRow {
 Future<List<GetOrdensServicoRelatorioRow>> performGetOrdensServicoRelatorio(
   Database database, {
   String? relatorioUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetOrdensServicoRelatorioRow>[]);
+  }
   final query = '''
 SELECT 
   ros.id,
@@ -1659,9 +1968,10 @@ SELECT
   os.situacao,
   os.observacoes  
 FROM relatorio_ordem_servico AS ros
+${_sqlJoinRelatorioTenant(relatorioUuidExpr: "ros.relatorio_uuid", ownerEscaped: _escSql(owner))}
 JOIN ordens_servico AS os
   ON os.uuid = ros.ordem_servico_uuid
-WHERE ros.relatorio_uuid = '${relatorioUuid}'
+WHERE ros.relatorio_uuid = '${_escSql(relatorioUuid)}'
   AND ${sqlNaoExcluidoPorSituacao('ros')}
   AND ${sqlNaoExcluidoPorSituacao('os')};
 ''';
@@ -1689,7 +1999,12 @@ class GetOrdensServicoRelatorioRow extends SqliteRow {
 Future<List<GetCustosOrdensRelatoriosRow>> performGetCustosOrdensRelatorios(
   Database database, {
   String? ordemRelatorioUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetCustosOrdensRelatoriosRow>[]);
+  }
   final query = '''
 SELECT 
   cosr.id,
@@ -1701,9 +2016,11 @@ SELECT
   cos.unidade,
   cos.qtd_prevista
 FROM relatorio_custos AS cosr
+INNER JOIN relatorio_ordem_servico AS ros ON ros.uuid = cosr.relatorio_ordem_servico_uuid
+${_sqlJoinRelatorioTenant(relatorioUuidExpr: "ros.relatorio_uuid", ownerEscaped: _escSql(owner))}
 JOIN ordem_servico_custos AS cos
   ON cos.uuid = cosr.ordem_servico_custo_uuid
-WHERE cosr.relatorio_ordem_servico_uuid = '${ordemRelatorioUuid}'
+WHERE cosr.relatorio_ordem_servico_uuid = '${_escSql(ordemRelatorioUuid)}'
   AND (cosr.situacao IS NULL OR CAST(cosr.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
   AND (cos.situacao IS NULL OR CAST(cos.situacao AS INTEGER) != ${kSituacaoExcluidoLogico});
 ''';
@@ -1730,10 +2047,18 @@ class GetCustosOrdensRelatoriosRow extends SqliteRow {
 Future<List<DetalhesComentarioRow>> performDetalhesComentario(
   Database database, {
   int? id,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<DetalhesComentarioRow>[]);
+  }
   final query = '''
-SELECT * FROM relatorio_comentarios WHERE id = ${id}
-  AND (situacao IS NULL OR CAST(situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
+SELECT c.*
+FROM relatorio_comentarios AS c
+${_sqlJoinRelatorioTenant(relatorioUuidExpr: "c.relatorio_uuid", ownerEscaped: _escSql(owner))}
+WHERE c.id = ${id ?? 0}
+  AND (c.situacao IS NULL OR CAST(c.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
 ''';
   return _readQuery(database, query, (d) => DetalhesComentarioRow(d));
 }
@@ -1751,10 +2076,18 @@ class DetalhesComentarioRow extends SqliteRow {
 Future<List<DetalhesOcorrenciaRow>> performDetalhesOcorrencia(
   Database database, {
   String? uuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<DetalhesOcorrenciaRow>[]);
+  }
   final query = '''
-SELECT * FROM relatorio_ocorrencias WHERE uuid = '${uuid}'
-  AND (situacao IS NULL OR CAST(situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
+SELECT o.*
+FROM relatorio_ocorrencias AS o
+${_sqlJoinRelatorioTenant(relatorioUuidExpr: "o.relatorio_uuid", ownerEscaped: _escSql(owner))}
+WHERE o.uuid = '${_escSql(uuid)}'
+  AND (o.situacao IS NULL OR CAST(o.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
 ''';
   return _readQuery(database, query, (d) => DetalhesOcorrenciaRow(d));
 }
@@ -1776,10 +2109,19 @@ class DetalhesOcorrenciaRow extends SqliteRow {
 Future<List<GetDetalhesItemAtividadeRow>> performGetDetalhesItemAtividade(
   Database database, {
   String? uuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetDetalhesItemAtividadeRow>[]);
+  }
   final query = '''
-SELECT * FROM relatorio_atividades_itens WHERE uuid = '${uuid}'
-  AND (situacao IS NULL OR CAST(situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
+SELECT rai.*
+FROM relatorio_atividades_itens AS rai
+INNER JOIN relatorio_atividades AS ra ON ra.uuid = rai.relatorio_atividade_uuid
+${_sqlJoinRelatorioTenant(relatorioUuidExpr: "ra.relatorio_uuid", ownerEscaped: _escSql(owner))}
+WHERE rai.uuid = '${_escSql(uuid)}'
+  AND (rai.situacao IS NULL OR CAST(rai.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
 
 ''';
   return _readQuery(database, query, (d) => GetDetalhesItemAtividadeRow(d));
@@ -1788,8 +2130,8 @@ SELECT * FROM relatorio_atividades_itens WHERE uuid = '${uuid}'
 class GetDetalhesItemAtividadeRow extends SqliteRow {
   GetDetalhesItemAtividadeRow(Map<String, dynamic> data) : super(data);
 
-  int? get qtdUtilizada => data['qtd_utilizada'] as int?;
-  int? get qtdRealizada => data['qtd_realizada'] as int?;
+  num? get qtdUtilizada => _asNumColuna(data['qtd_utilizada']);
+  num? get qtdRealizada => _asNumColuna(data['qtd_realizada']);
   num? get qtdProduzida {
     final v = data['qtd_produzida'];
     if (v == null) return null;
@@ -1896,9 +2238,13 @@ Future<List<GetEquipamentosRow>> performGetEquipamentos(
   Database database, {
   String? userUuid,
 }) {
+  final owner = _ownerOrEmpty(userUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetEquipamentosRow>[]);
+  }
   final query = '''
 SELECT * FROM equipamentos
-WHERE created_by = '${userUuid}'
+WHERE created_by = '${_escSql(owner)}'
   AND ${sqlNaoExcluidoPorSituacao()}
 ORDER BY nome desc;
 ''';
@@ -1921,9 +2267,13 @@ Future<List<GetInsumosRow>> performGetInsumos(
   Database database, {
   String? userUuid,
 }) {
+  final owner = _ownerOrEmpty(userUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetInsumosRow>[]);
+  }
   final query = '''
 SELECT * FROM insumos
-WHERE created_by = '${userUuid}'
+WHERE created_by = '${_escSql(owner)}'
   AND ${sqlNaoExcluidoPorSituacao()}
 ORDER BY nome desc;
 ''';
@@ -1947,9 +2297,13 @@ Future<List<GetLocaisRow>> performGetLocais(
   Database database, {
   String? userUuid,
 }) {
+  final owner = _ownerOrEmpty(userUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetLocaisRow>[]);
+  }
   final query = '''
 SELECT * FROM locais
-WHERE created_by = '${userUuid}'
+WHERE created_by = '${_escSql(owner)}'
   AND ${sqlNaoExcluidoPorSituacao()}
 ORDER BY nome desc;
 ''';
@@ -1971,11 +2325,14 @@ Future<List<GetFuncoesMaoObraRow>> performGetFuncoesMaoObra(
   Database database, {
   String? userUuid,
 }) {
-  String esc(String? v) => (v ?? '').replaceAll("'", "''");
+  final owner = _ownerOrEmpty(userUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetFuncoesMaoObraRow>[]);
+  }
   final query = '''
 SELECT *
 FROM funcoes_mao_obra
-WHERE (created_by = '${esc(userUuid)}' OR created_by IS NULL OR TRIM(created_by) = '')
+WHERE created_by = '${_escSql(owner)}'
   AND (situacao IS NULL OR CAST(situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
 ORDER BY nome COLLATE NOCASE ASC;
 ''';
@@ -2004,9 +2361,13 @@ Future<List<GetMaoObraRow>> performGetMaoObra(
   Database database, {
   String? userUuid,
 }) {
+  final owner = _ownerOrEmpty(userUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetMaoObraRow>[]);
+  }
   final query = '''
 SELECT * FROM mao_obra_profissionais
-WHERE created_by = '${userUuid}'
+WHERE created_by = '${_escSql(owner)}'
   AND ${sqlNaoExcluidoPorSituacao()}
 ORDER BY nome_completo asc;
 ''';
@@ -2110,9 +2471,13 @@ Future<List<GetTipoOcorrenciasRow>> performGetTipoOcorrencias(
   Database database, {
   String? userUuid,
 }) {
+  final owner = _ownerOrEmpty(userUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetTipoOcorrenciasRow>[]);
+  }
   final query = '''
 SELECT * FROM tipo_ocorrencias
-WHERE user_uuid = '${userUuid}'
+WHERE user_uuid = '${_escSql(owner)}'
   AND ${sqlNaoExcluidoPorSituacao()}
 ORDER BY nome ASC;
 ''';
@@ -2134,12 +2499,18 @@ Future<List<RelatorioDetalhesCopyRow>> performRelatorioDetalhesCopy(
   Database database, {
   String? uuid,
   String? userUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid ?? userUuid);
+  if (owner.isEmpty) {
+    return Future.value(<RelatorioDetalhesCopyRow>[]);
+  }
   final query = '''
-SELECT *
-FROM relatorios
-WHERE uuid = '${uuid}'
-  AND ${sqlNaoExcluidoPorSituacao()}
+SELECT r.*
+FROM relatorios AS r
+${_sqlJoinObraTenant(obraUuidExpr: "r.obra_uuid", ownerEscaped: _escSql(owner))}
+WHERE r.uuid = '${_escSql(uuid)}'
+  AND ${sqlNaoExcluidoPorSituacao('r')}
 LIMIT 1;
 
 ''';
@@ -2181,25 +2552,13 @@ Future<List<RelatoriosObraUltimosRow>> performRelatoriosObraUltimos(
 SELECT
   r.*,
   sr.nome AS status_nome,
-  COALESCE(
-    u_criador_uuid.nome,
-    u_criador_id.nome,
-    u_created_by_uuid.nome,
-    u_created_by_id.nome
-  ) AS criador_nome
+  $_sqlExprCriadorNomeRelatorio
 FROM relatorios AS r
 INNER JOIN obras AS ob ON ob.uuid = r.obra_uuid AND ob.user_uuid = '${esc(owner)}'
   AND (ob.situacao IS NULL OR CAST(ob.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
 LEFT JOIN status_relatorios AS sr
   ON sr.id = r.status_id
-LEFT JOIN users AS u_criador_uuid
-  ON u_criador_uuid.uuid = r.criador
-LEFT JOIN users AS u_criador_id
-  ON CAST(u_criador_id.id AS TEXT) = CAST(r.criador AS TEXT)
-LEFT JOIN users AS u_created_by_uuid
-  ON u_created_by_uuid.uuid = r.created_by
-LEFT JOIN users AS u_created_by_id
-  ON CAST(u_created_by_id.id AS TEXT) = CAST(r.created_by AS TEXT)
+$_sqlJoinsCriadorRelatorio
 WHERE r.obra_uuid = '${esc(obraUuid)}'
   AND (r.situacao IS NULL OR CAST(r.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
 ORDER BY COALESCE(NULLIF(trim(r.updated_at), ''), r.created_at) DESC, r.numero DESC, r.id DESC
@@ -2230,7 +2589,12 @@ class RelatoriosObraUltimosRow extends SqliteRow {
 Future<List<ObraLocaisRow>> performObraLocais(
   Database database, {
   String? obraUuid,
+  String? accountOwnerUuid,
 }) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<ObraLocaisRow>[]);
+  }
   final query = '''
 SELECT 
   ol.id,
@@ -2239,11 +2603,12 @@ SELECT
   l.nome,
   m.id_servidor AS local_id_servidor
 FROM obra_locais AS ol
+${_sqlJoinObraTenant(obraUuidExpr: "ol.obra_uuid", ownerEscaped: _escSql(owner))}
 JOIN locais AS l
   ON l.uuid = ol.local_uuid
 LEFT JOIN sync_id_mapping AS m
   ON m.tabela = 'locais' AND m.uuid = l.uuid
-WHERE ol.obra_uuid = '${obraUuid}'
+WHERE ol.obra_uuid = '${_escSql(obraUuid)}'
   AND (ol.situacao IS NULL OR CAST(ol.situacao AS INTEGER) != ${kSituacaoExcluidoLogico});
 ''';
   return _readQuery(database, query, (d) => ObraLocaisRow(d));

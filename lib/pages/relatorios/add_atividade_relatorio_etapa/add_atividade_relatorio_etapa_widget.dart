@@ -3,16 +3,17 @@ import '/componentes/atividades_relatorios/equipamentos_atividade_relatorio/equi
 import '/componentes/atividades_relatorios/includes/fotos_atividade/fotos_atividade_widget.dart';
 import '/componentes/atividades_relatorios/insumos_atividade_relatorio/insumos_atividade_relatorio_widget.dart';
 import '/componentes/atividades_relatorios/mao_obra_atividade_relatorio/mao_obra_atividade_relatorio_widget.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_drop_down.dart';
-import '/flutter_flow/flutter_flow_icon_button.dart';
+import '/flutter_flow/custom_functions.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import '/flutter_flow/form_field_controller.dart';
 import 'dart:ui';
 import '/custom_code/actions/index.dart' as actions;
 import '/index.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:percent_indicator/percent_indicator.dart';
 import 'package:provider/provider.dart';
@@ -27,10 +28,16 @@ String _textoAtividade(String? v) {
   return t;
 }
 
-String _qtdAtividadeTexto(int? q) {
+String _qtdAtividadeTexto(num? q) {
   if (q == null) return '';
-  return q.toString();
+  return formatQuantidadeRelatorio(q);
 }
+
+/// Aceita vírgula e ponto (o teclado decimal do Android varia conforme o locale)
+/// e limita a 2 casas, que é a precisão gravada no servidor.
+final List<TextInputFormatter> _formattersQuantidade = [
+  FilteringTextInputFormatter.allow(RegExp(r'^\d*[.,]?\d{0,2}')),
+];
 
 String _labelMaoObraRelatorioPresente(GetMaoObraRelatorioRow e) {
   final d = (e.descricao ?? '').trim();
@@ -79,6 +86,73 @@ class _AddAtividadeRelatorioEtapaWidgetState
     safeSetState(() => _listasItensAtividadeRefresh++);
   }
 
+  Future<bool> _itemJaVinculadoNaAtividade({
+    required String tipo,
+    required String obraItemUuid,
+  }) async {
+    final u = obraItemUuid.trim();
+    if (u.isEmpty || u == '0') return false;
+    final itens = await SQLiteManager.instance.getItensAtividade(
+      atividadeUuid: widget.atividadeUuid!,
+      tipo: tipo,
+    );
+    return itens.any(
+      (e) => (e.obraItemUuid ?? '').trim().toLowerCase() == u.toLowerCase(),
+    );
+  }
+
+  Future<void> _vincularVariosItensAtividade({
+    required String tipo,
+    required Iterable<String> obraItemUuids,
+  }) async {
+    final candidatos = obraItemUuids
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty && e != '0')
+        .toSet()
+        .toList();
+    if (candidatos.isEmpty) return;
+
+    var vinculados = 0;
+    for (final obraItemUuid in candidatos) {
+      if (await _itemJaVinculadoNaAtividade(
+        tipo: tipo,
+        obraItemUuid: obraItemUuid,
+      )) {
+        continue;
+      }
+      final itemUuid = await actions.generateUuid();
+      await SQLiteManager.instance.setItemAtividade(
+        relatorioAtividadeId: widget.atividadeId!,
+        tipo: tipo,
+        obraItemId: 0,
+        relatorioAtividadeUuid: widget.atividadeUuid,
+        obraItemUuid: obraItemUuid,
+        uuid: itemUuid,
+      );
+      vinculados++;
+    }
+    if (vinculados > 0) {
+      _atualizarListasItensAtividade();
+    }
+  }
+
+  Future<void> _onMultiSelectItensAtividade({
+    required String tipo,
+    required List<String>? selecionados,
+    required void Function(List<String>?) setDropDownValue,
+  }) async {
+    final lista = (selecionados ?? [])
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty && e != '0')
+        .toList();
+    setDropDownValue(lista);
+    if (lista.isEmpty) return;
+    await _vincularVariosItensAtividade(
+      tipo: tipo,
+      obraItemUuids: lista,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -89,16 +163,68 @@ class _AddAtividadeRelatorioEtapaWidgetState
     _model.textFieldDescricaoFocusNode ??= FocusNode();
 
     _model.textFieldQtdRealizadaFocusNode ??= FocusNode();
+    _model.textFieldQtdRealizadaFocusNode!
+        .addListener(_onQtdRealizadaFocusChange);
 
     _model.textFieldUnidadeFocusNode ??= FocusNode();
   }
 
   @override
   void dispose() {
+    _model.textFieldQtdRealizadaFocusNode
+        ?.removeListener(_onQtdRealizadaFocusChange);
     _model.dispose();
 
     super.dispose();
   }
+
+  num? _qtdRealizadaDoFormulario() {
+    final txt =
+        _model.textFieldQtdRealizadaTextController?.text.trim() ?? '';
+    if (txt.isEmpty) return null;
+    return tryParseQuantidadeRelatorio(txt);
+  }
+
+  void _onQtdRealizadaFocusChange() {
+    final node = _model.textFieldQtdRealizadaFocusNode;
+    if (node != null && !node.hasFocus) {
+      _persistirQtdRealizadaParcial();
+    }
+  }
+
+  Future<void> _persistirQtdRealizadaParcial() async {
+    final uuid = widget.atividadeUuid;
+    if (uuid == null || uuid.isEmpty) return;
+    final qtd = _qtdRealizadaDoFormulario();
+    if (qtd == null || qtd < 0) return;
+
+    final rows = await SQLiteManager.instance.getDadosAtividade(uuid: uuid);
+    final row = rows.firstOrNull;
+    if (row == null) return;
+
+    final localForm = (_model.dropDownLocalValue ?? '').trim();
+    final descForm =
+        (_model.textFieldDescricaoTextController?.text ?? '').trim();
+    final unForm =
+        (_model.textFieldUnidadeTextController?.text ?? '').trim();
+
+    await SQLiteManager.instance.updateAtividade(
+      uuid: uuid,
+      local: localForm.isNotEmpty ? localForm : (row.local ?? ''),
+      descricao: descForm.isNotEmpty ? descForm : (row.descricao ?? ''),
+      qtdRealizada: qtd,
+      unidade: unForm.isNotEmpty ? unForm : (row.unidade ?? ''),
+      situacao: _model.statusSelected ?? row.situacao ?? 1,
+    );
+    if (!mounted) return;
+    _atualizarListasItensAtividade();
+  }
+
+  /// Rótulo curto acima do campo, no padrão das tabelas do RDO.
+  Widget _rotuloCampo(String texto) => Padding(
+        padding: const EdgeInsets.only(bottom: 4, left: 2),
+        child: Text(texto.toUpperCase(), style: rdoColumnLabelStyle(context)),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -197,75 +323,70 @@ class _AddAtividadeRelatorioEtapaWidgetState
               FormFieldController<String>(_model.dropDownOrdemUuidValue);
         }
 
-        Widget localSelectorWidget() {
-          if (locaisVinculados.isEmpty) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
+        void voltarParaRelatorio() {
+          context.pushNamed(
+            ObraAddRelatorioWidget.routeName,
+            queryParameters: {
+              'id': serializeParam(widget!.relatorioId, ParamType.int),
+              'uuid': serializeParam(widget!.relatorioUuid, ParamType.String),
+            }.withoutNulls,
+          );
+        }
+
+        final theme = FlutterFlowTheme.of(context);
+        final descricaoAtividade = _textoAtividade(
+          addAtividadeRelatorioEtapaGetDadosAtividadeRowList.firstOrNull?.descricao,
+        ).trim();
+
+        Widget avisoCampo(String texto, Color cor) => Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: 2),
               child: Text(
-                'Nenhum local vinculado a esta obra. '
-                'Vincule locais na obra para selecionar aqui.',
-                style: FlutterFlowTheme.of(context).bodySmall.override(
-                      font: GoogleFonts.inter(
-                        fontWeight:
-                            FlutterFlowTheme.of(context).bodySmall.fontWeight,
-                        fontStyle:
-                            FlutterFlowTheme.of(context).bodySmall.fontStyle,
-                      ),
-                      color: FlutterFlowTheme.of(context).error,
-                      letterSpacing: 0.0,
-                    ),
+                texto,
+                style: GoogleFonts.inter(fontSize: 11.5, color: cor),
               ),
             );
+
+        Widget localSelectorWidget() {
+          if (locaisVinculados.isEmpty) {
+            return avisoCampo(
+              'Nenhum local vinculado a esta obra. '
+              'Vincule locais na obra para selecionar aqui.',
+              theme.error,
+            );
           }
-          return FlutterFlowDropDown<String>(
-            controller: _model.dropDownLocalValueController!,
-            options: locaisNomes,
-            optionLabels: locaisNomes,
-            onChanged: (val) async {
-              safeSetState(() => _model.dropDownLocalValue = val);
-            },
-            width: double.infinity,
-            height: 46.0,
-            textStyle: FlutterFlowTheme.of(context).bodyMedium.override(
-                  font: GoogleFonts.inter(
-                    fontWeight: FontWeight.w500,
-                    fontStyle:
-                        FlutterFlowTheme.of(context).bodyMedium.fontStyle,
-                  ),
-                  letterSpacing: 0.0,
-                  fontWeight: FontWeight.w500,
-                  fontStyle:
-                      FlutterFlowTheme.of(context).bodyMedium.fontStyle,
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _rotuloCampo('Local *'),
+              FlutterFlowDropDown<String>(
+                controller: _model.dropDownLocalValueController!,
+                options: locaisNomes,
+                optionLabels: locaisNomes,
+                onChanged: (val) async {
+                  safeSetState(() => _model.dropDownLocalValue = val);
+                },
+                width: double.infinity,
+                height: 38.0,
+                textStyle: rdoCompactFieldTextStyle(context),
+                hintText: 'Selecione o local',
+                icon: Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: theme.secondaryText,
+                  size: 18.0,
                 ),
-            hintText: 'Selecione o local',
-            icon: Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: FlutterFlowTheme.of(context).primaryText,
-              size: 24.0,
-            ),
-            fillColor: FlutterFlowTheme.of(context).primaryBackground,
-            elevation: 0.0,
-            borderColor: FlutterFlowTheme.of(context).alternate,
-            borderWidth: 1.0,
-            borderRadius: 8.0,
-            margin: EdgeInsetsDirectional.zero,
-            hidesUnderline: true,
-            isSearchable: true,
-            isMultiSelect: false,
-            labelText: 'Local *',
-            labelTextStyle: FlutterFlowTheme.of(context).labelMedium.override(
-                  font: GoogleFonts.inter(
-                    fontWeight:
-                        FlutterFlowTheme.of(context).labelMedium.fontWeight,
-                    fontStyle:
-                        FlutterFlowTheme.of(context).labelMedium.fontStyle,
-                  ),
-                  letterSpacing: 0.0,
-                  fontWeight:
-                      FlutterFlowTheme.of(context).labelMedium.fontWeight,
-                  fontStyle:
-                      FlutterFlowTheme.of(context).labelMedium.fontStyle,
-                ),
+                fillColor: theme.secondaryBackground,
+                elevation: 0.0,
+                borderColor: theme.alternate,
+                borderWidth: 1.0,
+                borderRadius: 8.0,
+                margin: const EdgeInsetsDirectional.fromSTEB(10, 0, 6, 0),
+                hidesUnderline: true,
+                isSearchable: true,
+                searchHintText: 'Buscar local...',
+                isMultiSelect: false,
+              ),
+            ],
           );
         }
 
@@ -274,76 +395,49 @@ class _AddAtividadeRelatorioEtapaWidgetState
             return const SizedBox.shrink();
           }
           if (ordensServicoList.isEmpty) {
-            return Padding(
-              padding: const EdgeInsets.only(top: 0.0),
-              child: Text(
-                'Nenhuma ordem de serviço encontrada para esta obra no app. Sincronize as ordens ou cadastre na web.',
-                style: FlutterFlowTheme.of(context).bodySmall.override(
-                      font: GoogleFonts.inter(
-                        fontWeight:
-                            FlutterFlowTheme.of(context).bodySmall.fontWeight,
-                        fontStyle:
-                            FlutterFlowTheme.of(context).bodySmall.fontStyle,
-                      ),
-                      color: FlutterFlowTheme.of(context).warning,
-                      letterSpacing: 0.0,
-                    ),
-              ),
+            return avisoCampo(
+              'Nenhuma ordem de serviço encontrada para esta obra no app. '
+              'Sincronize as ordens ou cadastre na web.',
+              theme.warning,
             );
           }
-          return FlutterFlowDropDown<String>(
-            controller: _model.dropDownOrdemUuidValueController ??=
-                FormFieldController<String>(_model.dropDownOrdemUuidValue),
-            options: ordensServicoList.map((o) => o.uuid).toList(),
-            optionLabels: ordensServicoList.map((o) {
-              final nome = (o.nome ?? '').trim();
-              return nome.isNotEmpty ? '${o.codigo} — $nome' : o.codigo;
-            }).toList(),
-            onChanged: (val) async {
-              safeSetState(() => _model.dropDownOrdemUuidValue = val);
-            },
-            width: double.infinity,
-            height: 46.0,
-            textStyle: FlutterFlowTheme.of(context).bodyMedium.override(
-                  font: GoogleFonts.inter(
-                    fontWeight: FontWeight.w500,
-                    fontStyle:
-                        FlutterFlowTheme.of(context).bodyMedium.fontStyle,
-                  ),
-                  letterSpacing: 0.0,
-                  fontWeight: FontWeight.w500,
-                  fontStyle:
-                      FlutterFlowTheme.of(context).bodyMedium.fontStyle,
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _rotuloCampo('Ordem de serviço'),
+              FlutterFlowDropDown<String>(
+                controller: _model.dropDownOrdemUuidValueController ??=
+                    FormFieldController<String>(_model.dropDownOrdemUuidValue),
+                options: ordensServicoList.map((o) => o.uuid).toList(),
+                optionLabels: ordensServicoList.map((o) {
+                  final nome = (o.nome ?? '').trim();
+                  return nome.isNotEmpty ? '${o.codigo} — $nome' : o.codigo;
+                }).toList(),
+                onChanged: (val) async {
+                  safeSetState(() => _model.dropDownOrdemUuidValue = val);
+                },
+                width: double.infinity,
+                height: 38.0,
+                textStyle: rdoCompactFieldTextStyle(context),
+                hintText: 'Referência no RDO',
+                icon: Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: theme.secondaryText,
+                  size: 18.0,
                 ),
-            hintText: 'Referência no RDO',
-            icon: Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: FlutterFlowTheme.of(context).primaryText,
-              size: 24.0,
-            ),
-            fillColor: FlutterFlowTheme.of(context).primaryBackground,
-            elevation: 0.0,
-            borderColor: FlutterFlowTheme.of(context).alternate,
-            borderWidth: 1.0,
-            borderRadius: 8.0,
-            margin: EdgeInsetsDirectional.zero,
-            hidesUnderline: true,
-            isSearchable: true,
-            isMultiSelect: false,
-            labelText: 'Ordem de serviço',
-            labelTextStyle: FlutterFlowTheme.of(context).labelMedium.override(
-                  font: GoogleFonts.inter(
-                    fontWeight:
-                        FlutterFlowTheme.of(context).labelMedium.fontWeight,
-                    fontStyle:
-                        FlutterFlowTheme.of(context).labelMedium.fontStyle,
-                  ),
-                  letterSpacing: 0.0,
-                  fontWeight:
-                      FlutterFlowTheme.of(context).labelMedium.fontWeight,
-                  fontStyle:
-                      FlutterFlowTheme.of(context).labelMedium.fontStyle,
-                ),
+                fillColor: theme.secondaryBackground,
+                elevation: 0.0,
+                borderColor: theme.alternate,
+                borderWidth: 1.0,
+                borderRadius: 8.0,
+                margin: const EdgeInsetsDirectional.fromSTEB(10, 0, 6, 0),
+                hidesUnderline: true,
+                isSearchable: true,
+                searchHintText: 'Buscar ordem...',
+                isMultiSelect: false,
+              ),
+            ],
           );
         }
 
@@ -354,361 +448,202 @@ class _AddAtividadeRelatorioEtapaWidgetState
           },
           child: Scaffold(
             key: scaffoldKey,
-            backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
+            backgroundColor: theme.primaryBackground,
             appBar: AppBar(
-              backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
+              backgroundColor: theme.primary,
               automaticallyImplyLeading: false,
-              leading: FlutterFlowIconButton(
-                borderRadius: 20.0,
-                buttonSize: 40.0,
-                icon: Icon(
-                  Icons.arrow_back_rounded,
-                  color: FlutterFlowTheme.of(context).primaryText,
-                  size: 24.0,
-                ),
-                onPressed: () async {
-                  context.pushNamed(
-                    ObraAddRelatorioWidget.routeName,
-                    queryParameters: {
-                      'id': serializeParam(
-                        widget!.relatorioId,
-                        ParamType.int,
-                      ),
-                      'uuid': serializeParam(
-                        widget!.relatorioUuid,
-                        ParamType.String,
-                      ),
-                    }.withoutNulls,
-                  );
-                },
+              elevation: 0.0,
+              scrolledUnderElevation: 0.0,
+              surfaceTintColor: Colors.transparent,
+              centerTitle: false,
+              titleSpacing: 0.0,
+              toolbarHeight: 58.0,
+              iconTheme: const IconThemeData(color: Colors.white),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                onPressed: voltarParaRelatorio,
               ),
-              title: Text(
-                'Gerenciar Atividade',
-                style: FlutterFlowTheme.of(context).headlineMedium.override(
-                      font: GoogleFonts.interTight(
-                        fontWeight: FontWeight.w600,
-                        fontStyle: FlutterFlowTheme.of(context)
-                            .headlineMedium
-                            .fontStyle,
+              title: Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Gerenciar Atividade',
+                      style: GoogleFonts.interTight(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
                       ),
-                      fontSize: 20.0,
-                      letterSpacing: 0.0,
-                      fontWeight: FontWeight.w600,
-                      fontStyle:
-                          FlutterFlowTheme.of(context).headlineMedium.fontStyle,
                     ),
+                    Text(
+                      descricaoAtividade.isEmpty
+                          ? 'Atividade da etapa'
+                          : descricaoAtividade,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        color: Colors.white.withValues(alpha: 0.85),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               actions: [
-                FlutterFlowIconButton(
-                  borderRadius: 20.0,
-                  buttonSize: 40.0,
-                  icon: Icon(
-                    Icons.close_rounded,
-                    color: FlutterFlowTheme.of(context).primaryText,
-                    size: 24.0,
-                  ),
-                  onPressed: () async {
-                    context.pushNamed(
-                      ObraAddRelatorioWidget.routeName,
-                      queryParameters: {
-                        'id': serializeParam(
-                          widget!.relatorioId,
-                          ParamType.int,
-                        ),
-                        'uuid': serializeParam(
-                          widget!.relatorioUuid,
-                          ParamType.String,
-                        ),
-                      }.withoutNulls,
-                    );
-                  },
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, color: Colors.white),
+                  tooltip: 'Fechar sem salvar',
+                  onPressed: voltarParaRelatorio,
                 ),
+                const SizedBox(width: 4),
               ],
-              centerTitle: true,
-              elevation: 0.0,
             ),
             body: SafeArea(
               top: true,
-              child: Padding(
-                padding: EdgeInsetsDirectional.fromSTEB(8.0, 0.0, 8.0, 0.0),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color:
-                              FlutterFlowTheme.of(context).secondaryBackground,
-                          borderRadius: BorderRadius.circular(12.0),
-                          border: Border.all(
-                            color: FlutterFlowTheme.of(context).alternate,
-                            width: 1.0,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.max,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    RdoSectionCard(
+                      title: 'Dados da Atividade',
+                      icon: Icons.assignment_outlined,
+                      margin: EdgeInsets.zero,
+                      contentPadding: const EdgeInsets.all(12),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.fromLTRB(10, 0, 4, 0),
+                            decoration: BoxDecoration(
+                              color:
+                                  theme.primaryBackground.withValues(alpha: 0.5),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: theme.alternate),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.link_rounded,
+                                  size: 15,
+                                  color: theme.secondaryText,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Vincular ordem de serviço',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: theme.primaryText,
+                                    ),
+                                  ),
+                                ),
+                                Transform.scale(
+                                  scale: 0.75,
+                                  child: Switch.adaptive(
+                                    value: _model.switchOrdemValue!,
+                                    onChanged: (newValue) async {
+                                      safeSetState(() {
+                                        _model.switchOrdemValue = newValue!;
+                                        if (newValue == false) {
+                                          _model.dropDownOrdemUuidValue = null;
+                                          _model.dropDownOrdemUuidValueController
+                                              ?.value = null;
+                                        }
+                                      });
+                                    },
+                                    activeColor: theme.primary,
+                                    activeTrackColor:
+                                        theme.primary.withValues(alpha: 0.35),
+                                    inactiveTrackColor: theme.alternate,
+                                    inactiveThumbColor:
+                                        theme.secondaryBackground,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.all(16.0),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.max,
+                          const SizedBox(height: 10),
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final estreito = constraints.maxWidth < 600;
+                              final localW = localSelectorWidget();
+                              if (!_model.switchOrdemValue!) {
+                                return localW;
+                              }
+                              final ordemW = ordemSelectorWidget();
+                              if (estreito) {
+                                return Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    localW,
+                                    const SizedBox(height: 10),
+                                    ordemW,
+                                  ],
+                                );
+                              }
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(child: localW),
+                                  const SizedBox(width: 10),
+                                  Expanded(child: ordemW),
+                                ],
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 10),
+                          _rotuloCampo('Descrição *'),
+                          TextFormField(
+                            controller:
+                                _model.textFieldDescricaoTextController ??=
+                                    TextEditingController(
+                              text: _textoAtividade(
+                                addAtividadeRelatorioEtapaGetDadosAtividadeRowList.firstOrNull?.descricao,
+                              ),
+                            ),
+                            focusNode: _model.textFieldDescricaoFocusNode,
+                            autofocus: false,
+                            textInputAction: TextInputAction.next,
+                            obscureText: false,
+                            decoration: rdoCompactFieldDecoration(
+                              context,
+                              hint: 'Descreva a atividade realizada',
+                            ).copyWith(
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 10),
+                            ),
+                            style: rdoCompactFieldTextStyle(context),
+                            maxLines: 3,
+                            minLines: 2,
+                            cursorColor: theme.primary,
+                            validator: _model
+                                .textFieldDescricaoTextControllerValidator
+                                .asValidator(context),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Dados da Atividade',
-                                style: FlutterFlowTheme.of(context)
-                                    .titleMedium
-                                    .override(
-                                      font: GoogleFonts.interTight(
-                                        fontWeight: FontWeight.w600,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .titleMedium
-                                            .fontStyle,
-                                      ),
-                                      color:
-                                          FlutterFlowTheme.of(context).primary,
-                                      letterSpacing: 0.0,
-                                      fontWeight: FontWeight.w600,
-                                      fontStyle: FlutterFlowTheme.of(context)
-                                          .titleMedium
-                                          .fontStyle,
-                                    ),
-                              ),
-                              Container(
-                                width: MediaQuery.sizeOf(context).width * 1.0,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(0.0),
-                                ),
+                              Expanded(
                                 child: Column(
-                                  mainAxisSize: MainAxisSize.max,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
                                   children: [
-                                    Row(
-                                      mainAxisSize: MainAxisSize.max,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Switch.adaptive(
-                                          value: _model.switchOrdemValue!,
-                                          onChanged: (newValue) async {
-                                            safeSetState(() {
-                                              _model.switchOrdemValue =
-                                                  newValue!;
-                                              if (newValue == false) {
-                                                _model.dropDownOrdemUuidValue =
-                                                    null;
-                                                _model
-                                                    .dropDownOrdemUuidValueController
-                                                    ?.value = null;
-                                              }
-                                            });
-                                          },
-                                          activeColor:
-                                              FlutterFlowTheme.of(context)
-                                                  .primary,
-                                          activeTrackColor:
-                                              FlutterFlowTheme.of(context)
-                                                  .primary,
-                                          inactiveTrackColor:
-                                              FlutterFlowTheme.of(context)
-                                                  .alternate,
-                                          inactiveThumbColor:
-                                              FlutterFlowTheme.of(context)
-                                                  .secondaryBackground,
-                                        ),
-                                        Expanded(
-                                          child: Text(
-                                            'Vincular ordem de serviço',
-                                            style: FlutterFlowTheme.of(context)
-                                                .bodyMedium
-                                                .override(
-                                                  font: GoogleFonts.inter(
-                                                    fontWeight: FontWeight.w600,
-                                                    fontStyle:
-                                                        FlutterFlowTheme.of(
-                                                                context)
-                                                            .bodyMedium
-                                                            .fontStyle,
-                                                  ),
-                                                  fontSize: 18.0,
-                                                  letterSpacing: 0.0,
-                                                  fontWeight: FontWeight.w600,
-                                                  fontStyle:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .bodyMedium
-                                                          .fontStyle,
-                                                ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    LayoutBuilder(
-                                      builder: (context, constraints) {
-                                        final narrow =
-                                            constraints.maxWidth < 600;
-                                        final localW = localSelectorWidget();
-                                        if (!_model.switchOrdemValue!) {
-                                          return localW;
-                                        }
-                                        final ordemW = ordemSelectorWidget();
-                                        if (narrow) {
-                                          return Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              localW,
-                                              SizedBox(height: 8.0),
-                                              ordemW,
-                                            ],
-                                          );
-                                        }
-                                        return Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Expanded(child: localW),
-                                            SizedBox(width: 8.0),
-                                            Expanded(child: ordemW),
-                                          ],
-                                        );
-                                      },
-                                    ),
-                                  ].divide(SizedBox(height: 8.0)),
-                                ),
-                              ),
-                              TextFormField(
-                                controller:
-                                    _model.textFieldDescricaoTextController ??=
-                                        TextEditingController(
-                                  text: _textoAtividade(
-                                    addAtividadeRelatorioEtapaGetDadosAtividadeRowList
-                                        .firstOrNull?.descricao,
-                                  ),
-                                ),
-                                focusNode: _model.textFieldDescricaoFocusNode,
-                                autofocus: false,
-                                textInputAction: TextInputAction.next,
-                                obscureText: false,
-                                decoration: InputDecoration(
-                                  labelText: 'Descrição *',
-                                  labelStyle: FlutterFlowTheme.of(context)
-                                      .labelMedium
-                                      .override(
-                                        font: GoogleFonts.inter(
-                                          fontWeight:
-                                              FlutterFlowTheme.of(context)
-                                                  .labelMedium
-                                                  .fontWeight,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .labelMedium
-                                                  .fontStyle,
-                                        ),
-                                        letterSpacing: 0.0,
-                                        fontWeight: FlutterFlowTheme.of(context)
-                                            .labelMedium
-                                            .fontWeight,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .labelMedium
-                                            .fontStyle,
-                                      ),
-                                  hintText: 'Descreva a atividade realizada',
-                                  hintStyle: FlutterFlowTheme.of(context)
-                                      .bodyMedium
-                                      .override(
-                                        font: GoogleFonts.inter(
-                                          fontWeight:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontWeight,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontStyle,
-                                        ),
-                                        letterSpacing: 0.0,
-                                        fontWeight: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontWeight,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontStyle,
-                                      ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: FlutterFlowTheme.of(context)
-                                          .alternate,
-                                      width: 1.0,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8.0),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color:
-                                          FlutterFlowTheme.of(context).primary,
-                                      width: 1.0,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8.0),
-                                  ),
-                                  errorBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: FlutterFlowTheme.of(context).error,
-                                      width: 1.0,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8.0),
-                                  ),
-                                  focusedErrorBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: FlutterFlowTheme.of(context).error,
-                                      width: 1.0,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8.0),
-                                  ),
-                                  filled: true,
-                                  fillColor: FlutterFlowTheme.of(context)
-                                      .primaryBackground,
-                                  contentPadding:
-                                      EdgeInsetsDirectional.fromSTEB(
-                                          12.0, 16.0, 12.0, 16.0),
-                                ),
-                                style: FlutterFlowTheme.of(context)
-                                    .bodyMedium
-                                    .override(
-                                      font: GoogleFonts.inter(
-                                        fontWeight: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontWeight,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontStyle,
-                                      ),
-                                      letterSpacing: 0.0,
-                                      fontWeight: FlutterFlowTheme.of(context)
-                                          .bodyMedium
-                                          .fontWeight,
-                                      fontStyle: FlutterFlowTheme.of(context)
-                                          .bodyMedium
-                                          .fontStyle,
-                                    ),
-                                maxLines: 3,
-                                minLines: 2,
-                                cursorColor:
-                                    FlutterFlowTheme.of(context).primary,
-                                validator: _model
-                                    .textFieldDescricaoTextControllerValidator
-                                    .asValidator(context),
-                              ),
-                              Row(
-                                mainAxisSize: MainAxisSize.max,
-                                children: [
-                                  Expanded(
-                                    child: TextFormField(
+                                    _rotuloCampo('Quantidade *'),
+                                    TextFormField(
                                       controller: _model
                                               .textFieldQtdRealizadaTextController ??=
                                           TextEditingController(
                                         text: _qtdAtividadeTexto(
-                                          addAtividadeRelatorioEtapaGetDadosAtividadeRowList
-                                              .firstOrNull?.qtdRealizada,
+                                          addAtividadeRelatorioEtapaGetDadosAtividadeRowList.firstOrNull?.qtdRealizada,
                                         ),
                                       ),
                                       focusNode:
@@ -716,137 +651,41 @@ class _AddAtividadeRelatorioEtapaWidgetState
                                       autofocus: false,
                                       textInputAction: TextInputAction.next,
                                       obscureText: false,
-                                      decoration: InputDecoration(
-                                        labelText: 'Quantidade *',
-                                        labelStyle: FlutterFlowTheme.of(context)
-                                            .labelMedium
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .labelMedium
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .labelMedium
-                                                        .fontStyle,
-                                              ),
-                                              letterSpacing: 0.0,
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelMedium
-                                                      .fontStyle,
-                                            ),
-                                        hintText: '0',
-                                        hintStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontStyle,
-                                              ),
-                                              letterSpacing: 0.0,
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color: FlutterFlowTheme.of(context)
-                                                .alternate,
-                                            width: 1.0,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(8.0),
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color: FlutterFlowTheme.of(context)
-                                                .primary,
-                                            width: 1.0,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(8.0),
-                                        ),
-                                        errorBorder: OutlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color: FlutterFlowTheme.of(context)
-                                                .error,
-                                            width: 1.0,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(8.0),
-                                        ),
-                                        focusedErrorBorder: OutlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color: FlutterFlowTheme.of(context)
-                                                .error,
-                                            width: 1.0,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(8.0),
-                                        ),
-                                        filled: true,
-                                        fillColor: FlutterFlowTheme.of(context)
-                                            .primaryBackground,
-                                        contentPadding:
-                                            EdgeInsetsDirectional.fromSTEB(
-                                                12.0, 16.0, 12.0, 16.0),
+                                      decoration: rdoCompactFieldDecoration(
+                                        context,
+                                        hint: '0',
                                       ),
-                                      style: FlutterFlowTheme.of(context)
-                                          .bodyMedium
-                                          .override(
-                                            font: GoogleFonts.inter(
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                            letterSpacing: 0.0,
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontStyle,
-                                          ),
-                                      keyboardType: TextInputType.number,
-                                      cursorColor:
-                                          FlutterFlowTheme.of(context).primary,
+                                      style: rdoCompactFieldTextStyle(context),
+                                      textAlign: TextAlign.center,
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                              decimal: true),
+                                      inputFormatters: _formattersQuantidade,
+                                      cursorColor: theme.primary,
+                                      onChanged: (_) => safeSetState(() {}),
+                                      onFieldSubmitted: (_) =>
+                                          _persistirQtdRealizadaParcial(),
                                       validator: _model
                                           .textFieldQtdRealizadaTextControllerValidator
                                           .asValidator(context),
                                     ),
-                                  ),
-                                  Expanded(
-                                    child: TextFormField(
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    _rotuloCampo('Unidade *'),
+                                    TextFormField(
                                       controller: _model
                                               .textFieldUnidadeTextController ??=
                                           TextEditingController(
                                         text: _textoAtividade(
-                                          addAtividadeRelatorioEtapaGetDadosAtividadeRowList
-                                              .firstOrNull?.unidade,
+                                          addAtividadeRelatorioEtapaGetDadosAtividadeRowList.firstOrNull?.unidade,
                                         ),
                                       ),
                                       focusNode:
@@ -854,957 +693,493 @@ class _AddAtividadeRelatorioEtapaWidgetState
                                       autofocus: false,
                                       textInputAction: TextInputAction.next,
                                       obscureText: false,
-                                      decoration: InputDecoration(
-                                        labelText: 'Unidade *',
-                                        labelStyle: FlutterFlowTheme.of(context)
-                                            .labelMedium
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .labelMedium
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .labelMedium
-                                                        .fontStyle,
-                                              ),
-                                              letterSpacing: 0.0,
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelMedium
-                                                      .fontStyle,
-                                            ),
-                                        hintText: 'm², m³, kg...',
-                                        hintStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontStyle,
-                                              ),
-                                              letterSpacing: 0.0,
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color: FlutterFlowTheme.of(context)
-                                                .alternate,
-                                            width: 1.0,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(8.0),
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color: FlutterFlowTheme.of(context)
-                                                .primary,
-                                            width: 1.0,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(8.0),
-                                        ),
-                                        errorBorder: OutlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color: FlutterFlowTheme.of(context)
-                                                .error,
-                                            width: 1.0,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(8.0),
-                                        ),
-                                        focusedErrorBorder: OutlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color: FlutterFlowTheme.of(context)
-                                                .error,
-                                            width: 1.0,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(8.0),
-                                        ),
-                                        filled: true,
-                                        fillColor: FlutterFlowTheme.of(context)
-                                            .primaryBackground,
-                                        contentPadding:
-                                            EdgeInsetsDirectional.fromSTEB(
-                                                12.0, 16.0, 12.0, 16.0),
+                                      decoration: rdoCompactFieldDecoration(
+                                        context,
+                                        hint: 'm², m³, kg...',
                                       ),
-                                      style: FlutterFlowTheme.of(context)
-                                          .bodyMedium
-                                          .override(
-                                            font: GoogleFonts.inter(
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                            letterSpacing: 0.0,
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontStyle,
-                                          ),
-                                      cursorColor:
-                                          FlutterFlowTheme.of(context).primary,
+                                      style: rdoCompactFieldTextStyle(context),
+                                      textAlign: TextAlign.center,
+                                      cursorColor: theme.primary,
                                       validator: _model
                                           .textFieldUnidadeTextControllerValidator
                                           .asValidator(context),
                                     ),
-                                  ),
-                                ].divide(SizedBox(width: 12.0)),
+                                  ],
+                                ),
                               ),
-                              Builder(
-                                builder: (context) {
-                                  final progRow =
-                                      addAtividadeRelatorioEtapaGetDadosAtividadeRowList
-                                          .firstOrNull;
-                                  final realizada =
-                                      progRow?.qtdRealizada ?? 0;
-                                  final planejada = progRow?.quantidade;
-                                  final unidadeProg =
-                                      valueOrDefault<String>(
-                                    progRow?.unidade,
-                                    '',
-                                  );
-                                  final unidadeSuf = unidadeProg.isNotEmpty
-                                      ? ' $unidadeProg'
-                                      : '';
-                                  final temPlanejado = planejada != null &&
-                                      planejada > 0;
-                                  final fracaoPlanejado = temPlanejado
-                                      ? (realizada / planejada!)
-                                          .clamp(0.0, 1.0)
-                                      : 0.0;
-                                  final progressText = temPlanejado
-                                      ? '$realizada$unidadeSuf realizados de um total de $planejada$unidadeSuf planejados'
-                                      : '$realizada$unidadeSuf realizados'
-                                          '${planejada == null ? ' (quantidade planejada não informada)' : ''}';
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Builder(
+                            builder: (context) {
+                              final progRow =
+                                  addAtividadeRelatorioEtapaGetDadosAtividadeRowList
+                                      .firstOrNull;
+                              final realizada =
+                                  progRow?.qtdRealizada ?? 0;
+                              final planejada = progRow?.quantidade;
+                              final unidadeProg =
+                                  valueOrDefault<String>(
+                                progRow?.unidade,
+                                '',
+                              );
+                              final unidadeSuf = unidadeProg.isNotEmpty
+                                  ? ' $unidadeProg'
+                                  : '';
+                              final temPlanejado = planejada != null &&
+                                  planejada > 0;
+                              final fracaoPlanejado = temPlanejado
+                                  ? (realizada / planejada!)
+                                      .clamp(0.0, 1.0)
+                                  : 0.0;
+                              final realizadaFmt =
+                                  formatQuantidadeRelatorio(realizada);
+                              final progressText = temPlanejado
+                                  ? '$realizadaFmt$unidadeSuf realizados de um total de $planejada$unidadeSuf planejados'
+                                  : '$realizadaFmt$unidadeSuf realizados'
+                                      '${planejada == null ? ' (quantidade planejada não informada)' : ''}';
 
-                                  return Container(
-                                    width: double.infinity,
-                                    height: 42.92,
-                                    decoration: BoxDecoration(
-                                      color: FlutterFlowTheme.of(context)
-                                          .secondaryBackground,
+                              return Container(
+                                width: double.infinity,
+                                height: 42.92,
+                                decoration: BoxDecoration(
+                                  color: FlutterFlowTheme.of(context)
+                                      .secondaryBackground,
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.max,
+                                  children: [
+                                    Text(
+                                      progressText,
+                                      style: FlutterFlowTheme.of(context)
+                                          .bodyMedium
+                                          .override(
+                                            font: GoogleFonts.inter(
+                                              fontWeight: FontWeight.bold,
+                                              fontStyle:
+                                                  FlutterFlowTheme.of(
+                                                          context)
+                                                      .bodyMedium
+                                                      .fontStyle,
+                                            ),
+                                            fontSize: 12.0,
+                                            letterSpacing: 0.0,
+                                            fontWeight: FontWeight.bold,
+                                            fontStyle:
+                                                FlutterFlowTheme.of(context)
+                                                    .bodyMedium
+                                                    .fontStyle,
+                                          ),
                                     ),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.max,
-                                      children: [
-                                        Text(
-                                          progressText,
-                                          style: FlutterFlowTheme.of(context)
-                                              .bodyMedium
+                                    Padding(
+                                      padding:
+                                          EdgeInsetsDirectional.fromSTEB(
+                                              0.0, 4.0, 0.0, 0.0),
+                                      child: LinearPercentIndicator(
+                                        percent: fracaoPlanejado,
+                                        width: MediaQuery.sizeOf(context)
+                                                .width *
+                                            0.85,
+                                        lineHeight: 16.0,
+                                        animation: true,
+                                        animateFromLastPercent: true,
+                                        progressColor:
+                                            FlutterFlowTheme.of(context)
+                                                .primary,
+                                        backgroundColor:
+                                            FlutterFlowTheme.of(context)
+                                                .secondary,
+                                        center: Text(
+                                          temPlanejado
+                                              ? '${(fracaoPlanejado * 100).round()}%'
+                                              : '—',
+                                          style: FlutterFlowTheme.of(
+                                                  context)
+                                              .headlineSmall
                                               .override(
-                                                font: GoogleFonts.inter(
-                                                  fontWeight: FontWeight.bold,
+                                                font: GoogleFonts.interTight(
+                                                  fontWeight:
+                                                      FlutterFlowTheme.of(
+                                                              context)
+                                                          .headlineSmall
+                                                          .fontWeight,
                                                   fontStyle:
                                                       FlutterFlowTheme.of(
                                                               context)
-                                                          .bodyMedium
+                                                          .headlineSmall
                                                           .fontStyle,
                                                 ),
+                                                color:
+                                                    FlutterFlowTheme.of(
+                                                            context)
+                                                        .primaryBackground,
                                                 fontSize: 12.0,
                                                 letterSpacing: 0.0,
-                                                fontWeight: FontWeight.bold,
+                                                fontWeight:
+                                                    FlutterFlowTheme.of(
+                                                            context)
+                                                        .headlineSmall
+                                                        .fontWeight,
                                                 fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
+                                                    FlutterFlowTheme.of(
+                                                            context)
+                                                        .headlineSmall
                                                         .fontStyle,
                                               ),
                                         ),
-                                        Padding(
-                                          padding:
-                                              EdgeInsetsDirectional.fromSTEB(
-                                                  0.0, 4.0, 0.0, 0.0),
-                                          child: LinearPercentIndicator(
-                                            percent: fracaoPlanejado,
-                                            width: MediaQuery.sizeOf(context)
-                                                    .width *
-                                                0.85,
-                                            lineHeight: 16.0,
-                                            animation: true,
-                                            animateFromLastPercent: true,
-                                            progressColor:
-                                                FlutterFlowTheme.of(context)
-                                                    .primary,
-                                            backgroundColor:
-                                                FlutterFlowTheme.of(context)
-                                                    .secondary,
-                                            center: Text(
-                                              temPlanejado
-                                                  ? '${(fracaoPlanejado * 100).round()}%'
-                                                  : '—',
-                                              style: FlutterFlowTheme.of(
-                                                      context)
-                                                  .headlineSmall
-                                                  .override(
-                                                    font: GoogleFonts.interTight(
-                                                      fontWeight:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .headlineSmall
-                                                              .fontWeight,
-                                                      fontStyle:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .headlineSmall
-                                                              .fontStyle,
-                                                    ),
-                                                    color:
-                                                        FlutterFlowTheme.of(
-                                                                context)
-                                                            .primaryBackground,
-                                                    fontSize: 12.0,
-                                                    letterSpacing: 0.0,
-                                                    fontWeight:
-                                                        FlutterFlowTheme.of(
-                                                                context)
-                                                            .headlineSmall
-                                                            .fontWeight,
-                                                    fontStyle:
-                                                        FlutterFlowTheme.of(
-                                                                context)
-                                                            .headlineSmall
-                                                            .fontStyle,
-                                                  ),
-                                            ),
-                                            padding: EdgeInsets.zero,
-                                          ),
-                                        ),
-                                      ],
+                                        padding: EdgeInsets.zero,
+                                      ),
                                     ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 10),
+                          _rotuloCampo('Status'),
+                          FlutterFlowDropDown<int>(
+                            controller: _model.dropDownStatusValueController!,
+                            options: List<int>.from([1, 0, 2]),
+                            optionLabels: const [
+                              'Em andamento',
+                              'Paralizada',
+                              'Concluída',
+                            ],
+                            onChanged: (val) async {
+                              safeSetState(
+                                  () => _model.dropDownStatusValue = val);
+                              _model.statusSelected =
+                                  _model.dropDownStatusValue;
+                              safeSetState(() {});
+                            },
+                            width: double.infinity,
+                            height: 38.0,
+                            textStyle: rdoCompactFieldTextStyle(context),
+                            hintText: 'Selecione o status',
+                            icon: Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              color: theme.secondaryText,
+                              size: 18.0,
+                            ),
+                            fillColor: theme.secondaryBackground,
+                            elevation: 0.0,
+                            borderColor: theme.alternate,
+                            borderWidth: 1.0,
+                            borderRadius: 8.0,
+                            margin: const EdgeInsetsDirectional.fromSTEB(
+                                10, 0, 6, 0),
+                            hidesUnderline: true,
+                            isSearchable: false,
+                            isMultiSelect: false,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    RdoSectionCard(
+                      title: 'Insumos',
+                      icon: Icons.inventory_2_outlined,
+                      margin: EdgeInsets.zero,
+                      contentPadding: const EdgeInsets.all(12),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          FutureBuilder<List<GetitensdaobraRow>>(
+                            future: SQLiteManager.instance.getitensdaobra(
+                              relatorioUuid: widget!.relatorioUuid!,
+                            ),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData) {
+                                return LinearProgressIndicator(
+                                  color: theme.primary,
+                                );
+                              }
+                              final itens = snapshot.data!;
+
+                              return FlutterFlowDropDown<String>(
+                                multiSelectController:
+                                    _model.dropDownInsumoValueController ??=
+                                        FormFieldController<List<String>?>(
+                                  _model.dropDownInsumoValue ??= <String>[],
+                                ),
+                                options: List<String>.from(itens
+                                    .map((e) => e.uuid)
+                                    .withoutNulls
+                                    .toList()),
+                                optionLabels: itens
+                                    .map((e) => e.nome)
+                                    .withoutNulls
+                                    .toList(),
+                                onMultiSelectChanged: (vals) async {
+                                  await _onMultiSelectItensAtividade(
+                                    tipo: 'insumo',
+                                    selecionados: vals,
+                                    setDropDownValue: (v) =>
+                                        _model.dropDownInsumoValue = v,
                                   );
-                                },
-                              ),
-                              FlutterFlowDropDown<int>(
-                                controller:
-                                    _model.dropDownStatusValueController!,
-                                options: List<int>.from([1, 0, 2]),
-                                optionLabels: [
-                                  'Em andamento',
-                                  'Paralizada',
-                                  'Concluída'
-                                ],
-                                onChanged: (val) async {
-                                  safeSetState(
-                                      () => _model.dropDownStatusValue = val);
-                                  _model.statusSelected =
-                                      _model.dropDownStatusValue;
                                   safeSetState(() {});
                                 },
                                 width: double.infinity,
-                                height: 56.0,
-                                textStyle: FlutterFlowTheme.of(context)
-                                    .bodyMedium
-                                    .override(
-                                      font: GoogleFonts.inter(
-                                        fontWeight: FontWeight.w500,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontStyle,
-                                      ),
-                                      letterSpacing: 0.0,
-                                      fontWeight: FontWeight.w500,
-                                      fontStyle: FlutterFlowTheme.of(context)
-                                          .bodyMedium
-                                          .fontStyle,
-                                    ),
-                                hintText: 'Selecione o status',
+                                height: 38.0,
+                                textStyle: rdoCompactFieldTextStyle(context),
+                                hintText: 'Selecione um ou mais insumos',
                                 icon: Icon(
                                   Icons.keyboard_arrow_down_rounded,
-                                  color:
-                                      FlutterFlowTheme.of(context).primaryText,
-                                  size: 24.0,
+                                  color: theme.secondaryText,
+                                  size: 18.0,
                                 ),
-                                fillColor: FlutterFlowTheme.of(context)
-                                    .primaryBackground,
+                                fillColor: theme.secondaryBackground,
                                 elevation: 0.0,
-                                borderColor:
-                                    FlutterFlowTheme.of(context).alternate,
+                                borderColor: theme.alternate,
                                 borderWidth: 1.0,
                                 borderRadius: 8.0,
-                                margin: EdgeInsetsDirectional.fromSTEB(
-                                    12.0, 0.0, 12.0, 0.0),
+                                margin: const EdgeInsetsDirectional.fromSTEB(
+                                    10, 0, 6, 0),
                                 hidesUnderline: true,
-                                isSearchable: false,
-                                isMultiSelect: false,
-                                labelText: 'Status',
-                                labelTextStyle: FlutterFlowTheme.of(context)
-                                    .labelMedium
-                                    .override(
-                                      font: GoogleFonts.inter(
-                                        fontWeight: FlutterFlowTheme.of(context)
-                                            .labelMedium
-                                            .fontWeight,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .labelMedium
-                                            .fontStyle,
-                                      ),
-                                      letterSpacing: 0.0,
-                                      fontWeight: FlutterFlowTheme.of(context)
-                                          .labelMedium
-                                          .fontWeight,
-                                      fontStyle: FlutterFlowTheme.of(context)
-                                          .labelMedium
-                                          .fontStyle,
-                                    ),
-                              ),
-                            ].divide(SizedBox(height: 16.0)),
-                          ),
-                        ),
-                      ),
-                      Container(
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color:
-                              FlutterFlowTheme.of(context).secondaryBackground,
-                          borderRadius: BorderRadius.circular(12.0),
-                          border: Border.all(
-                            color: FlutterFlowTheme.of(context).alternate,
-                            width: 1.0,
-                          ),
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.all(16.0),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.max,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Recursos Utilizados',
-                                style: FlutterFlowTheme.of(context)
-                                    .titleMedium
-                                    .override(
-                                      font: GoogleFonts.interTight(
-                                        fontWeight: FontWeight.w600,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .titleMedium
-                                            .fontStyle,
-                                      ),
-                                      color:
-                                          FlutterFlowTheme.of(context).primary,
-                                      letterSpacing: 0.0,
-                                      fontWeight: FontWeight.w600,
-                                      fontStyle: FlutterFlowTheme.of(context)
-                                          .titleMedium
-                                          .fontStyle,
-                                    ),
-                              ),
-                              Column(
-                                mainAxisSize: MainAxisSize.max,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Insumos',
-                                    style: FlutterFlowTheme.of(context)
-                                        .labelLarge
-                                        .override(
-                                          font: GoogleFonts.inter(
-                                            fontWeight: FontWeight.w600,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .labelLarge
-                                                    .fontStyle,
-                                          ),
-                                          letterSpacing: 0.0,
-                                          fontWeight: FontWeight.w600,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .labelLarge
-                                                  .fontStyle,
-                                        ),
-                                  ),
-                                  FutureBuilder<List<GetitensdaobraRow>>(
-                                    future:
-                                        SQLiteManager.instance.getitensdaobra(
-                                      relatorioUuid: widget!.relatorioUuid!,
-                                    ),
-                                    builder: (context, snapshot) {
-                                      // Customize what your widget looks like when it's loading.
-                                      if (!snapshot.hasData) {
-                                        return Center(
-                                          child: LinearProgressIndicator(
-                                            color: FlutterFlowTheme.of(context)
-                                                .primary,
-                                          ),
-                                        );
-                                      }
-                                      final dropDownInsumoGetitensdaobraRowList =
-                                          snapshot.data!;
-
-                                      return FlutterFlowDropDown<String>(
-                                        controller: _model
-                                                .dropDownInsumoValueController ??=
-                                            FormFieldController<String>(
-                                          _model.dropDownInsumoValue ??= '0',
-                                        ),
-                                        options: List<String>.from(
-                                            dropDownInsumoGetitensdaobraRowList
-                                                .map((e) => e.uuid)
-                                                .withoutNulls
-                                                .toList()),
-                                        optionLabels:
-                                            dropDownInsumoGetitensdaobraRowList
-                                                .map((e) => e.nome)
-                                                .withoutNulls
-                                                .toList(),
-                                        onChanged: (val) async {
-                                          safeSetState(() =>
-                                              _model.dropDownInsumoValue = val);
-                                          _model.insumoSelected =
-                                              _model.dropDownInsumoValue;
-                                          safeSetState(() {});
-                                          _model.uuidResultInsumos =
-                                              await actions.generateUuid();
-                                          await SQLiteManager.instance
-                                              .setItemAtividade(
-                                            relatorioAtividadeId:
-                                                widget!.atividadeId!,
-                                            tipo: 'insumo',
-                                            obraItemId: 0,
-                                            relatorioAtividadeUuid:
-                                                widget!.atividadeUuid,
-                                            uuid: _model.uuidResultInsumos,
-                                            obraItemUuid: _model.insumoSelected,
-                                          );
-                                          _atualizarListasItensAtividade();
-                                          safeSetState(() {});
-                                        },
-                                        width: double.infinity,
-                                        height: 56.0,
-                                        textStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight: FontWeight.w500,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontStyle,
-                                              ),
-                                              letterSpacing: 0.0,
-                                              fontWeight: FontWeight.w500,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                        hintText: 'Selecione um insumo',
-                                        icon: Icon(
-                                          Icons.keyboard_arrow_down_rounded,
-                                          color: FlutterFlowTheme.of(context)
-                                              .primaryText,
-                                          size: 24.0,
-                                        ),
-                                        fillColor: FlutterFlowTheme.of(context)
-                                            .primaryBackground,
-                                        elevation: 0.0,
-                                        borderColor:
-                                            FlutterFlowTheme.of(context)
-                                                .alternate,
-                                        borderWidth: 1.0,
-                                        borderRadius: 8.0,
-                                        margin: EdgeInsetsDirectional.fromSTEB(
-                                            12.0, 0.0, 12.0, 0.0),
-                                        hidesUnderline: true,
-                                        isSearchable: false,
-                                        isMultiSelect: false,
-                                      );
-                                    },
-                                  ),
-                                  Column(
-                                    mainAxisSize: MainAxisSize.max,
-                                    children: [
-                                      wrapWithModel(
-                                        model: _model
-                                            .insumosAtividadeRelatorioModel,
-                                        updateCallback: () =>
-                                            safeSetState(() {}),
-                                        child: InsumosAtividadeRelatorioWidget(
-                                          relatorioUuid: widget!.relatorioUuid!,
-                                          atividadeUuid: widget!.atividadeUuid!,
-                                          listRefreshToken:
-                                              _listasItensAtividadeRefresh,
-                                        ),
-                                      ),
-                                    ].divide(SizedBox(height: 8.0)),
-                                  ),
-                                ].divide(SizedBox(height: 12.0)),
-                              ),
-                              Divider(
-                                thickness: 1.0,
-                                color: FlutterFlowTheme.of(context).alternate,
-                              ),
-                              Column(
-                                mainAxisSize: MainAxisSize.max,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Equipamentos',
-                                    style: FlutterFlowTheme.of(context)
-                                        .labelLarge
-                                        .override(
-                                          font: GoogleFonts.inter(
-                                            fontWeight: FontWeight.w600,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .labelLarge
-                                                    .fontStyle,
-                                          ),
-                                          letterSpacing: 0.0,
-                                          fontWeight: FontWeight.w600,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .labelLarge
-                                                  .fontStyle,
-                                        ),
-                                  ),
-                                  FutureBuilder<List<CarregaItensObraRow>>(
-                                    future:
-                                        SQLiteManager.instance.carregaItensObra(
-                                      tipo: 'equipamento',
-                                      obraId: widget!.obraId,
-                                      obraUuid: widget!.obraUuid!,
-                                    ),
-                                    builder: (context, snapshot) {
-                                      // Customize what your widget looks like when it's loading.
-                                      if (!snapshot.hasData) {
-                                        return Center(
-                                          child: LinearProgressIndicator(
-                                            color: FlutterFlowTheme.of(context)
-                                                .primary,
-                                          ),
-                                        );
-                                      }
-                                      final dropDownEquipamentosCarregaItensObraRowList =
-                                          snapshot.data!;
-
-                                      return FlutterFlowDropDown<String>(
-                                        controller: _model
-                                                .dropDownEquipamentosValueController ??=
-                                            FormFieldController<String>(
-                                          _model.dropDownEquipamentosValue ??=
-                                              '0',
-                                        ),
-                                        options: List<String>.from(
-                                            dropDownEquipamentosCarregaItensObraRowList
-                                                .map((e) => e.uuid)
-                                                .toList()),
-                                        optionLabels:
-                                            dropDownEquipamentosCarregaItensObraRowList
-                                                .map((e) => e.descricao)
-                                                .toList(),
-                                        onChanged: (val) async {
-                                          safeSetState(() => _model
-                                              .dropDownEquipamentosValue = val);
-                                          _model.equipamentoSelected =
-                                              _model.dropDownEquipamentosValue;
-                                          safeSetState(() {});
-                                          _model.uuidResultEquipamentos =
-                                              await actions.generateUuid();
-                                          await SQLiteManager.instance
-                                              .setItemAtividade(
-                                            relatorioAtividadeId:
-                                                widget!.atividadeId!,
-                                            tipo: 'equipamento',
-                                            obraItemId: 0,
-                                            relatorioAtividadeUuid:
-                                                widget!.atividadeUuid,
-                                            uuid: _model.uuidResultEquipamentos,
-                                            obraItemUuid:
-                                                _model.equipamentoSelected,
-                                          );
-                                          _atualizarListasItensAtividade();
-                                          safeSetState(() {});
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                'Item cadastrado!',
-                                                style: TextStyle(
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .alternate,
-                                                ),
-                                              ),
-                                              duration:
-                                                  Duration(milliseconds: 4000),
-                                              backgroundColor:
-                                                  FlutterFlowTheme.of(context)
-                                                      .secondary,
-                                            ),
-                                          );
-                                        },
-                                        width: double.infinity,
-                                        height: 56.0,
-                                        textStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight: FontWeight.w500,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontStyle,
-                                              ),
-                                              letterSpacing: 0.0,
-                                              fontWeight: FontWeight.w500,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                        hintText: 'Selecione um equipamento',
-                                        icon: Icon(
-                                          Icons.keyboard_arrow_down_rounded,
-                                          color: FlutterFlowTheme.of(context)
-                                              .primaryText,
-                                          size: 24.0,
-                                        ),
-                                        fillColor: FlutterFlowTheme.of(context)
-                                            .primaryBackground,
-                                        elevation: 0.0,
-                                        borderColor:
-                                            FlutterFlowTheme.of(context)
-                                                .alternate,
-                                        borderWidth: 1.0,
-                                        borderRadius: 8.0,
-                                        margin: EdgeInsetsDirectional.fromSTEB(
-                                            12.0, 0.0, 12.0, 0.0),
-                                        hidesUnderline: true,
-                                        isSearchable: false,
-                                        isMultiSelect: false,
-                                      );
-                                    },
-                                  ),
-                                  Column(
-                                    mainAxisSize: MainAxisSize.max,
-                                    children: [
-                                      wrapWithModel(
-                                        model: _model
-                                            .equipamentosAtividadeRelatorioModel,
-                                        updateCallback: () =>
-                                            safeSetState(() {}),
-                                        child:
-                                            EquipamentosAtividadeRelatorioWidget(
-                                          relatorioUuid: widget!.relatorioUuid!,
-                                          atividadeUuid: widget!.atividadeUuid!,
-                                          listRefreshToken:
-                                              _listasItensAtividadeRefresh,
-                                        ),
-                                      ),
-                                    ].divide(SizedBox(height: 8.0)),
-                                  ),
-                                ].divide(SizedBox(height: 12.0)),
-                              ),
-                              Divider(
-                                thickness: 1.0,
-                                color: FlutterFlowTheme.of(context).alternate,
-                              ),
-                              Column(
-                                mainAxisSize: MainAxisSize.max,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Mão de Obra',
-                                    style: FlutterFlowTheme.of(context)
-                                        .labelLarge
-                                        .override(
-                                          font: GoogleFonts.inter(
-                                            fontWeight: FontWeight.w600,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .labelLarge
-                                                    .fontStyle,
-                                          ),
-                                          letterSpacing: 0.0,
-                                          fontWeight: FontWeight.w600,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .labelLarge
-                                                  .fontStyle,
-                                        ),
-                                  ),
-                                  FutureBuilder<List<GetMaoObraRelatorioRow>>(
-                                    future: SQLiteManager.instance
-                                        .getMaoObraRelatorio(
-                                      relatorioUuid: widget!.relatorioUuid!,
-                                    ).then((rows) {
-                                      final seen = <String>{};
-                                      final out = <GetMaoObraRelatorioRow>[];
-                                      for (final e in rows) {
-                                        if (e.statusPresenca
-                                                .trim()
-                                                .toLowerCase() !=
-                                            'presente') {
-                                          continue;
-                                        }
-                                        final u =
-                                            (e.obraItemUuid ?? '').trim();
-                                        if (u.isEmpty) continue;
-                                        if (seen.add(u)) out.add(e);
-                                      }
-                                      return out;
-                                    }),
-                                    builder: (context, snapshot) {
-                                      if (!snapshot.hasData) {
-                                        return Center(
-                                          child: LinearProgressIndicator(
-                                            color: FlutterFlowTheme.of(context)
-                                                .primary,
-                                          ),
-                                        );
-                                      }
-                                      final maoObraPresenteNoRelatorio =
-                                          snapshot.data!;
-                                      final itensDropdown =
-                                          maoObraPresenteNoRelatorio
-                                              .where(
-                                                (e) => (e.obraItemUuid ?? '')
-                                                    .trim()
-                                                    .isNotEmpty,
-                                              )
-                                              .toList();
-
-                                      if (itensDropdown.isEmpty) {
-                                        return Padding(
-                                          padding: const EdgeInsets.only(
-                                              bottom: 8.0),
-                                          child: Text(
-                                            'Nenhuma mão de obra marcada como presente neste relatório. '
-                                            'Registre presença no relatório para vincular aqui.',
-                                            style: FlutterFlowTheme.of(context)
-                                                .bodySmall
-                                                .override(
-                                                  font: GoogleFonts.inter(
-                                                    fontWeight:
-                                                        FlutterFlowTheme.of(
-                                                                context)
-                                                            .bodySmall
-                                                            .fontWeight,
-                                                    fontStyle:
-                                                        FlutterFlowTheme.of(
-                                                                context)
-                                                            .bodySmall
-                                                            .fontStyle,
-                                                  ),
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .error,
-                                                ),
-                                          ),
-                                        );
-                                      }
-
-                                      return FlutterFlowDropDown<String>(
-                                        controller: _model
-                                                .dropDownMaoObraValueController ??=
-                                            FormFieldController<String>(
-                                          _model.dropDownMaoObraValue,
-                                        ),
-                                        options: itensDropdown
-                                            .map((e) =>
-                                                (e.obraItemUuid ?? '').trim())
-                                            .toList(),
-                                        optionLabels: itensDropdown
-                                            .map(_labelMaoObraRelatorioPresente)
-                                            .toList(),
-                                        onChanged: (val) async {
-                                          safeSetState(() => _model
-                                              .dropDownMaoObraValue = val);
-                                          _model.maoObraSelected =
-                                              _model.dropDownMaoObraValue;
-                                          safeSetState(() {});
-                                          _model.uuidResultMo =
-                                              await actions.generateUuid();
-                                          await SQLiteManager.instance
-                                              .setItemAtividade(
-                                            relatorioAtividadeId:
-                                                widget!.atividadeId!,
-                                            tipo: 'mao_obra',
-                                            obraItemId: 0,
-                                            relatorioAtividadeUuid:
-                                                widget!.atividadeUuid,
-                                            uuid: _model.uuidResultMo,
-                                            obraItemUuid:
-                                                _model.maoObraSelected,
-                                          );
-                                          _atualizarListasItensAtividade();
-                                          safeSetState(() {});
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                'Item cadastrado!',
-                                                style: TextStyle(
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .alternate,
-                                                ),
-                                              ),
-                                              duration:
-                                                  Duration(milliseconds: 4000),
-                                              backgroundColor:
-                                                  FlutterFlowTheme.of(context)
-                                                      .secondary,
-                                            ),
-                                          );
-                                        },
-                                        width: double.infinity,
-                                        height: 56.0,
-                                        textStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight: FontWeight.w500,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontStyle,
-                                              ),
-                                              letterSpacing: 0.0,
-                                              fontWeight: FontWeight.w500,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                        hintText:
-                                            'Selecione mão de obra (presente no relatório)',
-                                        icon: Icon(
-                                          Icons.keyboard_arrow_down_rounded,
-                                          color: FlutterFlowTheme.of(context)
-                                              .primaryText,
-                                          size: 24.0,
-                                        ),
-                                        fillColor: FlutterFlowTheme.of(context)
-                                            .primaryBackground,
-                                        elevation: 0.0,
-                                        borderColor:
-                                            FlutterFlowTheme.of(context)
-                                                .alternate,
-                                        borderWidth: 1.0,
-                                        borderRadius: 8.0,
-                                        margin: EdgeInsetsDirectional.fromSTEB(
-                                            12.0, 0.0, 12.0, 0.0),
-                                        hidesUnderline: true,
-                                        isSearchable: true,
-                                        isMultiSelect: false,
-                                      );
-                                    },
-                                  ),
-                                  Column(
-                                    mainAxisSize: MainAxisSize.max,
-                                    children: [
-                                      wrapWithModel(
-                                        model: _model
-                                            .maoObraAtividadeRelatorioModel,
-                                        updateCallback: () =>
-                                            safeSetState(() {}),
-                                        child: MaoObraAtividadeRelatorioWidget(
-                                          relatorioUuid: widget!.relatorioUuid!,
-                                          atividadeUuid: widget!.atividadeUuid!,
-                                          listRefreshToken:
-                                              _listasItensAtividadeRefresh,
-                                        ),
-                                      ),
-                                    ].divide(SizedBox(height: 8.0)),
-                                  ),
-                                ].divide(SizedBox(height: 12.0)),
-                              ),
-                            ].divide(SizedBox(height: 16.0)),
-                          ),
-                        ),
-                      ),
-                      wrapWithModel(
-                        model: _model.fotosAtividadeModel,
-                        updateCallback: () => safeSetState(() {}),
-                        child: FotosAtividadeWidget(
-                          parameter1: widget!.atividadeId!,
-                        ),
-                      ),
-                      Row(
-                        mainAxisSize: MainAxisSize.max,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          FFButtonWidget(
-                            onPressed: () async {
-                              context.pushNamed(
-                                ObraAddRelatorioWidget.routeName,
-                                queryParameters: {
-                                  'id': serializeParam(
-                                    widget!.relatorioId,
-                                    ParamType.int,
-                                  ),
-                                  'uuid': serializeParam(
-                                    widget!.relatorioUuid,
-                                    ParamType.String,
-                                  ),
-                                }.withoutNulls,
+                                isSearchable: true,
+                                searchHintText: 'Buscar insumo...',
+                                isMultiSelect: true,
                               );
                             },
-                            text: 'Cancelar',
-                            options: FFButtonOptions(
-                              width: 120.0,
-                              height: 48.0,
-                              padding: EdgeInsets.all(8.0),
-                              iconPadding: EdgeInsetsDirectional.fromSTEB(
-                                  0.0, 0.0, 0.0, 0.0),
-                              color: FlutterFlowTheme.of(context)
-                                  .secondaryBackground,
-                              textStyle: FlutterFlowTheme.of(context)
-                                  .titleSmall
-                                  .override(
-                                    font: GoogleFonts.interTight(
-                                      fontWeight: FlutterFlowTheme.of(context)
-                                          .titleSmall
-                                          .fontWeight,
-                                      fontStyle: FlutterFlowTheme.of(context)
-                                          .titleSmall
-                                          .fontStyle,
-                                    ),
-                                    letterSpacing: 0.0,
-                                    fontWeight: FlutterFlowTheme.of(context)
-                                        .titleSmall
-                                        .fontWeight,
-                                    fontStyle: FlutterFlowTheme.of(context)
-                                        .titleSmall
-                                        .fontStyle,
-                                  ),
-                              elevation: 0.0,
-                              borderSide: BorderSide(
-                                color: FlutterFlowTheme.of(context).alternate,
-                                width: 1.0,
-                              ),
-                              borderRadius: BorderRadius.circular(8.0),
+                          ),
+                          const SizedBox(height: 8),
+                          wrapWithModel(
+                            model: _model.insumosAtividadeRelatorioModel,
+                            updateCallback: () => safeSetState(() {}),
+                            child: InsumosAtividadeRelatorioWidget(
+                              relatorioUuid: widget!.relatorioUuid!,
+                              atividadeUuid: widget!.atividadeUuid!,
+                              listRefreshToken: _listasItensAtividadeRefresh,
                             ),
                           ),
-                          FFButtonWidget(
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    RdoSectionCard(
+                      title: 'Equipamentos',
+                      icon: Icons.construction_outlined,
+                      margin: EdgeInsets.zero,
+                      contentPadding: const EdgeInsets.all(12),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          FutureBuilder<List<CarregaItensObraRow>>(
+                            future: SQLiteManager.instance.carregaItensObra(
+                              tipo: 'equipamento',
+                              obraId: widget!.obraId,
+                              obraUuid: widget!.obraUuid!,
+                            ),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData) {
+                                return LinearProgressIndicator(
+                                  color: theme.primary,
+                                );
+                              }
+                              final itens = snapshot.data!;
+
+                              return FlutterFlowDropDown<String>(
+                                multiSelectController: _model
+                                        .dropDownEquipamentosValueController ??=
+                                    FormFieldController<List<String>?>(
+                                  _model.dropDownEquipamentosValue ??=
+                                      <String>[],
+                                ),
+                                options: List<String>.from(
+                                    itens.map((e) => e.uuid).toList()),
+                                optionLabels:
+                                    itens.map((e) => e.descricao).toList(),
+                                onMultiSelectChanged: (vals) async {
+                                  await _onMultiSelectItensAtividade(
+                                    tipo: 'equipamento',
+                                    selecionados: vals,
+                                    setDropDownValue: (v) =>
+                                        _model.dropDownEquipamentosValue = v,
+                                  );
+                                  safeSetState(() {});
+                                },
+                                width: double.infinity,
+                                height: 38.0,
+                                textStyle: rdoCompactFieldTextStyle(context),
+                                hintText: 'Selecione um ou mais equipamentos',
+                                icon: Icon(
+                                  Icons.keyboard_arrow_down_rounded,
+                                  color: theme.secondaryText,
+                                  size: 18.0,
+                                ),
+                                fillColor: theme.secondaryBackground,
+                                elevation: 0.0,
+                                borderColor: theme.alternate,
+                                borderWidth: 1.0,
+                                borderRadius: 8.0,
+                                margin: const EdgeInsetsDirectional.fromSTEB(
+                                    10, 0, 6, 0),
+                                hidesUnderline: true,
+                                isSearchable: true,
+                                searchHintText: 'Buscar equipamento...',
+                                isMultiSelect: true,
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          wrapWithModel(
+                            model: _model.equipamentosAtividadeRelatorioModel,
+                            updateCallback: () => safeSetState(() {}),
+                            child: EquipamentosAtividadeRelatorioWidget(
+                              relatorioUuid: widget!.relatorioUuid!,
+                              atividadeUuid: widget!.atividadeUuid!,
+                              listRefreshToken: _listasItensAtividadeRefresh,
+                              qtdRealizadaAtividade: _qtdRealizadaDoFormulario,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    RdoSectionCard(
+                      title: 'Mão de Obra',
+                      icon: Icons.groups_2_outlined,
+                      margin: EdgeInsets.zero,
+                      contentPadding: const EdgeInsets.all(12),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          FutureBuilder<List<GetMaoObraRelatorioRow>>(
+                            future: SQLiteManager.instance
+                                .getMaoObraRelatorio(
+                              relatorioUuid: widget!.relatorioUuid!,
+                            ).then((rows) {
+                              final seen = <String>{};
+                              final out = <GetMaoObraRelatorioRow>[];
+                              for (final e in rows) {
+                                if (e.statusPresenca
+                                        .trim()
+                                        .toLowerCase() !=
+                                    'presente') {
+                                  continue;
+                                }
+                                final u =
+                                    (e.obraItemUuid ?? '').trim();
+                                if (u.isEmpty) continue;
+                                if (seen.add(u)) out.add(e);
+                              }
+                              return out;
+                            }),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData) {
+                                return LinearProgressIndicator(
+                                  color: theme.primary,
+                                );
+                              }
+                              final itensDropdown = snapshot.data!
+                                  .where((e) =>
+                                      (e.obraItemUuid ?? '').trim().isNotEmpty)
+                                  .toList();
+
+                              if (itensDropdown.isEmpty) {
+                                return avisoCampo(
+                                  'Nenhuma mão de obra marcada como presente neste relatório. '
+                                  'Registre presença no relatório para vincular aqui.',
+                                  theme.error,
+                                );
+                              }
+
+                              return FlutterFlowDropDown<String>(
+                                multiSelectController:
+                                    _model.dropDownMaoObraValueController ??=
+                                        FormFieldController<List<String>?>(
+                                  _model.dropDownMaoObraValue ??= <String>[],
+                                ),
+                                options: itensDropdown
+                                    .map((e) => (e.obraItemUuid ?? '').trim())
+                                    .toList(),
+                                optionLabels: itensDropdown
+                                    .map(_labelMaoObraRelatorioPresente)
+                                    .toList(),
+                                onMultiSelectChanged: (vals) async {
+                                  await _onMultiSelectItensAtividade(
+                                    tipo: 'mao_obra',
+                                    selecionados: vals,
+                                    setDropDownValue: (v) =>
+                                        _model.dropDownMaoObraValue = v,
+                                  );
+                                  safeSetState(() {});
+                                },
+                                width: double.infinity,
+                                height: 38.0,
+                                textStyle: rdoCompactFieldTextStyle(context),
+                                hintText:
+                                    'Selecione uma ou mais mãos de obra',
+                                icon: Icon(
+                                  Icons.keyboard_arrow_down_rounded,
+                                  color: theme.secondaryText,
+                                  size: 18.0,
+                                ),
+                                fillColor: theme.secondaryBackground,
+                                elevation: 0.0,
+                                borderColor: theme.alternate,
+                                borderWidth: 1.0,
+                                borderRadius: 8.0,
+                                margin: const EdgeInsetsDirectional.fromSTEB(
+                                    10, 0, 6, 0),
+                                hidesUnderline: true,
+                                isSearchable: true,
+                                searchHintText: 'Buscar mão de obra...',
+                                isMultiSelect: true,
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          wrapWithModel(
+                            model: _model.maoObraAtividadeRelatorioModel,
+                            updateCallback: () => safeSetState(() {}),
+                            child: MaoObraAtividadeRelatorioWidget(
+                              relatorioUuid: widget!.relatorioUuid!,
+                              atividadeUuid: widget!.atividadeUuid!,
+                              listRefreshToken: _listasItensAtividadeRefresh,
+                              qtdRealizadaAtividade: _qtdRealizadaDoFormulario,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    wrapWithModel(
+                      model: _model.fotosAtividadeModel,
+                      updateCallback: () => safeSetState(() {}),
+                      child: FotosAtividadeWidget(
+                        parameter1: widget!.atividadeId!,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: voltarParaRelatorio,
+                            icon: const Icon(Icons.close_rounded, size: 16),
+                            label: const Text('Cancelar'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: theme.secondaryText,
+                              minimumSize: const Size(0, 40),
+                              side: BorderSide(color: theme.alternate),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              textStyle: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 2,
+                          child: FilledButton.icon(
                             onPressed: () async {
                               final descricao = _model
                                   .textFieldDescricaoTextController.text
@@ -1815,8 +1190,9 @@ class _AddAtividadeRelatorioEtapaWidgetState
                               final qtdTxt = _model
                                   .textFieldQtdRealizadaTextController.text
                                   .trim();
-                              final qtdParsed =
-                                  qtdTxt.isEmpty ? null : int.tryParse(qtdTxt);
+                              final qtdParsed = qtdTxt.isEmpty
+                                  ? null
+                                  : tryParseQuantidadeRelatorio(qtdTxt);
                               if (_model.dropDownLocalValue == null ||
                                   descricao.isEmpty ||
                                   unidade.isEmpty ||
@@ -1922,49 +1298,25 @@ class _AddAtividadeRelatorioEtapaWidgetState
                                 },
                               );
                             },
-                            text: 'Salvar',
-                            options: FFButtonOptions(
-                              width: 120.0,
-                              height: 48.0,
-                              padding: EdgeInsets.all(8.0),
-                              iconPadding: EdgeInsetsDirectional.fromSTEB(
-                                  0.0, 0.0, 0.0, 0.0),
-                              color: FlutterFlowTheme.of(context).primary,
-                              textStyle: FlutterFlowTheme.of(context)
-                                  .titleSmall
-                                  .override(
-                                    font: GoogleFonts.interTight(
-                                      fontWeight: FlutterFlowTheme.of(context)
-                                          .titleSmall
-                                          .fontWeight,
-                                      fontStyle: FlutterFlowTheme.of(context)
-                                          .titleSmall
-                                          .fontStyle,
-                                    ),
-                                    color: FlutterFlowTheme.of(context).info,
-                                    letterSpacing: 0.0,
-                                    fontWeight: FlutterFlowTheme.of(context)
-                                        .titleSmall
-                                        .fontWeight,
-                                    fontStyle: FlutterFlowTheme.of(context)
-                                        .titleSmall
-                                        .fontStyle,
-                                  ),
-                              elevation: 0.0,
-                              borderSide: BorderSide(
-                                color: Colors.transparent,
-                                width: 1.0,
+                            icon: const Icon(Icons.check_rounded, size: 17),
+                            label: const Text('Salvar atividade'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: theme.primary,
+                              foregroundColor: theme.info,
+                              minimumSize: const Size(0, 40),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                              borderRadius: BorderRadius.circular(8.0),
+                              textStyle: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
-                        ].divide(SizedBox(width: 12.0)),
-                      ),
-                    ]
-                        .divide(SizedBox(height: 24.0))
-                        .addToStart(SizedBox(height: 16.0))
-                        .addToEnd(SizedBox(height: 32.0)),
-                  ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),

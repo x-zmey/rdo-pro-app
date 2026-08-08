@@ -147,6 +147,7 @@ class _ShowMateriaisRecebidosRelatorioWidgetState
                       return ListView.builder(
                         padding: EdgeInsets.zero,
                         shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
                         scrollDirection: Axis.vertical,
                         itemCount:
                             listViewEquipamentosRecebidosObraRowList.length,

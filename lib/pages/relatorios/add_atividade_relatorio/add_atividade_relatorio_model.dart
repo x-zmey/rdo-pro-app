@@ -60,23 +60,23 @@ class AddAtividadeRelatorioModel
   // State field(s) for DropDownStatus widget.
   int? dropDownStatusValue;
   FormFieldController<int>? dropDownStatusValueController;
-  // State field(s) for DropDownInsumo widget.
-  String? dropDownInsumoValue;
-  FormFieldController<String>? dropDownInsumoValueController;
+  // State field(s) for DropDownInsumo widget (multi-select).
+  List<String>? dropDownInsumoValue;
+  FormFieldController<List<String>?>? dropDownInsumoValueController;
   // Stores action output result for [Custom Action - generateUuid] action in DropDownInsumo widget.
   String? uuidResult;
   // Model for insumosAtividadeRelatorio component.
   late InsumosAtividadeRelatorioModel insumosAtividadeRelatorioModel;
-  // State field(s) for DropDownEquipamentos widget.
-  String? dropDownEquipamentosValue;
-  FormFieldController<String>? dropDownEquipamentosValueController;
+  // State field(s) for DropDownEquipamentos widget (multi-select).
+  List<String>? dropDownEquipamentosValue;
+  FormFieldController<List<String>?>? dropDownEquipamentosValueController;
   // Stores action output result for [Custom Action - generateUuid] action in DropDownEquipamentos widget.
   String? uuidResultEquipamento;
   // Model for equipamentosAtividadeRelatorio component.
   late EquipamentosAtividadeRelatorioModel equipamentosAtividadeRelatorioModel;
-  // State field(s) for DropDownMaoObra widget.
-  String? dropDownMaoObraValue;
-  FormFieldController<String>? dropDownMaoObraValueController;
+  // State field(s) for DropDownMaoObra widget (multi-select).
+  List<String>? dropDownMaoObraValue;
+  FormFieldController<List<String>?>? dropDownMaoObraValueController;
   // Stores action output result for [Custom Action - generateUuid] action in DropDownMaoObra widget.
   String? uuidResultMo;
   // Model for maoObraAtividadeRelatorio component.

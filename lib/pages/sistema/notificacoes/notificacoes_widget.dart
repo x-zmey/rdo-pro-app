@@ -1,5 +1,6 @@
 import '/backend/api_requests/api_calls.dart';
 import '/componentes/navegacao/barra_navegacao_principal.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
@@ -28,6 +29,7 @@ class NotificacoesWidget extends StatefulWidget {
 class _NotificacoesWidgetState extends State<NotificacoesWidget> {
   late NotificacoesModel _model;
 
+  final scaffoldKey = GlobalKey<ScaffoldState>();
   final _scrollController = ScrollController();
 
   final List<Map<String, dynamic>> _items = [];
@@ -332,7 +334,7 @@ class _NotificacoesWidgetState extends State<NotificacoesWidget> {
           RelatorioDetalhesWidget.routeName,
           queryParameters: {'uuid': uuid}.withoutNulls,
           extra: <String, dynamic>{
-            '__transition_info__': TransitionInfo(
+            kTransitionInfoKey: const TransitionInfo(
               hasTransition: true,
               transitionType: PageTransitionType.rightToLeft,
             ),
@@ -349,7 +351,7 @@ class _NotificacoesWidgetState extends State<NotificacoesWidget> {
           DetalhesOrdemServicoWidget.routeName,
           queryParameters: {'ordemUuid': part}.withoutNulls,
           extra: <String, dynamic>{
-            '__transition_info__': TransitionInfo(
+            kTransitionInfoKey: const TransitionInfo(
               hasTransition: true,
               transitionType: PageTransitionType.rightToLeft,
             ),
@@ -365,7 +367,7 @@ class _NotificacoesWidgetState extends State<NotificacoesWidget> {
         RelatorioDetalhesWidget.routeName,
         queryParameters: {'uuid': relUuid}.withoutNulls,
         extra: <String, dynamic>{
-          '__transition_info__': TransitionInfo(
+          kTransitionInfoKey: const TransitionInfo(
             hasTransition: true,
             transitionType: PageTransitionType.rightToLeft,
           ),
@@ -380,7 +382,7 @@ class _NotificacoesWidgetState extends State<NotificacoesWidget> {
         DetalhesOrdemServicoWidget.routeName,
         queryParameters: {'ordemUuid': osUuid}.withoutNulls,
         extra: <String, dynamic>{
-          '__transition_info__': TransitionInfo(
+          kTransitionInfoKey: const TransitionInfo(
             hasTransition: true,
             transitionType: PageTransitionType.rightToLeft,
           ),
@@ -398,7 +400,7 @@ class _NotificacoesWidgetState extends State<NotificacoesWidget> {
           RelatorioDetalhesWidget.routeName,
           queryParameters: {'camufladoId': cam}.withoutNulls,
           extra: <String, dynamic>{
-            '__transition_info__': TransitionInfo(
+            kTransitionInfoKey: const TransitionInfo(
               hasTransition: true,
               transitionType: PageTransitionType.rightToLeft,
             ),
@@ -408,63 +410,493 @@ class _NotificacoesWidgetState extends State<NotificacoesWidget> {
     }
   }
 
-  Widget _buildFiltroTabs(FlutterFlowTheme t) {
-    Widget tab(String value, String label) {
-      final selected = _filterLeitura == value;
-      return Expanded(
-        child: Material(
-          color: selected ? t.secondaryBackground : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          elevation: selected ? 1 : 0,
-          shadowColor: Colors.black.withValues(alpha: 0.08),
-          child: InkWell(
-            onTap: _loading
-                ? null
-                : () {
-                    if (_filterLeitura == value) return;
-                    setState(() => _filterLeitura = value);
-                    _carregar(reset: true);
-                  },
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-              child: Text(
-                label,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  color: selected ? t.primary : t.secondaryText,
-                ),
+  Future<void> _confirmarExcluir(Map<String, dynamic> n) async {
+    final theme = FlutterFlowTheme.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text(
+          'Excluir notificação?',
+          style: GoogleFonts.inter(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: theme.primaryText,
+          ),
+        ),
+        content: Text(
+          'Esta ação não pode ser desfeita.',
+          style: GoogleFonts.inter(fontSize: 13.5, color: theme.secondaryText),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Cancelar',
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w600,
+                color: theme.secondaryText,
               ),
             ),
           ),
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: t.primaryBackground,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: t.alternate),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.error,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Excluir'),
+          ),
+        ],
       ),
-      child: Row(
-        children: [
-          tab('all', 'Todas'),
-          tab('unread', 'Não lidas ($_unreadCount)'),
-          tab('read', 'Lidas'),
+    );
+    if (ok == true) await _excluir(n);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    context.watch<FFAppState>();
+    final theme = FlutterFlowTheme.of(context);
+
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(context).unfocus();
+        FocusManager.instance.primaryFocus?.unfocus();
+      },
+      child: Scaffold(
+        key: scaffoldKey,
+        backgroundColor: theme.primaryBackground,
+        appBar: AppBar(
+          backgroundColor: theme.primary,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          centerTitle: false,
+          titleSpacing: 0,
+          toolbarHeight: 58,
+          iconTheme: const IconThemeData(color: Colors.white),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: () => context.safePop(),
+          ),
+          title: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Notificações',
+                  style: GoogleFonts.interTight(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  _unreadCount > 0
+                      ? '$_unreadCount não lida${_unreadCount == 1 ? '' : 's'}'
+                      : 'Alertas de OS, RDO e sistema',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            if (_unreadCount > 0)
+              IconButton(
+                tooltip: 'Marcar todas como lidas',
+                icon: const Icon(Icons.done_all_rounded,
+                    color: Colors.white, size: 21),
+                onPressed: _loading ? null : _marcarTodasLidas,
+              ),
+            IconButton(
+              tooltip: 'Atualizar',
+              icon: const Icon(Icons.refresh_rounded,
+                  color: Colors.white, size: 21),
+              onPressed: _loading ? null : () => _carregar(reset: true),
+            ),
+            const SizedBox(width: 4),
+          ],
+        ),
+        body: Column(
+          children: [
+            Expanded(child: _buildBody(theme)),
+            const BarraNavegacaoPrincipal(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody(FlutterFlowTheme theme) {
+    return RefreshIndicator(
+      color: theme.primary,
+      onRefresh: () => _carregar(reset: true),
+      child: CustomScrollView(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        slivers: [
+          if (_unreadCount > 0 || _items.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                child: RdoSectionCard(
+                  title: 'Resumo',
+                  icon: Icons.insights_outlined,
+                  margin: EdgeInsets.zero,
+                  contentPadding: EdgeInsets.zero,
+                  child: RdoKpiStrip(
+                    itens: [
+                      RdoKpiData(
+                        label: 'Não lidas',
+                        value: '$_unreadCount',
+                        destaque: _unreadCount > 0,
+                      ),
+                      RdoKpiData(
+                        label: 'Nesta lista',
+                        value: '${_items.length}',
+                      ),
+                      RdoKpiData(
+                        label: 'Filtro',
+                        value: _filterLeitura == 'all'
+                            ? 'Todas'
+                            : _filterLeitura == 'unread'
+                                ? 'Não lidas'
+                                : 'Lidas',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: _buildFiltros(theme),
+            ),
+          ),
+          if (_error != null)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.error.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.error.withValues(alpha: 0.28),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline_rounded,
+                          size: 18, color: theme.error),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _error!,
+                          style: GoogleFonts.inter(
+                            fontSize: 12.5,
+                            color: theme.error,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              16,
+              10,
+              16,
+              kBarraNavegacaoPrincipalReservaScroll,
+            ),
+            sliver: SliverToBoxAdapter(
+              child: RdoSectionCard(
+                title: 'Lista',
+                icon: Icons.notifications_outlined,
+                subtitle: _loading && _items.isEmpty
+                    ? 'Carregando…'
+                    : _items.isEmpty
+                        ? 'Nenhuma notificação neste filtro'
+                        : 'Toque para abrir · deslize para mais',
+                margin: EdgeInsets.zero,
+                trailing: _items.isEmpty
+                    ? null
+                    : RdoContadorChip('${_items.length}'),
+                contentPadding: EdgeInsets.zero,
+                child: _buildListaConteudo(theme),
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
+  Widget _buildFiltros(FlutterFlowTheme theme) {
+    return RdoSectionCard(
+      title: 'Filtro',
+      icon: Icons.filter_list_rounded,
+      subtitle: 'Por status de leitura',
+      margin: EdgeInsets.zero,
+      contentPadding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.primaryBackground.withValues(alpha: 0.65),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: theme.alternate),
+        ),
+        padding: const EdgeInsets.all(4),
+        child: Row(
+          children: [
+            Expanded(
+              child: _buildFiltroBotao(
+                theme,
+                value: 'all',
+                titulo: 'Todas',
+                subtitulo: 'Completo',
+                icon: Icons.inbox_outlined,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: _buildFiltroBotao(
+                theme,
+                value: 'unread',
+                titulo: 'Não lidas',
+                subtitulo: _unreadCount == 0
+                    ? 'Nenhuma'
+                    : '$_unreadCount pendente${_unreadCount == 1 ? '' : 's'}',
+                icon: Icons.mark_email_unread_outlined,
+                badge: _unreadCount > 0 ? _unreadCount : null,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: _buildFiltroBotao(
+                theme,
+                value: 'read',
+                titulo: 'Lidas',
+                subtitulo: 'Arquivo',
+                icon: Icons.mark_email_read_outlined,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFiltroBotao(
+    FlutterFlowTheme theme, {
+    required String value,
+    required String titulo,
+    required String subtitulo,
+    required IconData icon,
+    int? badge,
+  }) {
+    final selecionado = _filterLeitura == value;
+    final disabled = _loading;
+
+    return Material(
+      color: selecionado ? theme.primary : Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: disabled
+            ? null
+            : () {
+                if (_filterLeitura == value) return;
+                setState(() => _filterLeitura = value);
+                _carregar(reset: true);
+              },
+        borderRadius: BorderRadius.circular(8),
+        child: Opacity(
+          opacity: disabled ? 0.55 : 1,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 30,
+                      height: 30,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: selecionado
+                            ? Colors.white.withValues(alpha: 0.18)
+                            : theme.secondaryBackground,
+                        borderRadius: BorderRadius.circular(8),
+                        border: selecionado
+                            ? null
+                            : Border.all(color: theme.alternate),
+                      ),
+                      child: Icon(
+                        icon,
+                        size: 16,
+                        color: selecionado ? Colors.white : theme.primary,
+                      ),
+                    ),
+                    if (badge != null)
+                      Positioned(
+                        right: -6,
+                        top: -5,
+                        child: Container(
+                          constraints: const BoxConstraints(minWidth: 16),
+                          height: 16,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: selecionado
+                                ? Colors.white
+                                : theme.error,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: selecionado
+                                  ? theme.primary
+                                  : theme.secondaryBackground,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Text(
+                            badge > 99 ? '99+' : '$badge',
+                            style: GoogleFonts.inter(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: selecionado
+                                  ? theme.primary
+                                  : Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  titulo,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: selecionado ? Colors.white : theme.primaryText,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  subtitulo,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w500,
+                    color: selecionado
+                        ? Colors.white.withValues(alpha: 0.85)
+                        : theme.secondaryText,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListaConteudo(FlutterFlowTheme theme) {
+    if (_loading && _items.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 36),
+        child: Center(
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
+      );
+    }
+
+    if (_items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 28, 16, 28),
+        child: Column(
+          children: [
+            Icon(
+              Icons.notifications_off_outlined,
+              size: 40,
+              color: theme.secondaryText.withValues(alpha: 0.4),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Nenhuma notificação',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: theme.primaryText,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _filterLeitura == 'unread'
+                  ? 'Você não tem notificações não lidas.'
+                  : _filterLeitura == 'read'
+                      ? 'Nenhuma notificação lida neste filtro.'
+                      : 'Quando houver alertas de OS, RDO ou sistema, eles aparecem aqui.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                color: theme.secondaryText,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        for (var i = 0; i < _items.length; i++) ...[
+          if (i > 0)
+            Divider(height: 1, thickness: 1, color: theme.alternate),
+          _buildNotificacaoItem(theme, _items[i]),
+        ],
+        if (_loadingMore)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildNotificacaoItem(
-    BuildContext context,
-    FlutterFlowTheme t,
+    FlutterFlowTheme theme,
     Map<String, dynamic> n,
   ) {
     final read = _isRead(n);
@@ -475,319 +907,128 @@ class _NotificacoesWidgetState extends State<NotificacoesWidget> {
     final actionText =
         data['action_mobile_text']?.toString().trim() ?? 'Abrir';
     final corTipo = _corTipo(context, tipo);
-    final faixa = read ? t.alternate : t.primary;
+    final faixa = read ? theme.alternate : theme.primary;
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 5),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () => _abrirNotificacao(n),
-          child: Container(
-            decoration: BoxDecoration(
-              color: read
-                  ? t.secondaryBackground
-                  : t.primary.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: read
-                    ? t.primaryText.withValues(alpha: 0.06)
-                    : t.primary.withValues(alpha: 0.18),
+    return Material(
+      color: read
+          ? theme.secondaryBackground
+          : theme.primary.withValues(alpha: 0.04),
+      child: InkWell(
+        onTap: () => _abrirNotificacao(n),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(width: 3, color: faixa),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 10, 0, 10),
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: corTipo.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(_iconeTipo(tipo), color: corTipo, size: 18),
+                ),
               ),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(9),
-              child: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(width: 3.5, color: faixa),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 6, 0, 6),
-                      child: Icon(
-                        _iconeTipo(tipo),
-                        color: corTipo,
-                        size: 18,
-                      ),
-                    ),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(6, 5, 4, 5),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: t.primaryText,
-                                    ),
-                                  ),
-                                ),
-                                if (!read)
-                                  Container(
-                                    width: 6,
-                                    height: 6,
-                                    margin: const EdgeInsets.only(left: 4),
-                                    decoration: BoxDecoration(
-                                      color: t.primary,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            if (message.isNotEmpty) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                message,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.inter(
-                                  fontSize: 11,
-                                  height: 1.25,
-                                  color: t.secondaryText,
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 3),
-                            Text(
-                              '${_tempoRelativo(n['created_at'])} · $actionText',
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 10, 4, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              title,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.inter(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                                color: read ? t.secondaryText : t.primary,
+                                fontSize: 13.5,
+                                fontWeight:
+                                    read ? FontWeight.w600 : FontWeight.w700,
+                                color: theme.primaryText,
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                          if (!read)
+                            Container(
+                              width: 7,
+                              height: 7,
+                              margin: const EdgeInsets.only(left: 6),
+                              decoration: BoxDecoration(
+                                color: theme.primary,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                        ],
                       ),
-                    ),
-                    _iconAction(
-                      t,
-                      icon: Icons.delete_outline_rounded,
-                      tooltip: 'Excluir',
-                      onPressed: () => _confirmarExcluir(n),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _iconAction(
-    FlutterFlowTheme t, {
-    required IconData icon,
-    required VoidCallback onPressed,
-    String? tooltip,
-  }) {
-    final btn = Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(6),
-        child: SizedBox(
-          width: 32,
-          height: double.infinity,
-          child: Icon(icon, size: 18, color: t.secondaryText),
-        ),
-      ),
-    );
-    if (tooltip == null) return btn;
-    return Tooltip(message: tooltip, child: btn);
-  }
-
-  Future<void> _confirmarExcluir(Map<String, dynamic> n) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Excluir notificação?'),
-        content: const Text('Esta ação não pode ser desfeita.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancelar')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Excluir')),
-        ],
-      ),
-    );
-    if (ok == true) await _excluir(n);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    context.watch<FFAppState>();
-    final t = FlutterFlowTheme.of(context);
-
-    return GestureDetector(
-      onTap: () {
-        FocusScope.of(context).unfocus();
-        FocusManager.instance.primaryFocus?.unfocus();
-      },
-      child: Scaffold(
-        backgroundColor: t.primaryBackground,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          surfaceTintColor: Colors.transparent,
-          title: Text(
-            'Notificações',
-            style: GoogleFonts.inter(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: t.primaryText,
-              letterSpacing: -0.2,
-            ),
-          ),
-          leading: IconButton(
-            icon: Icon(Icons.arrow_back_rounded, color: t.primary),
-            onPressed: () => context.safePop(),
-          ),
-          actions: [
-            if (_unreadCount > 0)
-              Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: TextButton(
-                  onPressed: _loading ? null : _marcarTodasLidas,
-                  style: TextButton.styleFrom(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: Text(
-                    'Marcar todas',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: t.primary,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-        body: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Positioned.fill(
-              child: Padding(
-                padding: const EdgeInsets.only(
-                  bottom: kBarraNavegacaoPrincipalReservaScroll,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
-                      child: _buildFiltroTabs(t),
-                    ),
-                    if (_error != null)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-                        child: Text(
-                          _error!,
+                      if (message.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          message,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
-                            fontSize: 13,
-                            color: t.error,
+                            fontSize: 12,
+                            height: 1.3,
+                            color: theme.secondaryText,
                           ),
                         ),
-                      ),
-                    Expanded(
-                      child: _loading && _items.isEmpty
-                          ? Center(
-                              child:
-                                  CircularProgressIndicator(color: t.primary))
-                          : RefreshIndicator(
-                              color: t.primary,
-                              onRefresh: () => _carregar(reset: true),
-                              child: _items.isEmpty
-                                  ? ListView(
-                                      physics:
-                                          const AlwaysScrollableScrollPhysics(),
-                                      children: [
-                                        SizedBox(
-                                          height: MediaQuery.sizeOf(context)
-                                                  .height *
-                                              0.18,
-                                        ),
-                                        Icon(
-                                          Icons.notifications_off_outlined,
-                                          size: 36,
-                                          color: t.secondaryText
-                                              .withValues(alpha: 0.45),
-                                        ),
-                                        const SizedBox(height: 10),
-                                        Text(
-                                          'Nenhuma notificação por aqui.',
-                                          textAlign: TextAlign.center,
-                                          style: GoogleFonts.inter(
-                                            fontSize: 13,
-                                            color: t.secondaryText,
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : ListView.builder(
-                                      controller: _scrollController,
-                                      physics:
-                                          const AlwaysScrollableScrollPhysics(),
-                                      padding: const EdgeInsets.fromLTRB(
-                                          12, 2, 12, 16),
-                                      itemCount: _items.length +
-                                          (_loadingMore ? 1 : 0),
-                                      itemBuilder: (context, i) {
-                                        if (i >= _items.length) {
-                                          return Padding(
-                                            padding: const EdgeInsets.all(16),
-                                            child: Center(
-                                              child: SizedBox(
-                                                width: 24,
-                                                height: 24,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                  color: t.primary,
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        }
-                                        return _buildNotificacaoItem(
-                                          context,
-                                          t,
-                                          _items[i],
-                                        );
-                                      },
-                                    ),
+                      ],
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _tempoRelativo(n['created_at']),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                color: theme.secondaryText,
+                              ),
                             ),
-                    ),
-                  ],
+                          ),
+                          Text(
+                            actionText,
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: read ? theme.secondaryText : theme.primary,
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 16,
+                            color: read ? theme.secondaryText : theme.primary,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: BarraNavegacaoPrincipal(),
-            ),
-          ],
+              Tooltip(
+                message: 'Excluir',
+                child: InkWell(
+                  onTap: () => _confirmarExcluir(n),
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    width: 36,
+                    child: Icon(
+                      Icons.delete_outline_rounded,
+                      size: 18,
+                      color: theme.secondaryText,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

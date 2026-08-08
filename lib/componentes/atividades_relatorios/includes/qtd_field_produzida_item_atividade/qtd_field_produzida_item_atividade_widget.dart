@@ -1,4 +1,5 @@
 import '/backend/sqlite/sqlite_manager.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/custom_functions.dart';
@@ -20,6 +21,7 @@ class QtdFieldProduzidaItemAtividadeWidget extends StatefulWidget {
     required this.tipo,
     this.unidade,
     this.onSaved,
+    this.qtdRealizadaAtividade,
   });
 
   final String uuid;
@@ -30,6 +32,10 @@ class QtdFieldProduzidaItemAtividadeWidget extends StatefulWidget {
   final String tipo;
   final String? unidade;
   final VoidCallback? onSaved;
+
+  /// Quantidade realizada digitada no formulário da atividade (pode ainda não
+  /// estar persistida no SQLite). Usada como teto da produtividade.
+  final ValueGetter<num?>? qtdRealizadaAtividade;
 
   @override
   State<QtdFieldProduzidaItemAtividadeWidget> createState() =>
@@ -106,6 +112,7 @@ class _QtdFieldProduzidaItemAtividadeWidgetState
       atividade: atividade,
       qtdProduzida: digitado,
       tipoLabel: _tipoLabel,
+      qtdRealizadaFormulario: widget.qtdRealizadaAtividade?.call(),
     );
 
     if (!check.ok) {
@@ -165,68 +172,12 @@ class _QtdFieldProduzidaItemAtividadeWidgetState
       autofocus: false,
       textInputAction: TextInputAction.done,
       obscureText: false,
-      decoration: InputDecoration(
-        isDense: true,
-        hintText: '0',
-        hintStyle: FlutterFlowTheme.of(context).bodyLarge.override(
-              font: GoogleFonts.inter(
-                fontWeight: FlutterFlowTheme.of(context).bodyLarge.fontWeight,
-                fontStyle: FlutterFlowTheme.of(context).bodyLarge.fontStyle,
-              ),
-              letterSpacing: 0.0,
-              fontWeight: FlutterFlowTheme.of(context).bodyLarge.fontWeight,
-              fontStyle: FlutterFlowTheme.of(context).bodyLarge.fontStyle,
-              lineHeight: 0.7,
-            ),
-        suffixText: unidade.toUpperCase(),
-        suffixStyle: FlutterFlowTheme.of(context).labelSmall.override(
-              font: GoogleFonts.inter(
-                fontWeight: FontWeight.w500,
-              ),
-              color: FlutterFlowTheme.of(context).secondaryText,
-              letterSpacing: 0.0,
-            ),
-        enabledBorder: OutlineInputBorder(
-          borderSide: BorderSide(
-            color: FlutterFlowTheme.of(context).alternate,
-            width: 1.0,
-          ),
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderSide: BorderSide(
-            color: FlutterFlowTheme.of(context).primary,
-            width: 1.0,
-          ),
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderSide: const BorderSide(
-            color: Color(0x00000000),
-            width: 1.0,
-          ),
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderSide: const BorderSide(
-            color: Color(0x00000000),
-            width: 1.0,
-          ),
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        filled: true,
+      decoration: rdoCompactFieldDecoration(
+        context,
+        hint: '0',
         fillColor: FlutterFlowTheme.of(context).primaryBackground,
       ),
-      style: FlutterFlowTheme.of(context).bodyMedium.override(
-            font: GoogleFonts.inter(
-              fontWeight: FlutterFlowTheme.of(context).bodyMedium.fontWeight,
-              fontStyle: FlutterFlowTheme.of(context).bodyMedium.fontStyle,
-            ),
-            fontSize: 16.0,
-            letterSpacing: 0.0,
-            fontWeight: FlutterFlowTheme.of(context).bodyMedium.fontWeight,
-            fontStyle: FlutterFlowTheme.of(context).bodyMedium.fontStyle,
-          ),
+      style: rdoCompactFieldTextStyle(context),
       textAlign: TextAlign.center,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       onFieldSubmitted: (_) => _salvar(),

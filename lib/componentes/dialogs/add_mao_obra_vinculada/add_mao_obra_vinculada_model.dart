@@ -15,13 +15,13 @@ class AddMaoObraVinculadaModel
     extends FlutterFlowModel<AddMaoObraVinculadaWidget> {
   ///  Local state fields for this component.
 
-  String? funcionarioSelected;
+  List<String>? funcionariosSelected;
 
   ///  State fields for stateful widgets in this component.
 
-  // State field(s) for DropDown widget.
-  String? dropDownValue;
-  FormFieldController<String>? dropDownValueController;
+  // State field(s) for DropDown widget (multi-select).
+  List<String>? dropDownValue;
+  FormFieldController<List<String>?>? dropDownValueController;
   // Stores action output result for [Backend Call - SQLite (relatorioDetalhes)] action in Button widget.
   List<RelatorioDetalhesRow>? relatorioResult;
   // Stores action output result for [Custom Action - generateUuid] action in Button widget.

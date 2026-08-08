@@ -1,3 +1,4 @@
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/custom_code/actions/index.dart' as actions;
@@ -47,37 +48,15 @@ class _FotosAtividadeWidgetState extends State<FotosAtividadeWidget> {
   Widget build(BuildContext context) {
     context.watch<FFAppState>();
 
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: FlutterFlowTheme.of(context).secondaryBackground,
-        borderRadius: BorderRadius.circular(12.0),
-        border: Border.all(
-          color: FlutterFlowTheme.of(context).alternate,
-          width: 1.0,
-        ),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(16.0),
-        child: Column(
+    return RdoSectionCard(
+      title: 'Fotos',
+      icon: Icons.photo_camera_outlined,
+      margin: EdgeInsets.zero,
+      contentPadding: const EdgeInsets.all(12.0),
+      child: Column(
           mainAxisSize: MainAxisSize.max,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Fotos',
-              style: FlutterFlowTheme.of(context).titleMedium.override(
-                    font: GoogleFonts.interTight(
-                      fontWeight: FontWeight.w600,
-                      fontStyle:
-                          FlutterFlowTheme.of(context).titleMedium.fontStyle,
-                    ),
-                    color: FlutterFlowTheme.of(context).primary,
-                    letterSpacing: 0.0,
-                    fontWeight: FontWeight.w600,
-                    fontStyle:
-                        FlutterFlowTheme.of(context).titleMedium.fontStyle,
-                  ),
-            ),
             Container(
               width: double.infinity,
               height: 135.6,
@@ -328,9 +307,8 @@ class _FotosAtividadeWidgetState extends State<FotosAtividadeWidget> {
                 reloadTrigger: FFAppState().reloadFotosTrigger,
               ),
             ),
-          ].divide(SizedBox(height: 16.0)),
+          ].divide(SizedBox(height: 12.0)),
         ),
-      ),
     );
   }
 }

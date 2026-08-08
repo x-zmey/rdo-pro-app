@@ -1,6 +1,6 @@
-import 'dart:math' as math;
-
 import '/backend/api_requests/api_calls.dart';
+import '/componentes/ui/rdo_estilo.dart';
+import '/flutter_flow/custom_functions.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';
@@ -641,39 +641,57 @@ class _RelatorioDetalhesWidgetState extends State<RelatorioDetalhesWidget>
 
   PreferredSizeWidget _buildAppBar() {
     final theme = FlutterFlowTheme.of(context);
+    final data = _data;
+    final numero = _str(data?['numero']);
+    final obraNome = _str(_map(data?['obra'])?['nome']);
+    final subtitulo = [
+      if (numero.isNotEmpty) 'RDO #$numero',
+      if (obraNome.isNotEmpty) obraNome,
+    ].join(' · ');
+
     return AppBar(
-      backgroundColor: Colors.transparent,
+      backgroundColor: theme.primary,
       elevation: 0,
       scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
       centerTitle: false,
-      leading: Container(
-        margin: const EdgeInsets.only(left: 8),
-        decoration: BoxDecoration(
-          color: theme.primary.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: IconButton(
-          icon: Icon(Icons.arrow_back_rounded, color: theme.primary),
-          onPressed: () => context.safePop(),
-        ),
+      titleSpacing: 0,
+      toolbarHeight: 58,
+      iconTheme: const IconThemeData(color: Colors.white),
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+        onPressed: () => context.safePop(),
       ),
-      title: Text(
-        'Detalhes do Relatório',
-        style: GoogleFonts.inter(
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-          color: theme.primaryText,
-          letterSpacing: -0.3,
+      title: Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Detalhes do RDO',
+              style: GoogleFonts.interTight(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+            Text(
+              subtitulo.isEmpty ? 'Relatório diário de obra' : subtitulo,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
+            ),
+          ],
         ),
       ),
       actions: [
         IconButton(
           tooltip: 'Atualizar',
-          icon: Icon(Icons.refresh_rounded, color: theme.primary, size: 22),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.refresh_rounded, color: Colors.white, size: 21),
           onPressed: _loading ? null : _load,
         ),
         const SizedBox(width: 4),
@@ -827,107 +845,133 @@ class _RelatorioDetalhesWidgetState extends State<RelatorioDetalhesWidget>
         _str(status?['nome']).isEmpty ? 'N/A' : _str(status?['nome']);
     final podePdf = _camuflado != null && _camuflado!.trim().isNotEmpty;
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.secondaryBackground,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.alternate),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final inicio = _dataBr(data['data_inicio']);
+    final fim = _dataBr(data['data_final']);
+    // API/web: data única vem em `data` (accessor d/m/Y). SQLite local usa data_executado.
+    final dataCampo = _dataBr(data['data']);
+    final dataExecutado = _dataBr(data['data_executado']);
+    final ehPeriodo = inicio.isNotEmpty && fim.isNotEmpty && inicio != fim;
+    final dataUnica = [
+      dataCampo,
+      dataExecutado,
+      inicio,
+      fim,
+    ].firstWhere((e) => e.isNotEmpty, orElse: () => '');
+    final entrada = _str(data['entrada_manha']);
+    final saida = _str(data['saida_tarde']);
+    final jornada = entrada.isEmpty && saida.isEmpty
+        ? '--'
+        : '${entrada.isEmpty ? '--' : entrada} - ${saida.isEmpty ? '--' : saida}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: rdoCardDecoration(context),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              Container(
+                padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
+                decoration: BoxDecoration(
+                  color: theme.primaryBackground.withValues(alpha: 0.5),
+                  border: Border(bottom: BorderSide(color: theme.alternate)),
+                ),
+                child: Row(
                   children: [
-                    Text(
-                      'RDO #${_str(data['numero'])}',
-                      style: GoogleFonts.inter(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: theme.primaryText,
-                        letterSpacing: -0.2,
+                    Icon(Icons.apartment_rounded,
+                        size: 16, color: theme.secondaryText),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        obraNome,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: theme.primaryText,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      obraNome,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: theme.secondaryText,
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 9, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: theme.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${_str(data['data_inicio'])} · ${_str(data['data_final'])}',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: theme.secondaryText,
+                      child: Text(
+                        statusNome,
+                        style: GoogleFonts.inter(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: theme.primary,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: theme.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: theme.primary.withValues(alpha: 0.2),
+              RdoKpiStrip(
+                itens: [
+                  RdoKpiData(
+                    label: 'RDO nº',
+                    value: _str(data['numero']).isEmpty
+                        ? '---'
+                        : _str(data['numero']),
+                    flex: 2,
                   ),
-                ),
-                child: Text(
-                  statusNome,
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: theme.primary,
+                  RdoKpiData(
+                    label: ehPeriodo ? 'Período' : 'Data',
+                    value: ehPeriodo
+                        ? '$inicio - $fim'
+                        : (dataUnica.isEmpty ? '---' : dataUnica),
+                    flex: ehPeriodo ? 4 : 2,
                   ),
-                ),
+                  RdoKpiData(
+                    label: 'Jornada',
+                    value: jornada,
+                    destaque: true,
+                    flex: 2,
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionButton(
+                icon: Icons.picture_as_pdf_outlined,
+                label: 'PDF',
+                onPressed: podePdf && !_pdfLoading ? _onImprimir : null,
+                loading: _pdfLoading,
+                backgroundColor: theme.secondaryBackground,
+                foregroundColor: theme.primary,
+                outlined: true,
+              ),
+            ),
+            if (data['pode_solicitar_revogacao'] == true) ...[
+              const SizedBox(width: 8),
               Expanded(
                 child: _buildActionButton(
-                  icon: Icons.picture_as_pdf_outlined,
-                  label: 'PDF',
-                  onPressed: podePdf && !_pdfLoading ? _onImprimir : null,
-                  loading: _pdfLoading,
-                  backgroundColor: theme.primaryBackground,
-                  foregroundColor: theme.primary,
+                  icon: Icons.undo_rounded,
+                  label: 'Revogar',
+                  onPressed: _onSolicitarRevogacao,
+                  backgroundColor: theme.error.withValues(alpha: 0.08),
+                  foregroundColor: theme.error,
                   outlined: true,
                 ),
               ),
-              if (data['pode_solicitar_revogacao'] == true) ...[
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _buildActionButton(
-                    icon: Icons.undo_rounded,
-                    label: 'Revogar',
-                    onPressed: _onSolicitarRevogacao,
-                    backgroundColor: theme.error.withValues(alpha: 0.08),
-                    foregroundColor: theme.error,
-                    outlined: true,
-                  ),
-                ),
-              ],
             ],
-          ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -1359,91 +1403,218 @@ class _RelatorioDetalhesWidgetState extends State<RelatorioDetalhesWidget>
   }
 
   Widget _buildObraInfo(Map<String, dynamic> data) {
+    final theme = FlutterFlowTheme.of(context);
     final obra = _map(data['obra']);
     final cliente = _map(obra?['cliente']);
     final prazos = _map(data['prazos']);
     final enc = _map(data['encarregado']);
 
+    final logradouro = [
+      _str(obra?['rua']),
+      _str(obra?['numero']),
+    ].where((e) => e.isNotEmpty).join(', ');
+    final endereco = [
+      logradouro,
+      _str(obra?['bairro']),
+    ].where((e) => e.isNotEmpty).join(' · ');
+    final cidade = [
+      _str(obra?['cidade']),
+      _str(obra?['estado']),
+    ].where((e) => e.isNotEmpty).join(' / ');
+
+    final decorrido =
+        double.tryParse(_str(prazos?['porcentagem_decorrida']).replaceAll(',', '.'))
+                ?.clamp(0, 100)
+                .toDouble() ??
+            0;
+
     return _buildSection(
       title: 'Informações da Obra',
       icon: Icons.apartment_rounded,
+      contentPadding: EdgeInsets.zero,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildInfoRow('Contrato', _str(obra?['contrato'])),
-          _buildDivider(),
-          _buildInfoRow('Início obra', _str(obra?['data_inicio'])),
-          _buildInfoRow('Fim obra', _str(obra?['data_final'])),
-          _buildDivider(),
-          _buildInfoRow(
-              'Prazo contratual', '${_str(prazos?['prazo_contratual'])} dias'),
-          _buildInfoRow(
-              'Prazo decorrido', '${_str(prazos?['prazo_decorrido'])} dias'),
-          _buildInfoRow(
-              'Prazo a vencer', '${_str(prazos?['prazo_a_vencer'])} dias'),
-          _buildInfoRow(
-              'Progresso', '${_str(prazos?['porcentagem_decorrida'])}%'),
-          _buildDivider(),
-          _buildInfoRow('Cliente', _str(cliente?['nome'])),
-          _buildInfoRow('Encarregado', _str(enc?['nome'])),
-          _buildDivider(),
-          _buildInfoRow(
-              'Endereço', '${_str(obra?['rua'])}, ${_str(obra?['numero'])}'),
-          _buildInfoRow('Bairro', _str(obra?['bairro'])),
-          _buildInfoRow(
-              'Cidade', '${_str(obra?['cidade'])} / ${_str(obra?['estado'])}'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            child: Column(
+              children: [
+                _parInfo(
+                  'Cliente',
+                  _str(cliente?['nome']),
+                  'Contrato',
+                  _str(obra?['contrato']),
+                ),
+                const SizedBox(height: 8),
+                _parInfo(
+                  'Encarregado',
+                  _str(enc?['nome']),
+                  'Progresso do prazo',
+                  '${decorrido.round()}%',
+                ),
+                const SizedBox(height: 8),
+                _parInfo(
+                  'Início da obra',
+                  _dataBr(obra?['data_inicio']),
+                  'Fim da obra',
+                  _dataBr(obra?['data_final']),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              border: Border.symmetric(
+                horizontal: BorderSide(color: theme.alternate),
+              ),
+            ),
+            child: RdoKpiStrip(
+              itens: [
+                RdoKpiData(
+                  label: 'Prazo contratual',
+                  value: _dias(prazos?['prazo_contratual']),
+                ),
+                RdoKpiData(
+                  label: 'Decorrido',
+                  value: _dias(prazos?['prazo_decorrido']),
+                ),
+                RdoKpiData(
+                  label: 'A vencer',
+                  value: _dias(prazos?['prazo_a_vencer']),
+                  destaque: true,
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: decorrido / 100,
+                minHeight: 5,
+                backgroundColor: theme.alternate,
+                color: decorrido >= 100 ? theme.error : theme.primary,
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: theme.alternate)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.place_outlined, size: 14, color: theme.secondaryText),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        endereco.isEmpty ? 'Endereço não informado' : endereco,
+                        style: GoogleFonts.inter(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                          color: theme.primaryText,
+                        ),
+                      ),
+                      if (cidade.isNotEmpty)
+                        Text(
+                          cidade,
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: theme.secondaryText,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildHorarios(Map<String, dynamic> data) {
-    return _buildSection(
-      title: 'Horários e Turnos',
-      icon: Icons.schedule_rounded,
-      child: Container(
-        decoration: BoxDecoration(
-          color: FlutterFlowTheme.of(context).primary.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildTimeChip('Entrada', _str(data['entrada_manha'])),
-              _buildTimeChip('Intervalo', _str(data['inicio_intervalo'])),
-              _buildTimeChip('Retorno', _str(data['fim_intervalo'])),
-              _buildTimeChip('Saída', _str(data['saida_tarde'])),
-              _buildTimeChip('Jornada', '${_str(data['horas_trabalhadas'])}h'),
-            ],
-          ),
-        ),
-      ),
+  /// Dois campos rótulo/valor na mesma linha, no padrão das tabelas do RDO.
+  Widget _parInfo(
+    String label1,
+    String valor1,
+    String label2,
+    String valor2, {
+    int flexEsquerda = 3,
+    int flexDireita = 2,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(flex: flexEsquerda, child: _campoInfo(label1, valor1)),
+        const SizedBox(width: 12),
+        Expanded(flex: flexDireita, child: _campoInfo(label2, valor2)),
+      ],
     );
   }
 
-  Widget _buildTimeChip(String label, String time) {
+  Widget _campoInfo(String label, String valor) {
     final theme = FlutterFlowTheme.of(context);
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(label.toUpperCase(), style: rdoColumnLabelStyle(context)),
+        const SizedBox(height: 2),
         Text(
-          label,
+          valor.trim().isEmpty ? '—' : valor.trim(),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: GoogleFonts.inter(
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-            color: theme.secondaryText,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          time.isEmpty ? '—' : time,
-          style: GoogleFonts.inter(
-            fontSize: 13,
+            fontSize: 12.5,
             fontWeight: FontWeight.w600,
             color: theme.primaryText,
           ),
         ),
       ],
+    );
+  }
+
+  String _dias(dynamic v) {
+    final s = _str(v);
+    if (s.isEmpty) return '—';
+    final n = double.tryParse(s.replaceAll(',', '.'));
+    final texto = n == null ? s : n.round().toString();
+    return '$texto d';
+  }
+
+  Widget _buildHorarios(Map<String, dynamic> data) {
+    String hora(dynamic v) {
+      final s = _str(v);
+      return s.isEmpty ? '--' : s;
+    }
+
+    final horas = _str(data['horas_trabalhadas']);
+
+    return _buildSection(
+      title: 'Horários e Turnos',
+      icon: Icons.schedule_rounded,
+      contentPadding: EdgeInsets.zero,
+      child: RdoKpiStrip(
+        itens: [
+          RdoKpiData(label: 'Entrada', value: hora(data['entrada_manha'])),
+          RdoKpiData(
+            label: 'Intervalo',
+            value: hora(data['inicio_intervalo']),
+            hint: 'até ${hora(data['fim_intervalo'])}',
+          ),
+          RdoKpiData(label: 'Saída', value: hora(data['saida_tarde'])),
+          RdoKpiData(
+            label: 'Jornada',
+            value: horas.isEmpty ? '--' : '${horas}h',
+            destaque: true,
+          ),
+        ],
+      ),
     );
   }
 
@@ -1466,67 +1637,132 @@ class _RelatorioDetalhesWidgetState extends State<RelatorioDetalhesWidget>
       );
     }
 
+    final theme = FlutterFlowTheme.of(context);
     return _buildSection(
       title: 'Mão de Obra Vinculada',
       icon: Icons.groups_2_rounded,
-      child: ListView.separated(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: list.length,
-        separatorBuilder: (_, __) => _buildDivider(),
-        itemBuilder: (ctx, idx) {
-          final mo = list[idx] as Map?;
-          if (mo == null) return const SizedBox.shrink();
-          final maoObra = _map(mo['mao_obra']) ??
-              _map(mo['maoObra']) ??
-              _map(mo['obra_item']);
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 5),
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    _str(maoObra?['descricao']),
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _getPresencaColor(mo['status_presenca'])
-                          .withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _str(mo['status_presenca']),
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: _getPresencaColor(mo['status_presenca']),
+      trailing: RdoContadorChip(
+        list.length == 1 ? '1 pessoa' : '${list.length} pessoas',
+      ),
+      contentPadding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const RdoTableHeader(
+            columns: [
+              RdoColumn('Colaborador', flex: 5),
+              RdoColumn('Presença', flex: 3, align: TextAlign.center),
+              RdoColumn('Horas', flex: 2, align: TextAlign.end),
+            ],
+          ),
+          for (var idx = 0; idx < list.length; idx++)
+            Builder(
+              builder: (_) {
+                final mo = list[idx] as Map?;
+                if (mo == null) return const SizedBox.shrink();
+                final maoObra = _map(mo['mao_obra']) ??
+                    _map(mo['maoObra']) ??
+                    _map(mo['obra_item']);
+                final nome = _str(mo['nome']).isNotEmpty
+                    ? _str(mo['nome'])
+                    : _str(maoObra?['descricao']);
+                final cargo = _str(mo['cargo']).isNotEmpty
+                    ? _str(mo['cargo'])
+                    : _str(maoObra?['cargo_funcao']);
+                final presenca = _str(mo['status_presenca']);
+                final cor = _getPresencaColor(mo['status_presenca']);
+                final horas = _str(mo['horas_trabalhadas']);
+
+                return Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: idx == list.length - 1
+                      ? null
+                      : BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(color: theme.alternate),
+                          ),
+                        ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 5,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              nome.isEmpty ? '—' : nome,
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: theme.primaryText,
+                              ),
+                            ),
+                            if (cargo.isNotEmpty)
+                              Text(
+                                cargo,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: theme.secondaryText,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
+                      Expanded(
+                        flex: 3,
+                        child: Center(child: _chipStatus(presenca, cor)),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          horas.isEmpty ? '—' : '${horas}h',
+                          textAlign: TextAlign.end,
+                          style: GoogleFonts.inter(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: theme.primaryText,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  '${_str(mo['horas_trabalhadas'])}h',
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: FlutterFlowTheme.of(context).primary,
-                  ),
-                ),
-              ],
+                );
+              },
             ),
-          );
-        },
+        ],
+      ),
+    );
+  }
+
+  Widget _chipStatus(String texto, Color cor) {
+    if (texto.isEmpty) {
+      return Text(
+        '—',
+        style: GoogleFonts.inter(
+          fontSize: 11,
+          color: FlutterFlowTheme.of(context).secondaryText,
+        ),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: cor.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cor.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        texto,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: GoogleFonts.inter(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+          color: cor,
+        ),
       ),
     );
   }
@@ -1577,7 +1813,12 @@ class _RelatorioDetalhesWidgetState extends State<RelatorioDetalhesWidget>
     return _buildSection(
       title: 'Atividades Realizadas',
       icon: Icons.task_alt_rounded,
+      trailing: RdoContadorChip(
+        list.length == 1 ? '1 atividade' : '${list.length} atividades',
+      ),
+      contentPadding: EdgeInsets.zero,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (var i = 0; i < list.length; i++)
             _buildActivityCard(list[i], i < list.length - 1),
@@ -1596,91 +1837,357 @@ class _RelatorioDetalhesWidgetState extends State<RelatorioDetalhesWidget>
         ? Colors.green
         : (progress > 0 ? Colors.orange : theme.secondaryText);
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
+    final local = _str(activity['local_nome'] ?? activity['local']);
+    final unidade = _str(activity['unidade']);
+    final etapa = _etapaAtividade(activity);
+
+    final insumos = _itensAtividade(activity, const ['insumos']);
+    final equipamentos = _itensAtividade(activity, const ['equipamentos']);
+    final maoObra = _itensAtividade(activity, const ['mao_obra', 'maoObra']);
+    final temItens =
+        insumos.isNotEmpty || equipamentos.isNotEmpty || maoObra.isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      decoration: showDivider
+          ? BoxDecoration(
+              border: Border(bottom: BorderSide(color: theme.alternate)),
+            )
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
                       _descricaoAtividade(activity),
                       style: GoogleFonts.inter(
                         fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
+                        height: 1.25,
                         color: theme.primaryText,
                       ),
                     ),
-                  ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      status,
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: statusColor,
+                    if (etapa.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          etapa,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: theme.secondaryText,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Local · ${_str(activity['local_nome'] ?? activity['local'])}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: theme.secondaryText,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Qtd ${_fmtNum(activity['qtd_realizada'])}',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: theme.primary,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: progress / 100,
-                  minHeight: 4,
-                  backgroundColor: Theme.of(context).dividerColor,
-                  color: progress >= 100 ? Colors.green : theme.primary,
+                  ],
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(width: 8),
+              _chipStatus(status, statusColor),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.place_outlined, size: 13, color: theme.secondaryText),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  local.isEmpty ? 'Local não informado' : local,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: theme.secondaryText,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               Text(
-                '${progress.round()}%',
-                style:
-                    GoogleFonts.inter(fontSize: 10, color: theme.secondaryText),
-                textAlign: TextAlign.end,
+                'Realizado ${_qtd(activity['qtd_realizada'])}'
+                '${unidade.isEmpty ? '' : ' $unidade'}',
+                style: GoogleFonts.inter(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: theme.primary,
+                ),
               ),
             ],
           ),
-        ),
-        if (showDivider) _buildDivider(),
-      ],
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress / 100,
+                    minHeight: 5,
+                    backgroundColor: theme.alternate,
+                    color: progress >= 100 ? Colors.green : theme.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${progress.round()}%',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: theme.secondaryText,
+                ),
+              ),
+            ],
+          ),
+          if (temItens) ...[
+            const SizedBox(height: 10),
+            _grupoItensAtividade(
+              titulo: 'Insumos',
+              icone: Icons.inventory_2_outlined,
+              cor: theme.primary,
+              itens: insumos,
+              mostrarProduzida: false,
+            ),
+            _grupoItensAtividade(
+              titulo: 'Equipamentos',
+              icone: Icons.precision_manufacturing_outlined,
+              cor: theme.tertiary,
+              itens: equipamentos,
+              mostrarProduzida: true,
+            ),
+            _grupoItensAtividade(
+              titulo: 'Mão de obra',
+              icone: Icons.groups_2_outlined,
+              cor: theme.secondary,
+              itens: maoObra,
+              mostrarProduzida: true,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Itens vinculados à atividade (`relatorio_atividades_itens` no payload).
+  List<Map<String, dynamic>> _itensAtividade(
+    Map<dynamic, dynamic> atividade,
+    List<String> chaves,
+  ) {
+    for (final chave in chaves) {
+      final v = atividade[chave];
+      if (v is List) {
+        return v
+            .map(_map)
+            .whereType<Map<String, dynamic>>()
+            .toList(growable: false);
+      }
+    }
+    return const [];
+  }
+
+  String _etapaAtividade(Map<dynamic, dynamic> a) {
+    final tarefa = _map(a['tarefa']);
+    final etapa = _map(tarefa?['etapa']);
+    final nome = _str(etapa?['nome']);
+    if (nome.isNotEmpty) return nome;
+    final item = _str(etapa?['item']);
+    if (item.isNotEmpty) return item;
+    return '';
+  }
+
+  /// Bloco de recursos usados na atividade, no formato de tabela compacta.
+  /// Equipamentos e mão de obra também trazem a quantidade produzida.
+  Widget _grupoItensAtividade({
+    required String titulo,
+    required IconData icone,
+    required Color cor,
+    required List<Map<String, dynamic>> itens,
+    required bool mostrarProduzida,
+  }) {
+    if (itens.isEmpty) return const SizedBox.shrink();
+    final theme = FlutterFlowTheme.of(context);
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: theme.primaryBackground.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.alternate),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: cor.withValues(alpha: 0.08),
+              border: Border(bottom: BorderSide(color: theme.alternate)),
+            ),
+            child: Row(
+              children: [
+                Icon(icone, size: 13, color: cor),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    titulo.toUpperCase(),
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                      color: cor,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${itens.length}',
+                  style: GoogleFonts.inter(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: theme.secondaryText,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(10, 5, 10, 5),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: theme.alternate)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: Text('Item', style: rdoColumnLabelStyle(context)),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'UTIL.',
+                    textAlign: TextAlign.end,
+                    style: rdoColumnLabelStyle(context),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'REAL.',
+                    textAlign: TextAlign.end,
+                    style: rdoColumnLabelStyle(context),
+                  ),
+                ),
+                if (mostrarProduzida)
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      'PROD.',
+                      textAlign: TextAlign.end,
+                      style: rdoColumnLabelStyle(context),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          for (var i = 0; i < itens.length; i++)
+            _linhaItemAtividade(
+              itens[i],
+              mostrarProduzida: mostrarProduzida,
+              ultimo: i == itens.length - 1,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _linhaItemAtividade(
+    Map<String, dynamic> item, {
+    required bool mostrarProduzida,
+    required bool ultimo,
+  }) {
+    final theme = FlutterFlowTheme.of(context);
+    final obraItem = _map(item['obra_item']) ?? _map(item['obraItem']);
+    final profissional = _map(obraItem?['profissional']);
+
+    final nomeProfissional = _str(profissional?['nome_completo']).isNotEmpty
+        ? _str(profissional?['nome_completo'])
+        : _str(profissional?['nome']);
+    final descricao = _str(obraItem?['descricao']);
+    final nome = nomeProfissional.isNotEmpty
+        ? nomeProfissional
+        : (descricao.isEmpty ? '—' : descricao);
+
+    final apoio = [
+      _str(obraItem?['cargo_funcao']),
+      _str(obraItem?['unidade']),
+    ].where((e) => e.isNotEmpty).join(' · ');
+
+    Widget valor(dynamic v) => Expanded(
+          flex: 2,
+          child: Text(
+            _qtd(v),
+            textAlign: TextAlign.end,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: theme.primaryText,
+            ),
+          ),
+        );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: ultimo
+          ? null
+          : BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: theme.alternate.withValues(alpha: 0.6),
+                ),
+              ),
+            ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 5,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  nome,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: theme.primaryText,
+                  ),
+                ),
+                if (apoio.isNotEmpty)
+                  Text(
+                    apoio,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 10.5,
+                      color: theme.secondaryText,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          valor(item['qtd_utilizada']),
+          valor(item['qtd_realizada']),
+          if (mostrarProduzida) valor(item['qtd_produzida']),
+        ],
+      ),
     );
   }
 
@@ -1712,78 +2219,57 @@ class _RelatorioDetalhesWidgetState extends State<RelatorioDetalhesWidget>
   }
 
   Widget _buildMateriaisECustos(Map<String, dynamic> data) {
-    final rec = _listaRelatorioFirstMatch(data, ['materiais_recebidos', 'materiaisRecebidos']);
-    final ins = _listaRelatorioFirstMatch(data, ['insumos_usados', 'insumosUsados']);
+    final rec = _listaRelatorioFirstMatch(
+        data, ['materiais_recebidos', 'materiaisRecebidos']);
+    final ins =
+        _listaRelatorioFirstMatch(data, ['insumos_usados', 'insumosUsados']);
     final custos = data['custos'];
 
     return _buildSection(
       title: 'Materiais e Custos',
       icon: Icons.inventory_2_rounded,
+      contentPadding: const EdgeInsets.fromLTRB(0, 0, 0, 4),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Recebidos',
-              style:
-                  GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6),
-          _buildSimpleList(rec, 'Nenhum material recebido'),
-          const SizedBox(height: 10),
-          Text('Utilizados',
-              style:
-                  GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6),
-          _buildSimpleList(ins, 'Nenhum material utilizado'),
-          const SizedBox(height: 10),
-          Text('Custos',
-              style:
-                  GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6),
-          _buildSimpleList(custos, 'Nenhum custo registrado'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSimpleList(dynamic list, String emptyMessage) {
-    if (list is! List || list.isEmpty) {
-      return Text(emptyMessage,
-          style: GoogleFonts.inter(
-              fontSize: 12, color: FlutterFlowTheme.of(context).secondaryText));
-    }
-    return Column(
-      children: list.map((item) {
-        if (item is! Map) return const SizedBox.shrink();
-        final desc = _str(item['descricao'] ??
-            item['equipamento']?['descricao'] ??
-            item['ordem_servico_custo']?['descricao']);
-        final qtd = _fmtNum(item['quantidade'] ??
-            item['total_utilizado'] ??
-            item['qtd_realizada']);
-        final un = _str(item['unidade'] ?? item['equipamento']?['unidade']);
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  desc,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.inter(fontSize: 12),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '$qtd $un',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+          _subtituloTabela('Materiais recebidos'),
+          _tabelaResumo(
+            list: rec,
+            vazio: 'Nenhum material recebido',
+            rotuloItem: 'Material',
+            nome: (m) => _str(m['descricao'] ?? _map(m['equipamento'])?['descricao']),
+            apoio: (m) => _str(m['unidade'] ?? _map(m['equipamento'])?['unidade']),
+            colunas: [
+              _ColunaResumo('Qtd', (m) => _qtd(m['quantidade'])),
             ],
           ),
-        );
-      }).toList(),
+          _subtituloTabela('Insumos utilizados'),
+          _tabelaResumo(
+            list: ins,
+            vazio: 'Nenhum insumo utilizado',
+            rotuloItem: 'Insumo',
+            nome: (m) => _str(m['descricao']),
+            apoio: (m) => _str(m['unidade']),
+            colunas: [
+              _ColunaResumo('Util.', (m) => _qtd(m['total_utilizado'])),
+              _ColunaResumo('Real.', (m) => _qtd(m['total_realizado'])),
+            ],
+          ),
+          _subtituloTabela('Custos lançados'),
+          _tabelaResumo(
+            list: custos,
+            vazio: 'Nenhum custo registrado',
+            rotuloItem: 'Custo',
+            nome: (m) => _str(
+                m['descricao'] ?? _map(m['ordem_servico_custo'])?['descricao']),
+            apoio: (m) =>
+                _str(m['unidade'] ?? _map(m['ordem_servico_custo'])?['unidade']),
+            colunas: [
+              _ColunaResumo('Qtd', (m) => _qtd(m['qtd_realizada'])),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -1791,25 +2277,159 @@ class _RelatorioDetalhesWidgetState extends State<RelatorioDetalhesWidget>
     final mo = data['mao_obra_usadas'];
     final eq = data['equipamentos_usados'];
 
+    // `total_produzido` só existe em servidores atualizados; sem ele a coluna
+    // some em vez de mostrar zero para todo mundo.
+    bool temProduzido(dynamic list) =>
+        list is List &&
+        list.any((e) => e is Map && e['total_produzido'] != null);
+
+    List<_ColunaResumo> colunas(dynamic list) => [
+          _ColunaResumo('Util.', (m) => _qtd(m['total_utilizado'])),
+          _ColunaResumo('Real.', (m) => _qtd(m['total_realizado'])),
+          if (temProduzido(list))
+            _ColunaResumo('Prod.', (m) => _qtd(m['total_produzido'])),
+        ];
+
     return _buildSection(
       title: 'Equipamentos e Mão de Obra',
       icon: Icons.precision_manufacturing_rounded,
+      subtitle: 'Totais somados de todas as atividades',
+      contentPadding: const EdgeInsets.fromLTRB(0, 0, 0, 4),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Mão de Obra Utilizada',
-              style:
-                  GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6),
-          _buildSimpleList(mo, 'Nenhuma mão de obra utilizada'),
-          const SizedBox(height: 10),
-          Text('Equipamentos Utilizados',
-              style:
-                  GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6),
-          _buildSimpleList(eq, 'Nenhum equipamento utilizado'),
+          _subtituloTabela('Mão de obra utilizada'),
+          _tabelaResumo(
+            list: mo,
+            vazio: 'Nenhuma mão de obra utilizada',
+            rotuloItem: 'Colaborador',
+            nome: (m) => _str(m['descricao']),
+            apoio: (m) => _str(m['unidade']),
+            colunas: colunas(mo),
+          ),
+          _subtituloTabela('Equipamentos utilizados'),
+          _tabelaResumo(
+            list: eq,
+            vazio: 'Nenhum equipamento utilizado',
+            rotuloItem: 'Equipamento',
+            nome: (m) => _str(m['descricao']),
+            apoio: (m) => _str(m['unidade']),
+            colunas: colunas(eq),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _subtituloTabela(String texto) {
+    final theme = FlutterFlowTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+      child: Text(
+        texto,
+        style: GoogleFonts.inter(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: theme.primaryText,
+        ),
+      ),
+    );
+  }
+
+  /// Tabela compacta reaproveitada pelas listas de recursos do RDO.
+  Widget _tabelaResumo({
+    required dynamic list,
+    required String vazio,
+    required String rotuloItem,
+    required String Function(Map<String, dynamic>) nome,
+    required List<_ColunaResumo> colunas,
+    String Function(Map<String, dynamic>)? apoio,
+  }) {
+    final theme = FlutterFlowTheme.of(context);
+    if (list is! List || list.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+        child: Text(
+          vazio,
+          style: GoogleFonts.inter(fontSize: 12, color: theme.secondaryText),
+        ),
+      );
+    }
+
+    final itens = list
+        .map(_map)
+        .whereType<Map<String, dynamic>>()
+        .toList(growable: false);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        RdoTableHeader(
+          columns: [
+            RdoColumn(rotuloItem, flex: 5),
+            for (final c in colunas)
+              RdoColumn(c.label, flex: 2, align: TextAlign.end),
+          ],
+        ),
+        for (var i = 0; i < itens.length; i++)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: i == itens.length - 1
+                ? null
+                : BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: theme.alternate.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        nome(itens[i]).isEmpty ? '—' : nome(itens[i]),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: theme.primaryText,
+                        ),
+                      ),
+                      if (apoio != null && apoio(itens[i]).isNotEmpty)
+                        Text(
+                          apoio(itens[i]),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            color: theme.secondaryText,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                for (final c in colunas)
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      c.valor(itens[i]),
+                      textAlign: TextAlign.end,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: theme.primaryText,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
@@ -1818,47 +2438,85 @@ class _RelatorioDetalhesWidgetState extends State<RelatorioDetalhesWidget>
     if (list is! List || list.isEmpty) return const SizedBox.shrink();
 
     final theme = FlutterFlowTheme.of(context);
+    final itens = list.map(_map).whereType<Map<String, dynamic>>().toList();
+
     return _buildSection(
       title: 'Ocorrências',
       icon: Icons.warning_amber_rounded,
+      trailing: RdoContadorChip(
+        itens.length == 1 ? '1 ocorrência' : '${itens.length} ocorrências',
+      ),
+      contentPadding: EdgeInsets.zero,
       child: Column(
-        children: list.map((o) {
-          if (o is! Map) return const SizedBox.shrink();
-          final tipo = _map(o['tipo']);
-          return Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: theme.error.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: theme.error.withValues(alpha: 0.15)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _str(tipo?['nome']),
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: theme.error,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < itens.length; i++)
+            Builder(
+              builder: (_) {
+                final o = itens[i];
+                final tipo = _map(o['tipo']);
+                final horario = [
+                  _str(o['hora_inicio']),
+                  _str(o['hora_saida']),
+                ].where((e) => e.isNotEmpty).join(' - ');
+
+                return Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  decoration: i == itens.length - 1
+                      ? null
+                      : BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(color: theme.alternate),
+                          ),
+                        ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _str(tipo?['nome']).isEmpty
+                                  ? 'Ocorrência'
+                                  : _str(tipo?['nome']),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: theme.error,
+                              ),
+                            ),
+                          ),
+                          if (horario.isNotEmpty)
+                            Text(
+                              horario,
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: theme.secondaryText,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _str(o['descricao']).isEmpty
+                            ? '—'
+                            : _str(o['descricao']),
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          height: 1.3,
+                          color: theme.primaryText,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _str(o['descricao']),
-                  style: GoogleFonts.inter(fontSize: 12),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${_str(o['hora_inicio'])} - ${_str(o['hora_saida'])}',
-                  style: GoogleFonts.inter(
-                      fontSize: 11, color: theme.secondaryText),
-                ),
-              ],
+                );
+              },
             ),
-          );
-        }).toList(),
+        ],
       ),
     );
   }
@@ -1868,39 +2526,68 @@ class _RelatorioDetalhesWidgetState extends State<RelatorioDetalhesWidget>
     if (list is! List || list.isEmpty) return const SizedBox.shrink();
 
     final theme = FlutterFlowTheme.of(context);
+    final itens = list.map(_map).whereType<Map<String, dynamic>>().toList();
+
     return _buildSection(
       title: 'Comentários',
       icon: Icons.chat_bubble_outline_rounded,
+      trailing: RdoContadorChip(
+        itens.length == 1 ? '1 comentário' : '${itens.length} comentários',
+      ),
+      contentPadding: EdgeInsets.zero,
       child: Column(
-        children: list.map((c) {
-          if (c is! Map) return const SizedBox.shrink();
-          return Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: theme.primaryBackground,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: theme.alternate),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _str(c['texto']),
-                  style: GoogleFonts.inter(fontSize: 12),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${_str(c['autor_nome']).isNotEmpty ? _str(c['autor_nome']) : _str(c['created_by'])} · ${_formatDataHoraBr(c['created_at'])}',
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    color: theme.secondaryText,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < itens.length; i++)
+            Builder(
+              builder: (_) {
+                final c = itens[i];
+                final autor = _str(c['autor_nome']).isNotEmpty
+                    ? _str(c['autor_nome'])
+                    : _str(c['created_by']);
+                final quando = _formatDataHoraBr(c['created_at']);
+                final assinatura = [autor, quando]
+                    .where((e) => e.isNotEmpty)
+                    .join(' · ');
+
+                return Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  decoration: i == itens.length - 1
+                      ? null
+                      : BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(color: theme.alternate),
+                          ),
+                        ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _str(c['texto']).isEmpty ? '—' : _str(c['texto']),
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          height: 1.3,
+                          color: theme.primaryText,
+                        ),
+                      ),
+                      if (assinatura.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Text(
+                            assinatura,
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: theme.secondaryText,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                ),
-              ],
+                );
+              },
             ),
-          );
-        }).toList(),
+        ],
       ),
     );
   }
@@ -1913,13 +2600,16 @@ class _RelatorioDetalhesWidgetState extends State<RelatorioDetalhesWidget>
     return _buildSection(
       title: 'Fotos',
       icon: Icons.photo_library_rounded,
+      trailing: RdoContadorChip(
+        list.length == 1 ? '1 foto' : '${list.length} fotos',
+      ),
       child: GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 4,
-          crossAxisSpacing: 6,
-          mainAxisSpacing: 6,
+          crossAxisCount: 6,
+          crossAxisSpacing: 4,
+          mainAxisSpacing: 4,
           childAspectRatio: 1,
         ),
         itemCount: take,
@@ -1929,27 +2619,27 @@ class _RelatorioDetalhesWidgetState extends State<RelatorioDetalhesWidget>
           final url = _str(f['arquivo_url']);
           final theme = FlutterFlowTheme.of(context);
           return InkWell(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(6),
             onTap: url.isNotEmpty ? () => _openPhoto(url) : null,
             child: Container(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(6),
                 color: theme.alternate,
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(6),
                 child: url.isNotEmpty
                     ? Image.network(
                         url,
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => Center(
                           child: Icon(Icons.broken_image,
-                              color: theme.secondaryText),
+                              size: 16, color: theme.secondaryText),
                         ),
                       )
                     : Center(
                         child: Icon(Icons.image_not_supported,
-                            color: theme.secondaryText),
+                            size: 16, color: theme.secondaryText),
                       ),
               ),
             ),
@@ -2071,88 +2761,18 @@ class _RelatorioDetalhesWidgetState extends State<RelatorioDetalhesWidget>
     required String title,
     required Widget child,
     IconData? icon,
+    String? subtitle,
+    Widget? trailing,
+    EdgeInsetsGeometry contentPadding = const EdgeInsets.all(12),
   }) {
-    final theme = FlutterFlowTheme.of(context);
-    return Container(
+    return RdoSectionCard(
+      title: title,
+      subtitle: subtitle,
+      icon: icon,
+      trailing: trailing,
       margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: theme.secondaryBackground,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.alternate),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-            child: Row(
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, size: 17, color: theme.primary),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: Text(
-                    title,
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: theme.primaryText,
-                      letterSpacing: -0.2,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Divider(height: 1, thickness: 1, color: theme.alternate),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-            child: child,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    final theme = FlutterFlowTheme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 108,
-            child: Text(
-              label,
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: theme.secondaryText,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value.isEmpty ? '—' : value,
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: theme.primaryText,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDivider() {
-    return Divider(
-      height: 1,
-      thickness: 1,
-      color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
+      contentPadding: contentPadding,
+      child: child,
     );
   }
 
@@ -2167,6 +2787,23 @@ class _RelatorioDetalhesWidgetState extends State<RelatorioDetalhesWidget>
     return dateTimeFormat('dd/MM/yyyy HH:mm', dt.toLocal(), locale: 'pt_BR');
   }
 
+  /// A API mistura `2026-07-30`, `2026-07-30 00:00:00`, `30/07/2026` e o accessor `d/m/Y`.
+  String _dataBr(dynamic raw) {
+    final s = _str(raw);
+    if (s.isEmpty || s == 'null' || s.toUpperCase() == 'N/A') return '';
+    final br = RegExp(r'^(\d{2})/(\d{2})/(\d{4})').firstMatch(s);
+    if (br != null) {
+      return '${br.group(1)}/${br.group(2)}/${br.group(3)}';
+    }
+    final iso = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(s);
+    if (iso != null) {
+      return '${iso.group(3)}/${iso.group(2)}/${iso.group(1)}';
+    }
+    final dt = DateTime.tryParse(s.replaceFirst(' ', 'T'));
+    if (dt == null) return s;
+    return dateTimeFormat('dd/MM/yyyy', dt.toLocal(), locale: 'pt_BR');
+  }
+
   Map<String, dynamic>? _map(dynamic v) {
     if (v is Map<String, dynamic>) return v;
     if (v is Map) return Map<String, dynamic>.from(v);
@@ -2178,10 +2815,18 @@ class _RelatorioDetalhesWidgetState extends State<RelatorioDetalhesWidget>
     return v.toString().trim();
   }
 
-  String _fmtNum(dynamic v) {
-    if (v == null) return '0';
-    final n = double.tryParse(v.toString().replaceAll(',', '.'));
-    if (n == null) return v.toString();
-    return n.toStringAsFixed(2);
+  /// Quantidade no padrão do RDO: inteiro sem casas, decimal com vírgula.
+  String _qtd(dynamic v) {
+    if (v == null) return '—';
+    final s = v.toString().trim();
+    if (s.isEmpty) return '—';
+    return formatQuantidadeRelatorio(v);
   }
+}
+
+class _ColunaResumo {
+  const _ColunaResumo(this.label, this.valor);
+
+  final String label;
+  final String Function(Map<String, dynamic> item) valor;
 }

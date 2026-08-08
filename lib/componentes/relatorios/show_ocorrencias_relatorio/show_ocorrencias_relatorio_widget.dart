@@ -138,6 +138,7 @@ class _ShowOcorrenciasRelatorioWidgetState
                       return ListView.builder(
                         padding: EdgeInsets.zero,
                         shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
                         scrollDirection: Axis.vertical,
                         itemCount:
                             listViewCarregaOcorrenciasRelatorioRowList.length,

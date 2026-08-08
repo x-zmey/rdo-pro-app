@@ -1,12 +1,11 @@
 import '/auth/membership_access.dart';
 import '/backend/api_requests/api_calls.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/custom_code/actions/index.dart' as actions;
 import '/flutter_flow/brazilian_currency_input_formatter.dart';
 import '/flutter_flow/flutter_flow_drop_down.dart';
-import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import '/flutter_flow/form_field_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -355,6 +354,42 @@ class _ObraAddComposicaoWidgetState extends State<ObraAddComposicaoWidget> {
     }
   }
 
+  Widget _buildDropdown<T>({
+    required FlutterFlowTheme theme,
+    required FormFieldController<T>? controller,
+    required List<T> options,
+    required List<String> optionLabels,
+    required ValueChanged<T?> onChanged,
+    required String hintText,
+    bool disabled = false,
+    bool isSearchable = true,
+    Key? key,
+  }) {
+    return FlutterFlowDropDown<T>(
+      key: key,
+      controller: controller,
+      options: options,
+      optionLabels: optionLabels,
+      onChanged: onChanged,
+      width: double.infinity,
+      height: 48,
+      textStyle: rdoFormFieldTextStyle(context),
+      hintText: hintText,
+      disabled: disabled,
+      icon: Icon(Icons.keyboard_arrow_down_rounded,
+          color: theme.secondaryText),
+      fillColor: theme.secondaryBackground,
+      elevation: 0,
+      borderColor: theme.alternate,
+      borderWidth: 1,
+      borderRadius: 8,
+      margin: EdgeInsets.zero,
+      hidesUnderline: true,
+      isSearchable: isSearchable,
+      isMultiSelect: false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     context.watch<FFAppState>();
@@ -367,40 +402,29 @@ class _ObraAddComposicaoWidgetState extends State<ObraAddComposicaoWidget> {
       },
       child: Scaffold(
         backgroundColor: theme.primaryBackground,
-        appBar: AppBar(
-          backgroundColor: theme.secondaryBackground,
-          elevation: 0,
-          leading: FlutterFlowIconButton(
-            borderColor: Colors.transparent,
-            borderRadius: 30,
-            buttonSize: 48,
-            icon: Icon(Icons.chevron_left_rounded,
-                color: theme.primaryText, size: 28),
-            onPressed: () => context.safePop(),
-          ),
-          title: Text(
-            'Nova composição',
-            style: theme.titleLarge.override(
-              font: GoogleFonts.interTight(fontWeight: FontWeight.w600),
-              color: theme.primaryText,
-            ),
-          ),
-        ),
+        appBar: _buildAppBar(theme),
         body: SafeArea(
           child: FutureBuilder<List<ListaEtapasObraRow>>(
             future: _etapasFuture,
             builder: (context, snap) {
               if (!snap.hasData) {
                 return Center(
-                    child: LinearProgressIndicator(color: theme.primary));
+                  child: CircularProgressIndicator(color: theme.primary),
+                );
               }
               final etapas = snap.data!;
               if (etapas.isEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    'Não há etapas nesta obra. Cadastre uma etapa antes.',
-                    style: theme.bodyMedium,
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'Não há etapas nesta obra. Cadastre uma etapa antes.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: theme.secondaryText,
+                      ),
+                    ),
                   ),
                 );
               }
@@ -431,261 +455,331 @@ class _ObraAddComposicaoWidgetState extends State<ObraAddComposicaoWidget> {
 
               return Form(
                 key: _model.formKey,
-                child: ListView(
-                  padding: const EdgeInsets.all(24),
+                child: Column(
                   children: [
-                    Text(
-                      'Insumo, equipamento ou mão de obra vinculados a uma tarefa (mesmo endpoint do web).',
-                      style: theme.bodySmall.override(
-                        font: GoogleFonts.inter(),
-                        color: theme.secondaryText,
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                        children: [
+                          RdoSectionCard(
+                            title: 'Vínculo',
+                            icon: Icons.link_rounded,
+                            margin: EdgeInsets.zero,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildDropdown<String>(
+                                  theme: theme,
+                                  controller:
+                                      _model.dropDownEtapaUuidValueController ??=
+                                          FormFieldController<String>(
+                                              _model.dropDownEtapaUuidValue),
+                                  options: uuids,
+                                  optionLabels: labels,
+                                  onChanged: (val) async {
+                                    await _onEtapaChanged(val);
+                                  },
+                                  hintText: 'Selecione a etapa',
+                                ),
+                                const SizedBox(height: 12),
+                                if (_carregandoPais)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 8),
+                                    child: Center(
+                                      child: SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: theme.primary,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  _buildDropdown<String>(
+                                    key: ValueKey<String>(
+                                      '${_model.dropDownEtapaUuidValue}_${_paiIds.join()}',
+                                    ),
+                                    theme: theme,
+                                    controller: _model
+                                            .dropDownTarefaPaiIdValueController ??=
+                                        FormFieldController<String>(
+                                            _model.dropDownTarefaPaiIdValue),
+                                    options: _paiIds,
+                                    optionLabels: _paiLabels,
+                                    onChanged: (val) async {
+                                      safeSetState(() =>
+                                          _model.dropDownTarefaPaiIdValue =
+                                              val);
+                                      if (val != null &&
+                                          val.trim().isNotEmpty) {
+                                        await _atualizarItemComposicao(
+                                            val.trim());
+                                      }
+                                    },
+                                    hintText: _paiIds.isEmpty
+                                        ? 'Nenhuma tarefa nesta etapa'
+                                        : 'Selecione a tarefa',
+                                    disabled: _paiIds.isEmpty,
+                                  ),
+                                const SizedBox(height: 12),
+                                _buildDropdown<String>(
+                                  theme: theme,
+                                  controller:
+                                      _model.dropDownTipoValueController ??=
+                                          FormFieldController<String>(
+                                              _model.dropDownTipoValue),
+                                  options: _tipos,
+                                  optionLabels: _tipoLabels,
+                                  onChanged: (val) => safeSetState(
+                                      () => _model.dropDownTipoValue = val),
+                                  hintText: 'Selecione o tipo',
+                                  isSearchable: false,
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: _model.itemTextController,
+                                  focusNode: _model.itemFocusNode,
+                                  readOnly: true,
+                                  style: rdoFormFieldTextStyle(context),
+                                  decoration: rdoFormFieldDecoration(
+                                    context,
+                                    label: 'Nº item (próximo sugerido)',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          RdoSectionCard(
+                            title: 'Dados da composição',
+                            icon: Icons.playlist_add_outlined,
+                            margin: EdgeInsets.zero,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                TextFormField(
+                                  controller: _model.descricaoTextController,
+                                  focusNode: _model.descricaoFocusNode,
+                                  textCapitalization:
+                                      TextCapitalization.sentences,
+                                  style: rdoFormFieldTextStyle(context),
+                                  decoration: rdoFormFieldDecoration(
+                                    context,
+                                    label: 'Descrição',
+                                    hint: 'Ex.: Cimento CP-II',
+                                  ),
+                                  validator: (v) =>
+                                      (v == null || v.trim().isEmpty)
+                                          ? 'Informe a descrição'
+                                          : null,
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller: _model.qtdTextController,
+                                        focusNode: _model.qtdFocusNode,
+                                        keyboardType: const TextInputType
+                                            .numberWithOptions(decimal: true),
+                                        style: rdoFormFieldTextStyle(context),
+                                        decoration: rdoFormFieldDecoration(
+                                          context,
+                                          label: 'Quantidade',
+                                          hint: '1',
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller:
+                                            _model.unidadeTextController,
+                                        focusNode: _model.unidadeFocusNode,
+                                        style: rdoFormFieldTextStyle(context),
+                                        decoration: rdoFormFieldDecoration(
+                                          context,
+                                          label: 'Unidade',
+                                          hint: 'un',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: _model.valorUnitTextController,
+                                  focusNode: _model.valorUnitFocusNode,
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [_valorUnitarioMask],
+                                  style: rdoFormFieldTextStyle(context),
+                                  decoration: rdoFormFieldDecoration(
+                                    context,
+                                    label: 'Valor unitário',
+                                    prefixText: 'R\$ ',
+                                  ),
+                                  validator: (v) =>
+                                      (v == null || v.trim().isEmpty)
+                                          ? 'Informe o valor unitário'
+                                          : null,
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller: _model.metaTextController,
+                                        focusNode: _model.metaFocusNode,
+                                        keyboardType: const TextInputType
+                                            .numberWithOptions(decimal: true),
+                                        style: rdoFormFieldTextStyle(context),
+                                        decoration: rdoFormFieldDecoration(
+                                          context,
+                                          label: 'Meta (opcional)',
+                                          hint: '0',
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller:
+                                            _model.metaUnidadeTextController,
+                                        focusNode: _model.metaUnidadeFocusNode,
+                                        style: rdoFormFieldTextStyle(context),
+                                        decoration: rdoFormFieldDecoration(
+                                          context,
+                                          label: 'Meta unidade',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    Text('Etapa', style: theme.labelMedium),
-                    const SizedBox(height: 6),
-                    FlutterFlowDropDown<String>(
-                      controller: _model.dropDownEtapaUuidValueController ??=
-                          FormFieldController<String>(
-                              _model.dropDownEtapaUuidValue),
-                      options: uuids,
-                      optionLabels: labels,
-                      onChanged: (val) async {
-                        await _onEtapaChanged(val);
-                      },
-                      width: double.infinity,
-                      height: 56,
-                      textStyle: theme.bodyMedium,
-                      hintText: 'Selecione a etapa',
-                      icon: Icon(Icons.keyboard_arrow_down_rounded,
-                          color: theme.secondaryText),
-                      fillColor: theme.primaryBackground,
-                      elevation: 0,
-                      borderColor: theme.alternate,
-                      borderWidth: 1,
-                      borderRadius: 12,
-                      margin: EdgeInsets.zero,
-                      hidesUnderline: true,
-                      isSearchable: true,
-                      isMultiSelect: false,
-                    ),
-                    const SizedBox(height: 16),
-                    Text('Tarefa (pai)', style: theme.labelMedium),
-                    const SizedBox(height: 6),
-                    if (_carregandoPais)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: LinearProgressIndicator(color: theme.primary),
-                      )
-                    else
-                      FlutterFlowDropDown<String>(
-                        key: ValueKey<String>(
-                          '${_model.dropDownEtapaUuidValue}_${_paiIds.join()}',
-                        ),
-                        controller:
-                            _model.dropDownTarefaPaiIdValueController ??=
-                                FormFieldController<String>(
-                                    _model.dropDownTarefaPaiIdValue),
-                        options: _paiIds,
-                        optionLabels: _paiLabels,
-                        onChanged: (val) async {
-                          safeSetState(
-                              () => _model.dropDownTarefaPaiIdValue = val);
-                          if (val != null && val.trim().isNotEmpty) {
-                            await _atualizarItemComposicao(val.trim());
-                          }
-                        },
-                        width: double.infinity,
-                        height: 56,
-                        textStyle: theme.bodyMedium,
-                        hintText: _paiIds.isEmpty
-                            ? 'Nenhuma tarefa nesta etapa'
-                            : 'Selecione a tarefa',
-                        disabled: _paiIds.isEmpty,
-                        icon: Icon(Icons.keyboard_arrow_down_rounded,
-                            color: theme.secondaryText),
-                        fillColor: theme.primaryBackground,
-                        elevation: 0,
-                        borderColor: theme.alternate,
-                        borderWidth: 1,
-                        borderRadius: 12,
-                        margin: EdgeInsets.zero,
-                        hidesUnderline: true,
-                        isSearchable: true,
-                        isMultiSelect: false,
-                      ),
-                    const SizedBox(height: 16),
-                    Text('Tipo', style: theme.labelMedium),
-                    const SizedBox(height: 6),
-                    FlutterFlowDropDown<String>(
-                      controller: _model.dropDownTipoValueController ??=
-                          FormFieldController<String>(_model.dropDownTipoValue),
-                      options: _tipos,
-                      optionLabels: _tipoLabels,
-                      onChanged: (val) =>
-                          safeSetState(() => _model.dropDownTipoValue = val),
-                      width: double.infinity,
-                      height: 56,
-                      textStyle: theme.bodyMedium,
-                      hintText: 'Selecione o tipo',
-                      icon: Icon(Icons.keyboard_arrow_down_rounded,
-                          color: theme.secondaryText),
-                      fillColor: theme.primaryBackground,
-                      elevation: 0,
-                      borderColor: theme.alternate,
-                      borderWidth: 1,
-                      borderRadius: 12,
-                      margin: EdgeInsets.zero,
-                      hidesUnderline: true,
-                      isSearchable: false,
-                      isMultiSelect: false,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _model.itemTextController,
-                      focusNode: _model.itemFocusNode,
-                      readOnly: true,
-                      decoration: InputDecoration(
-                        labelText: 'Nº item (próximo sugerido)',
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _model.descricaoTextController,
-                      focusNode: _model.descricaoFocusNode,
-                      decoration: InputDecoration(
-                        labelText: 'Descrição',
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Informe a descrição'
-                          : null,
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _model.qtdTextController,
-                            focusNode: _model.qtdFocusNode,
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
-                            decoration: InputDecoration(
-                              labelText: 'Quantidade',
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _model.unidadeTextController,
-                            focusNode: _model.unidadeFocusNode,
-                            decoration: InputDecoration(
-                              labelText: 'Unidade',
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _model.valorUnitTextController,
-                      focusNode: _model.valorUnitFocusNode,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [_valorUnitarioMask],
-                      decoration: InputDecoration(
-                        labelText: 'Valor unitário',
-                        prefixText: 'R\$ ',
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Informe o valor unitário'
-                          : null,
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _model.metaTextController,
-                            focusNode: _model.metaFocusNode,
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
-                            decoration: InputDecoration(
-                              labelText: 'Meta (opcional)',
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _model.metaUnidadeTextController,
-                            focusNode: _model.metaUnidadeFocusNode,
-                            decoration: InputDecoration(
-                              labelText: 'Meta unidade',
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 28),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: FFButtonWidget(
-                            onPressed: _model.salvando
-                                ? null
-                                : () => context.safePop(),
-                            text: 'Cancelar',
-                            options: FFButtonOptions(
-                              height: 48,
-                              color: theme.alternate,
-                              textStyle: theme.titleSmall.override(
-                                font: GoogleFonts.interTight(),
-                                color: theme.primary,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: FFButtonWidget(
-                            onPressed: (etapas.isEmpty || _model.salvando)
-                                ? null
-                                : _salvar,
-                            text: _model.salvando ? 'Salvando…' : 'Salvar',
-                            options: FFButtonOptions(
-                              height: 48,
-                              color: theme.primary,
-                              textStyle: theme.titleSmall.override(
-                                font:
-                                    GoogleFonts.interTight(color: Colors.white),
-                                color: Colors.white,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                    _buildBarraAcoes(theme),
                   ],
                 ),
               );
             },
           ),
+        ),
+      ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(FlutterFlowTheme theme) {
+    return AppBar(
+      backgroundColor: theme.primary,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      surfaceTintColor: Colors.transparent,
+      centerTitle: false,
+      titleSpacing: 0,
+      toolbarHeight: 58,
+      iconTheme: const IconThemeData(color: Colors.white),
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+        onPressed: () => context.safePop(),
+      ),
+      title: Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Nova composição',
+              style: GoogleFonts.interTight(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+            Text(
+              'Planejamento da obra',
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBarraAcoes(FlutterFlowTheme theme) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      decoration: BoxDecoration(
+        color: theme.secondaryBackground,
+        border: Border(top: BorderSide(color: theme.alternate)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _model.salvando ? null : () => context.safePop(),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: theme.primaryText,
+                  side: BorderSide(color: theme.alternate),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Text(
+                  'Cancelar',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              flex: 2,
+              child: FilledButton.icon(
+                onPressed: _model.salvando ? null : _salvar,
+                icon: _model.salvando
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.check_rounded, size: 18),
+                label: Text(
+                  _model.salvando ? 'Salvando…' : 'Salvar',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: theme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -40,11 +40,33 @@ Future<void> applyMembershipFromAuth(
   int? fallbackTenantUserId,
   bool preserveLocalTenantOnConflict = false,
 }) async {
+  final prevTenantId = FFAppState().activeTenantUserId;
+  final prevCreatorUuid = FFAppState().creatorUuid.trim();
+
   final tenantId = resolveActiveTenantUserId(
     response,
     fallbackTenantUserId: fallbackTenantUserId,
     preserveLocalOnConflict: preserveLocalTenantOnConflict,
   );
+
+  var creatorUuid = LoginCall.creatorUuid(response)?.trim() ?? '';
+  if (creatorUuid.isEmpty) {
+    creatorUuid = LoginCall.membershipTenantUuid(response)?.trim() ?? '';
+  }
+
+  final tenantChanged = (tenantId != null &&
+          tenantId > 0 &&
+          prevTenantId > 0 &&
+          tenantId != prevTenantId) ||
+      (creatorUuid.isNotEmpty &&
+          prevCreatorUuid.isNotEmpty &&
+          creatorUuid != prevCreatorUuid);
+
+  // Evita reutilizar allowedObraIds/UUIDs do tenant anterior.
+  if (tenantChanged) {
+    clearAllowedObrasCache();
+  }
+
   if (tenantId != null && tenantId > 0) {
     FFAppState().activeTenantUserId = tenantId;
   }
@@ -56,10 +78,6 @@ Future<void> applyMembershipFromAuth(
     FFAppState().creatorId = tenantId;
   }
 
-  var creatorUuid = LoginCall.creatorUuid(response)?.trim() ?? '';
-  if (creatorUuid.isEmpty) {
-    creatorUuid = LoginCall.membershipTenantUuid(response)?.trim() ?? '';
-  }
   if (creatorUuid.isNotEmpty) {
     FFAppState().creatorUuid = creatorUuid;
   }
@@ -127,9 +145,14 @@ Future<void> applyMembershipFromAuth(
     }
   }
 
+  // Lista vazia também é autoritativa (sem obras neste tenant).
   final allowedFromLogin = LoginCall.allowedObraIds(response);
-  if (allowedFromLogin != null && allowedFromLogin.isNotEmpty) {
+  if (allowedFromLogin != null) {
     FFAppState().allowedObraIds = allowedFromLogin;
+    if (allowedFromLogin.isEmpty) {
+      FFAppState().allowedObraUuids = [];
+      FFAppState().allowedObraLocalIds = [];
+    }
     MembershipAccess.persistToPrefs();
   }
   // Sempre busca vínculos com UUID (API) e garante linhas locais — IDs do

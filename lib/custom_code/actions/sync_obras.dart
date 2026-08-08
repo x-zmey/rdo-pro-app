@@ -18,6 +18,7 @@ import 'dart:convert';
 import 'dart:math';
 import '/backend/sqlite/situacao_soft_delete.dart';
 import '/auth/membership_access.dart';
+import 'download_obra_foto_local.dart';
 
 // ===== FUNÇÕES UTILITÁRIAS (já existentes - copie da action anterior) =====
 
@@ -360,6 +361,10 @@ Future<void> _processarObra(
     whereArgs: [uuid],
   );
 
+  final fotoLocalAtual = existe.isNotEmpty
+      ? existe.first['foto_local']?.toString()
+      : null;
+
   final rowComum = <String, dynamic>{
     'uuid_pai': obraServer['uuid_pai'],
     'user_id': obraServer['user_id'],
@@ -379,6 +384,7 @@ Future<void> _processarObra(
     'data_inicio': obraServer['data_inicio'],
     'data_final': obraServer['data_final'],
     'contrato': obraServer['contrato'],
+    // Path relativo do S3 — não sobrescrever com caminho local.
     'foto': obraServer['foto'],
     'created_by': _createdByLocal(obraServer),
     'situacao_id': obraServer['situacao_id'],
@@ -405,6 +411,14 @@ Future<void> _processarObra(
       },
     );
   }
+
+  // Baixa o arquivo da foto para uso offline (foto_local).
+  await downloadObraFotoLocal(
+    obraUuid: uuid,
+    fotoServidor: obraServer['foto']?.toString(),
+    fotoUrl: obraServer['foto_url']?.toString(),
+    fotoLocalAtual: fotoLocalAtual,
+  );
 }
 
 // ===== FUNÇÕES RESTANTES =====

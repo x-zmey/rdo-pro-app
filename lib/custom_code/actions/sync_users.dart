@@ -22,6 +22,7 @@ import 'dart:math';
 import '/backend/sqlite/situacao_soft_delete.dart';
 import '/backend/sqlite/empresa_multi_tenant_sqlite.dart';
 import 'sync_tenant_headers.dart';
+import 'package:sqflite/sqflite.dart';
 
 // ===== FUNÇÕES UTILITÁRIAS =====
 
@@ -90,8 +91,11 @@ String _createdByUser(Map<String, dynamic> row) {
 /// SQLite exige NOT NULL em email e type.
 Map<String, dynamic> _userRowFromServer(
     Map<String, dynamic> s, String serverTime) {
-  final nome =
-      _nonEmptyStr(s['nome']).isEmpty ? 'Usuário' : _nonEmptyStr(s['nome']);
+  final razao = _nonEmptyStr(s['razao_social']);
+  final nomeRaw = _nonEmptyStr(s['nome']);
+  final nome = nomeRaw.isNotEmpty
+      ? nomeRaw
+      : (razao.isNotEmpty ? razao : 'Usuário');
   final emailRaw = _nonEmptyStr(s['email']);
   final uuidKey = _nonEmptyStr(s['uuid']).replaceAll('-', '');
   final email = emailRaw.isEmpty
@@ -189,6 +193,7 @@ Future syncUsers() async {
           );
         }
         print('✅ Download concluído: $downloadedCount users');
+        await _ensureContaCompanyLocal(db, serverTime);
       } else if (downloadResponse.statusCode == 401) {
         _updateSyncStatus(false, 'Token expirado. Faça login novamente.', 0, 0);
         return;
@@ -267,8 +272,7 @@ Future<void> _processarUser(
     print('✅ Novo user inserido: ${row['nome']}');
   }
 
-  if (userServer['empresa_user_id'] != null ||
-      userServer['tenant_user_id'] != null) {
+  if (userServer['empresa_user_id'] != null) {
     await upsertEmpresaUserFromServer(db, userServer, serverTime);
   }
 }
@@ -295,5 +299,85 @@ Future<String> _getAuthToken() async {
     return FFAppState().UserToken;
   } catch (e) {
     return '';
+  }
+}
+
+/// Garante a conta company (tenant) no SQLite — ela não vem de empresa_users.
+Future<void> _ensureContaCompanyLocal(Database db, String serverTime) async {
+  final uuid = FFAppState().creatorUuid.trim().isNotEmpty
+      ? FFAppState().creatorUuid.trim()
+      : FFAppState().UserUuid.trim();
+  if (uuid.isEmpty) return;
+
+  final existente = await db.query(
+    'users',
+    columns: ['id', 'nome', 'razao_social', 'email'],
+    where: 'uuid = ?',
+    whereArgs: [uuid],
+    limit: 1,
+  );
+
+  final nomeApp = FFAppState().UserName.trim();
+  final nome = nomeApp.isNotEmpty ? nomeApp : 'Empresa';
+  final idServer = FFAppState().creatorId > 0
+      ? FFAppState().creatorId
+      : (FFAppState().UserID > 0 ? FFAppState().UserID : null);
+
+  if (existente.isEmpty) {
+    await db.insert('users', {
+      'uuid': uuid,
+      'nome': nome,
+      'email': 'company-${uuid.replaceAll('-', '')}@sync.local',
+      'type': 'company',
+      'created_by': uuid,
+      'situacao': kSituacaoAtivo,
+      'obra_travada': 0,
+      'synced': 1,
+      'sync_try_count': 0,
+      'last_sync_date': serverTime,
+      'updated_at': serverTime,
+      if (idServer != null) 'id_server': idServer,
+    });
+    if (idServer != null) {
+      await _salvarMapeamento('users', idServer, uuid);
+    }
+    print('✅ Conta company inserida localmente: $nome');
+    return;
+  }
+
+  final row = existente.first;
+  final nomeAtual = (row['nome']?.toString() ?? '').trim();
+  final razao = (row['razao_social']?.toString() ?? '').trim();
+  final email = (row['email']?.toString() ?? '').trim();
+  final precisaNome = nomeAtual.isEmpty ||
+      nomeAtual.toLowerCase() == 'usuário' ||
+      nomeAtual.toLowerCase() == 'usuario';
+  if (!precisaNome && (razao.isNotEmpty || email.isNotEmpty)) {
+    if (idServer != null) {
+      await db.update(
+        'users',
+        {'id_server': idServer, 'type': 'company'},
+        where: 'uuid = ?',
+        whereArgs: [uuid],
+      );
+      await _salvarMapeamento('users', idServer, uuid);
+    }
+    return;
+  }
+
+  await db.update(
+    'users',
+    {
+      if (precisaNome && nome.isNotEmpty) 'nome': nome,
+      'type': 'company',
+      'updated_at': serverTime,
+      'last_sync_date': serverTime,
+      if (idServer != null) 'id_server': idServer,
+    },
+    where: 'uuid = ?',
+    whereArgs: [uuid],
+  );
+  if (idServer != null) {
+    await _salvarMapeamento('users', idServer, uuid);
   }
 }

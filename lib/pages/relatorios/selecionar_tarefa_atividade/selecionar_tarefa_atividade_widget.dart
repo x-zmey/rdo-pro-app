@@ -1,9 +1,8 @@
 import '/backend/sqlite/sqlite_manager.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_drop_down.dart';
-import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import '/flutter_flow/form_field_controller.dart';
 import 'dart:ui';
 import '/custom_code/actions/index.dart' as actions;
@@ -27,6 +26,20 @@ String _statusTarefaLabel(int? status) {
   }
 }
 
+Color _statusTarefaColor(BuildContext context, int? status) {
+  final theme = FlutterFlowTheme.of(context);
+  switch (status) {
+    case 1:
+      return theme.warning;
+    case 2:
+      return theme.success;
+    case 0:
+      return theme.secondaryText;
+    default:
+      return theme.secondaryText;
+  }
+}
+
 String _prioridadeTarefaLabel(double? porcentagem) {
   if (porcentagem == null) return 'Não informada';
   if (porcentagem >= 75) return 'Alta';
@@ -43,14 +56,8 @@ Color _prioridadeTarefaColor(BuildContext context, double? porcentagem) {
   return FlutterFlowTheme.of(context).success;
 }
 
-/// crie uma página que onde vai ter um dropdown de seleciona etapa e abaixo
-/// outro que vai listar a tarefa de acordo com a etapa marcada mas acima de
-/// tudo tem que ter uma opção de seleção que se for marcada que vai buscar as
-/// tarefas de uma ordem de serviço ele abre abaixo a opção de seleciona qual
-/// ordem de serviço e quando a pessao seleciona a ordem de serviço aí vai
-/// abrir as tarefas que tem nela para seleciona a tarefa especifica e depois
-/// abaixo um botão de voltar e outro de avançar
-///
+/// Seleção da tarefa (por ordem de serviço ou por etapa) antes de criar a
+/// atividade vinculada no RDO.
 class SelecionarTarefaAtividadeWidget extends StatefulWidget {
   const SelecionarTarefaAtividadeWidget({
     super.key,
@@ -79,6 +86,8 @@ class _SelecionarTarefaAtividadeWidgetState
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
+  bool _salvando = false;
+
   @override
   void initState() {
     super.initState();
@@ -86,6 +95,13 @@ class _SelecionarTarefaAtividadeWidgetState
 
     _model.switchOrdemValue = false;
     _model.usarTarefaListaOrdem = true;
+  }
+
+  @override
+  void dispose() {
+    _model.dispose();
+
+    super.dispose();
   }
 
   void _limparSelecaoTarefa() {
@@ -96,333 +112,678 @@ class _SelecionarTarefaAtividadeWidgetState
     _model.dropDownTarefasValueController?.value = null;
   }
 
-  /// Etapa + tarefa (sem OS ou com OS em modo «Por etapa»).
-  Widget _buildSelecaoPorEtapa(BuildContext context) {
-                          return Column(
-                            mainAxisSize: MainAxisSize.max,
-                            children: [
-                              Text(
-                                'Selecionar Etapa',
-                                style: FlutterFlowTheme.of(context)
-                                    .titleMedium
-                                    .override(
-                                      font: GoogleFonts.interTight(
-                                        fontWeight: FontWeight.w500,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .titleMedium
-                                            .fontStyle,
-                                      ),
-                                      letterSpacing: 0.0,
-                                      fontWeight: FontWeight.w500,
-                                      fontStyle: FlutterFlowTheme.of(context)
-                                          .titleMedium
-                                          .fontStyle,
-                                    ),
-                              ),
-                              FutureBuilder<List<ListaEtapasObraRow>>(
-                                future: SQLiteManager.instance.listaEtapasObra(
-                                  obraUuid: widget!.obraUuid!,
-                                ),
-                                builder: (context, snapshot) {
-                                  // Customize what your widget looks like when it's loading.
-                                  if (!snapshot.hasData) {
-                                    return Center(
-                                      child: LinearProgressIndicator(
-                                        color:
-                                            FlutterFlowTheme.of(context).primary,
-                                      ),
-                                    );
-                                  }
-                                  final dropDownEtapaListaEtapasObraRowList =
-                                      snapshot.data!;
-  
-                                  return FlutterFlowDropDown<String>(
-                                    controller:
-                                        _model.dropDownEtapaValueController ??=
-                                            FormFieldController<String>(
-                                      _model.dropDownEtapaValue ??= '0',
-                                    ),
-                                    options: List<String>.from(
-                                        dropDownEtapaListaEtapasObraRowList
-                                            .map((e) => e.uuid)
-                                            .toList()),
-                                    optionLabels:
-                                        dropDownEtapaListaEtapasObraRowList
-                                            .map((e) => valueOrDefault<String>(
-                                                  e.nome,
-                                                  'Nd',
-                                                ))
-                                            .toList(),
-                                    onChanged: (val) async {
-                                      safeSetState(
-                                          () => _model.dropDownEtapaValue = val);
-                                      _model.etapaSelected =
-                                          _model.dropDownEtapaValue;
-                                      safeSetState(() {});
-                                    },
-                                    width: double.infinity,
-                                    height: 50.0,
-                                    searchHintTextStyle:
-                                        FlutterFlowTheme.of(context)
-                                            .labelMedium
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .labelMedium
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .labelMedium
-                                                        .fontStyle,
-                                              ),
-                                              letterSpacing: 0.0,
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelMedium
-                                                      .fontStyle,
-                                            ),
-                                    searchTextStyle: FlutterFlowTheme.of(context)
-                                        .bodyMedium
-                                        .override(
-                                          font: GoogleFonts.inter(
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontStyle,
-                                          ),
-                                          letterSpacing: 0.0,
-                                          fontWeight: FlutterFlowTheme.of(context)
-                                              .bodyMedium
-                                              .fontWeight,
-                                          fontStyle: FlutterFlowTheme.of(context)
-                                              .bodyMedium
-                                              .fontStyle,
-                                        ),
-                                    textStyle: FlutterFlowTheme.of(context)
-                                        .bodyMedium
-                                        .override(
-                                          font: GoogleFonts.inter(
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontStyle,
-                                          ),
-                                          color: FlutterFlowTheme.of(context)
-                                              .primaryText,
-                                          letterSpacing: 0.0,
-                                          fontWeight: FlutterFlowTheme.of(context)
-                                              .bodyMedium
-                                              .fontWeight,
-                                          fontStyle: FlutterFlowTheme.of(context)
-                                              .bodyMedium
-                                              .fontStyle,
-                                        ),
-                                    hintText: 'Escolha uma etapa...',
-                                    searchHintText: 'Buscar etapa...',
-                                    icon: Icon(
-                                      Icons.keyboard_arrow_down_rounded,
-                                      color: FlutterFlowTheme.of(context)
-                                          .primaryText,
-                                      size: 24.0,
-                                    ),
-                                    fillColor: FlutterFlowTheme.of(context)
-                                        .secondaryBackground,
-                                    elevation: 2.0,
-                                    borderColor:
-                                        FlutterFlowTheme.of(context).alternate,
-                                    borderWidth: 1.0,
-                                    borderRadius: 8.0,
-                                    margin: EdgeInsetsDirectional.fromSTEB(
-                                        0.0, 0.0, 0.0, 0.0),
-                                    hidesUnderline: true,
-                                    isOverButton: false,
-                                    isSearchable: true,
-                                    isMultiSelect: false,
-                                  );
-                                },
-                              ),
-                              Text(
-                                'Tarefas da Etapa',
-                                style: FlutterFlowTheme.of(context)
-                                    .titleMedium
-                                    .override(
-                                      font: GoogleFonts.interTight(
-                                        fontWeight: FontWeight.w500,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .titleMedium
-                                            .fontStyle,
-                                      ),
-                                      letterSpacing: 0.0,
-                                      fontWeight: FontWeight.w500,
-                                      fontStyle: FlutterFlowTheme.of(context)
-                                          .titleMedium
-                                          .fontStyle,
-                                    ),
-                              ),
-                              FutureBuilder<List<ListaTarefasEtapasObraRow>>(
-                                future:
-                                    SQLiteManager.instance.listaTarefasEtapasObra(
-                                  etapaUuid: _model.etapaSelected != null &&
-                                          _model.etapaSelected != ''
-                                      ? _model.etapaSelected!
-                                      : '0',
-                                ),
-                                builder: (context, snapshot) {
-                                  // Customize what your widget looks like when it's loading.
-                                  if (!snapshot.hasData) {
-                                    return Center(
-                                      child: LinearProgressIndicator(
-                                        color:
-                                            FlutterFlowTheme.of(context).primary,
-                                      ),
-                                    );
-                                  }
-                                  final dropDownTarefasListaTarefasEtapasObraRowList =
-                                      snapshot.data!;
-  
-                                  return FlutterFlowDropDown<String>(
-                                    controller:
-                                        _model.dropDownTarefasValueController ??=
-                                            FormFieldController<String>(
-                                      _model.dropDownTarefasValue ??= '0',
-                                    ),
-                                    options: List<String>.from(
-                                        dropDownTarefasListaTarefasEtapasObraRowList
-                                            .map((e) => e.uuid)
-                                            .toList()),
-                                    optionLabels:
-                                        dropDownTarefasListaTarefasEtapasObraRowList
-                                            .map((e) => e.descricao)
-                                            .withoutNulls
-                                            .toList(),
-                                    onChanged: (val) async {
-                                      safeSetState(() =>
-                                          _model.dropDownTarefasValue = val);
-                                      _model.tarefaSelected =
-                                          _model.dropDownTarefasValue;
-                                      safeSetState(() {});
-                                    },
-                                    width: double.infinity,
-                                    height: 50.0,
-                                    searchHintTextStyle:
-                                        FlutterFlowTheme.of(context)
-                                            .labelMedium
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .labelMedium
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .labelMedium
-                                                        .fontStyle,
-                                              ),
-                                              letterSpacing: 0.0,
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelMedium
-                                                      .fontStyle,
-                                            ),
-                                    searchTextStyle: FlutterFlowTheme.of(context)
-                                        .bodyMedium
-                                        .override(
-                                          font: GoogleFonts.inter(
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontStyle,
-                                          ),
-                                          letterSpacing: 0.0,
-                                          fontWeight: FlutterFlowTheme.of(context)
-                                              .bodyMedium
-                                              .fontWeight,
-                                          fontStyle: FlutterFlowTheme.of(context)
-                                              .bodyMedium
-                                              .fontStyle,
-                                        ),
-                                    textStyle: FlutterFlowTheme.of(context)
-                                        .bodyMedium
-                                        .override(
-                                          font: GoogleFonts.inter(
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontStyle,
-                                          ),
-                                          color: FlutterFlowTheme.of(context)
-                                              .primaryText,
-                                          letterSpacing: 0.0,
-                                          fontWeight: FlutterFlowTheme.of(context)
-                                              .bodyMedium
-                                              .fontWeight,
-                                          fontStyle: FlutterFlowTheme.of(context)
-                                              .bodyMedium
-                                              .fontStyle,
-                                        ),
-                                    hintText: 'Selecione uma tarefa...',
-                                    searchHintText: 'Buscar tarefa...',
-                                    icon: Icon(
-                                      Icons.keyboard_arrow_down_rounded,
-                                      color: FlutterFlowTheme.of(context)
-                                          .primaryText,
-                                      size: 24.0,
-                                    ),
-                                    fillColor: FlutterFlowTheme.of(context)
-                                        .secondaryBackground,
-                                    elevation: 2.0,
-                                    borderColor:
-                                        FlutterFlowTheme.of(context).alternate,
-                                    borderWidth: 1.0,
-                                    borderRadius: 8.0,
-                                    margin: EdgeInsetsDirectional.fromSTEB(
-                                        0.0, 0.0, 0.0, 0.0),
-                                    hidesUnderline: true,
-                                    isOverButton: false,
-                                    isSearchable: true,
-                                    isMultiSelect: false,
-                                  );
-                                },
-                              ),
-                            ].divide(SizedBox(height: 16.0)),
-                          );
+  bool get _temTarefa =>
+      (_model.tarefaSelected ?? '').trim().isNotEmpty &&
+      _model.tarefaSelected != '0';
+
+  void _voltarParaRelatorio() {
+    context.pushNamed(
+      ObraAddRelatorioWidget.routeName,
+      queryParameters: {
+        'id': serializeParam(widget.relatorioID, ParamType.int),
+        'uuid': serializeParam(widget.relatorioUuid, ParamType.String),
+      }.withoutNulls,
+    );
   }
 
-  @override
-  void dispose() {
-    _model.dispose();
+  Widget _rotulo(String texto) => Padding(
+        padding: const EdgeInsets.only(bottom: 4, left: 2),
+        child: Text(texto.toUpperCase(), style: rdoColumnLabelStyle(context)),
+      );
 
-    super.dispose();
+  Widget _dropdownTarefa({
+    required FormFieldController<String> controller,
+    required List<String> options,
+    required List<String> optionLabels,
+    required String hint,
+    required String buscaHint,
+    required Future<void> Function(String?) onChanged,
+  }) {
+    final theme = FlutterFlowTheme.of(context);
+    return FlutterFlowDropDown<String>(
+      controller: controller,
+      options: options,
+      optionLabels: optionLabels,
+      onChanged: (val) async => onChanged(val),
+      width: double.infinity,
+      height: 38.0,
+      textStyle: rdoCompactFieldTextStyle(context),
+      searchTextStyle: rdoCompactFieldTextStyle(context),
+      searchHintTextStyle:
+          GoogleFonts.inter(fontSize: 12, color: theme.secondaryText),
+      hintText: hint,
+      searchHintText: buscaHint,
+      icon: Icon(
+        Icons.keyboard_arrow_down_rounded,
+        color: theme.secondaryText,
+        size: 18.0,
+      ),
+      fillColor: theme.secondaryBackground,
+      elevation: 0.0,
+      borderColor: theme.alternate,
+      borderWidth: 1.0,
+      borderRadius: 8.0,
+      margin: const EdgeInsetsDirectional.fromSTEB(10, 0, 6, 0),
+      hidesUnderline: true,
+      isOverButton: false,
+      isSearchable: true,
+      isMultiSelect: false,
+    );
+  }
+
+  Widget _aviso(String texto, {IconData icone = Icons.info_outline_rounded}) {
+    final theme = FlutterFlowTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icone, size: 14, color: theme.secondaryText),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              texto,
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                height: 1.3,
+                color: theme.secondaryText,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _carregando() => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: LinearProgressIndicator(
+          color: FlutterFlowTheme.of(context).primary,
+          minHeight: 3,
+        ),
+      );
+
+  /// Alternador «Lista da ordem» × «Por etapa», no formato das abas do web.
+  Widget _seletorModoBusca() {
+    final theme = FlutterFlowTheme.of(context);
+    final porLista = _model.usarTarefaListaOrdem ?? true;
+
+    Widget opcao(String texto, IconData icone, bool valor) {
+      final ativo = porLista == valor;
+      return Expanded(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(6),
+          onTap: () {
+            if (porLista == valor) return;
+            safeSetState(() {
+              _model.usarTarefaListaOrdem = valor;
+              _limparSelecaoTarefa();
+              _model.dropDownEtapaValue = null;
+              _model.etapaSelected = null;
+              _model.dropDownEtapaValueController?.value = null;
+            });
+          },
+          child: Container(
+            height: 30,
+            decoration: BoxDecoration(
+              color: ativo ? theme.secondaryBackground : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+              border: ativo ? Border.all(color: theme.alternate) : null,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icone,
+                  size: 14,
+                  color: ativo ? theme.primary : theme.secondaryText,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  texto,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: ativo ? FontWeight.w600 : FontWeight.w500,
+                    color: ativo ? theme.primary : theme.secondaryText,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: theme.primaryBackground.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.alternate),
+      ),
+      child: Row(
+        children: [
+          opcao('Lista da ordem', Icons.playlist_add_check_rounded, true),
+          const SizedBox(width: 3),
+          opcao('Por etapa', Icons.stairs_rounded, false),
+        ],
+      ),
+    );
+  }
+
+  /// Etapa + tarefa (sem OS ou com OS em modo «Por etapa»).
+  Widget _selecaoPorEtapa() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _rotulo('Etapa'),
+        FutureBuilder<List<ListaEtapasObraRow>>(
+          future: SQLiteManager.instance.listaEtapasObra(
+            obraUuid: widget.obraUuid!,
+          ),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return _carregando();
+            final etapas = snapshot.data!;
+            if (etapas.isEmpty) {
+              return _aviso(
+                'Nenhuma etapa cadastrada nesta obra. Cadastre etapas na web '
+                'para localizar tarefas por etapa.',
+                icone: Icons.warning_amber_rounded,
+              );
+            }
+
+            return _dropdownTarefa(
+              controller: _model.dropDownEtapaValueController ??=
+                  FormFieldController<String>(_model.dropDownEtapaValue),
+              options: etapas.map((e) => e.uuid).toList(),
+              optionLabels: etapas
+                  .map((e) => valueOrDefault<String>(e.nome, 'Etapa sem nome'))
+                  .toList(),
+              hint: 'Escolha uma etapa...',
+              buscaHint: 'Buscar etapa...',
+              onChanged: (val) async {
+                safeSetState(() {
+                  _model.dropDownEtapaValue = val;
+                  _model.etapaSelected = val;
+                  _limparSelecaoTarefa();
+                });
+              },
+            );
+          },
+        ),
+        const SizedBox(height: 10),
+        _rotulo('Tarefa da etapa'),
+        if ((_model.etapaSelected ?? '').isEmpty)
+          _aviso('Selecione a etapa para listar as tarefas.')
+        else
+          FutureBuilder<List<ListaTarefasEtapasObraRow>>(
+            future: SQLiteManager.instance.listaTarefasEtapasObra(
+              etapaUuid: _model.etapaSelected!,
+            ),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return _carregando();
+              final tarefas = snapshot.data!;
+              if (tarefas.isEmpty) {
+                return _aviso(
+                  'Esta etapa ainda não tem tarefas cadastradas.',
+                  icone: Icons.warning_amber_rounded,
+                );
+              }
+
+              return _dropdownTarefa(
+                controller: _model.dropDownTarefasValueController ??=
+                    FormFieldController<String>(_model.dropDownTarefasValue),
+                options: tarefas.map((e) => e.uuid).toList(),
+                optionLabels: tarefas
+                    .map((e) =>
+                        valueOrDefault<String>(e.descricao, 'Tarefa sem nome'))
+                    .toList(),
+                hint: 'Selecione uma tarefa...',
+                buscaHint: 'Buscar tarefa...',
+                onChanged: (val) async {
+                  safeSetState(() {
+                    _model.dropDownTarefasValue = val;
+                    _model.tarefaSelected = val;
+                  });
+                },
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  /// Tarefas listadas diretamente na ordem de serviço escolhida.
+  Widget _selecaoPorOrdem() {
+    final ordem = (_model.ordemSelected ?? '').trim();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _rotulo('Tarefa da ordem'),
+        if (ordem.isEmpty || ordem == '0')
+          _aviso('Selecione a ordem de serviço para listar as tarefas.')
+        else
+          FutureBuilder<List<GetTarefasOrdemRow>>(
+            future: SQLiteManager.instance.getTarefasOrdem(ordemUuid: ordem),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return _carregando();
+              final tarefas = snapshot.data!;
+              if (tarefas.isEmpty) {
+                return _aviso(
+                  'Esta ordem não tem tarefas cadastradas. Use a busca por '
+                  'etapa ou cadastre as tarefas na web.',
+                  icone: Icons.warning_amber_rounded,
+                );
+              }
+
+              return _dropdownTarefa(
+                controller: _model.dropDownTarefasOrdemValueController ??=
+                    FormFieldController<String>(
+                        _model.dropDownTarefasOrdemValue),
+                options: tarefas
+                    .map((e) => valueOrDefault<String>(e.uuid, '0'))
+                    .toList(),
+                optionLabels: tarefas.map((e) {
+                  final nome = valueOrDefault<String>(e.nome, 'Tarefa');
+                  final unidade = (e.unidade ?? '').trim();
+                  final programada = e.qtdProgramada;
+                  if (programada == null || programada == 0) return nome;
+                  return '$nome · $programada${unidade.isEmpty ? '' : ' $unidade'}';
+                }).toList(),
+                hint: 'Selecione uma tarefa específica...',
+                buscaHint: 'Buscar tarefa...',
+                onChanged: (val) async {
+                  safeSetState(() {
+                    _model.dropDownTarefasOrdemValue = val;
+                    _model.tarefaSelected = val;
+                  });
+                },
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _cardOrigem() {
+    final theme = FlutterFlowTheme.of(context);
+    final comOrdem = _model.switchOrdemValue ?? false;
+    final porLista = _model.usarTarefaListaOrdem ?? true;
+
+    return RdoSectionCard(
+      title: 'Origem da tarefa',
+      subtitle: 'Escolha de onde vem a tarefa desta atividade',
+      icon: Icons.account_tree_outlined,
+      margin: EdgeInsets.zero,
+      contentPadding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(10, 0, 4, 0),
+            decoration: BoxDecoration(
+              color: theme.primaryBackground.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.alternate),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.link_rounded, size: 15, color: theme.secondaryText),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Vincular ordem de serviço',
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: theme.primaryText,
+                    ),
+                  ),
+                ),
+                Transform.scale(
+                  scale: 0.75,
+                  child: Switch.adaptive(
+                    value: comOrdem,
+                    onChanged: (newValue) {
+                      safeSetState(() {
+                        _model.switchOrdemValue = newValue;
+                        if (!newValue) {
+                          _model.dropDownOrdemValue = null;
+                          _model.ordemSelected = null;
+                          _model.dropDownOrdemValueController?.value = null;
+                          _model.dropDownEtapaValue = null;
+                          _model.etapaSelected = null;
+                          _model.dropDownEtapaValueController?.value = null;
+                        }
+                        _model.usarTarefaListaOrdem = true;
+                        _limparSelecaoTarefa();
+                      });
+                    },
+                    activeColor: theme.primary,
+                    activeTrackColor: theme.primary.withValues(alpha: 0.35),
+                    inactiveTrackColor: theme.alternate,
+                    inactiveThumbColor: theme.secondaryBackground,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (comOrdem) ...[
+            const SizedBox(height: 10),
+            _rotulo('Ordem de serviço'),
+            FutureBuilder<List<GetOrdensServicoRow>>(
+              future: SQLiteManager.instance.getOrdensServico(
+                obraUuid: widget.obraUuid!,
+                userId: FFAppState().creatorId,
+              ),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return _carregando();
+                final ordens = snapshot.data!;
+                if (ordens.isEmpty) {
+                  return _aviso(
+                    'Nenhuma ordem de serviço sincronizada para esta obra.',
+                    icone: Icons.warning_amber_rounded,
+                  );
+                }
+
+                return _dropdownTarefa(
+                  controller: _model.dropDownOrdemValueController ??=
+                      FormFieldController<String>(_model.dropDownOrdemValue),
+                  options: ordens.map((e) => e.uuid).toList(),
+                  optionLabels: ordens.map((e) {
+                    final nome = (e.nome ?? '').trim();
+                    return nome.isEmpty ? e.codigo : '${e.codigo} — $nome';
+                  }).toList(),
+                  hint: 'Escolha uma ordem de serviço...',
+                  buscaHint: 'Buscar ordem...',
+                  onChanged: (val) async {
+                    safeSetState(() {
+                      _model.dropDownOrdemValue = val;
+                      _model.ordemSelected = val;
+                      _limparSelecaoTarefa();
+                    });
+                  },
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+            _rotulo('Como localizar a tarefa'),
+            _seletorModoBusca(),
+            const SizedBox(height: 10),
+            if (porLista) _selecaoPorOrdem() else _selecaoPorEtapa(),
+          ] else ...[
+            const SizedBox(height: 10),
+            _selecaoPorEtapa(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _chip(String texto, Color cor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: cor.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cor.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(color: cor, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            texto,
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: cor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _linhaDetalhe(String rotulo, String valor) {
+    final theme = FlutterFlowTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 78,
+            child: Text(rotulo.toUpperCase(),
+                style: rdoColumnLabelStyle(context)),
+          ),
+          Expanded(
+            child: Text(
+              valor,
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+                color: theme.primaryText,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _cardTarefaSelecionada() {
+    final theme = FlutterFlowTheme.of(context);
+
+    if (!_temTarefa) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
+        decoration: BoxDecoration(
+          color: theme.primaryBackground.withValues(alpha: 0.4),
+          borderRadius: BorderRadius.circular(kRdoRadius),
+          border: Border.all(color: theme.alternate),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.touch_app_outlined, size: 18, color: theme.secondaryText),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Nenhuma tarefa selecionada. Escolha uma tarefa acima para '
+                'continuar.',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  height: 1.3,
+                  color: theme.secondaryText,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return FutureBuilder<List<GetDetalhesTarefaRow>>(
+      future: SQLiteManager.instance.getDetalhesTarefa(
+        uuid: _model.tarefaSelected!,
+      ),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return _carregando();
+        final tarefa = snapshot.data!.firstOrNull;
+        if (tarefa == null) {
+          return _aviso(
+            'Não foi possível carregar os detalhes desta tarefa.',
+            icone: Icons.error_outline_rounded,
+          );
+        }
+
+        final unidade = (tarefa.unidade ?? '').trim();
+        final planejado = (tarefa.qtd ?? '').trim();
+
+        return RdoSectionCard(
+          title: 'Tarefa selecionada',
+          icon: Icons.task_alt_rounded,
+          margin: EdgeInsets.zero,
+          contentPadding: const EdgeInsets.all(12),
+          trailing: Icon(
+            Icons.check_circle_rounded,
+            size: 18,
+            color: theme.success,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                valueOrDefault<String>(tarefa.descricao, 'Sem descrição'),
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  height: 1.25,
+                  color: theme.primaryText,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  _chip(
+                    _statusTarefaLabel(tarefa.status),
+                    _statusTarefaColor(context, tarefa.status),
+                  ),
+                  _chip(
+                    'Prioridade ${_prioridadeTarefaLabel(tarefa.porcentagem).toLowerCase()}',
+                    _prioridadeTarefaColor(context, tarefa.porcentagem),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Divider(height: 1, color: theme.alternate),
+              const SizedBox(height: 10),
+              _linhaDetalhe(
+                'Local',
+                valueOrDefault<String>(tarefa.local, 'Não informado'),
+              ),
+              if ((tarefa.item ?? '').trim().isNotEmpty)
+                _linhaDetalhe('Item', tarefa.item!.trim()),
+              _linhaDetalhe(
+                'Planejado',
+                planejado.isEmpty
+                    ? 'Não informado'
+                    : '$planejado${unidade.isEmpty ? '' : ' $unidade'}',
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _avancar() async {
+    if (_salvando || !_temTarefa) return;
+    safeSetState(() => _salvando = true);
+    try {
+      final detalhes = await SQLiteManager.instance.getDetalhesTarefa(
+        uuid: _model.tarefaSelected!,
+      );
+      final tarefa = detalhes.firstOrNull;
+      if (tarefa == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Não foi possível carregar a tarefa.'),
+            backgroundColor: FlutterFlowTheme.of(context).error,
+          ),
+        );
+        return;
+      }
+
+      _model.relatorioDetalhes = await SQLiteManager.instance.relatorioDetalhes(
+        uuid: widget.relatorioUuid!,
+        userUuid: FFAppState().creatorUuid,
+        accountOwnerUuid: FFAppState().creatorUuid,
+      );
+      _model.uuid = await actions.generateUuid();
+
+      int? ordemIdInsert;
+      String? ordemUuidInsert;
+      if (_model.switchOrdemValue == true) {
+        final sel =
+            (_model.dropDownOrdemValue ?? _model.ordemSelected ?? '').trim();
+        if (sel.isNotEmpty && sel != '0') {
+          ordemUuidInsert = sel;
+          final obraUuid = widget.obraUuid;
+          if (obraUuid != null && obraUuid.isNotEmpty) {
+            final ordensRows = await SQLiteManager.instance.getOrdensServico(
+              obraUuid: obraUuid,
+              userId: FFAppState().creatorId,
+            );
+            ordemIdInsert = ordensRows
+                .where((o) => o.uuid == ordemUuidInsert)
+                .firstOrNull
+                ?.id;
+          }
+        }
+      }
+
+      await SQLiteManager.instance.insertAtividadeRelatorio(
+        userId: FFAppState().UserID,
+        relatorioId: widget.relatorioID!,
+        createdBy: FFAppState().UserID.toString(),
+        local: tarefa.local,
+        descricao: tarefa.descricao,
+        quantidade: 0,
+        unidade: tarefa.unidade,
+        item: tarefa.item,
+        tarefaId: tarefa.id,
+        ordemId: ordemIdInsert,
+        ordemUuid: ordemUuidInsert,
+        relatorioUuid: _model.relatorioDetalhes?.firstOrNull?.uuid,
+        uuid: _model.uuid!,
+        userUuid: FFAppState().creatorUuid,
+        tarefaUuid: tarefa.uuid,
+      );
+      _model.atividadeResult =
+          await SQLiteManager.instance.carregaUltimaAtividadeRelatorio();
+
+      if (!mounted) return;
+      context.pushNamed(
+        AddAtividadeRelatorioWidget.routeName,
+        queryParameters: {
+          'relatorioId': serializeParam(widget.relatorioID, ParamType.int),
+          'obraId': serializeParam(widget.obraId, ParamType.int),
+          'atividadeId': serializeParam(
+            _model.atividadeResult?.firstOrNull?.id,
+            ParamType.int,
+          ),
+          'atividadeUuid': serializeParam(
+            _model.atividadeResult?.firstOrNull?.uuid,
+            ParamType.String,
+          ),
+          'relatorioUuid':
+              serializeParam(widget.relatorioUuid, ParamType.String),
+          'obraUuid': serializeParam(widget.obraUuid, ParamType.String),
+          'novaAtividade': serializeParam(true, ParamType.bool),
+        }.withoutNulls,
+      );
+    } finally {
+      if (mounted) safeSetState(() => _salvando = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     context.watch<FFAppState>();
+    final theme = FlutterFlowTheme.of(context);
 
     return GestureDetector(
       onTap: () {
@@ -431,1041 +792,127 @@ class _SelecionarTarefaAtividadeWidgetState
       },
       child: Scaffold(
         key: scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).secondaryBackground,
+        backgroundColor: theme.primaryBackground,
         appBar: AppBar(
-          backgroundColor: FlutterFlowTheme.of(context).secondaryBackground,
+          backgroundColor: theme.primary,
           automaticallyImplyLeading: false,
-          leading: FlutterFlowIconButton(
-            borderColor: FlutterFlowTheme.of(context).alternate,
-            borderRadius: 20.0,
-            borderWidth: 1.0,
-            buttonSize: 40.0,
-            icon: Icon(
-              Icons.arrow_back_rounded,
-              color: FlutterFlowTheme.of(context).primaryText,
-              size: 24.0,
-            ),
-            onPressed: () {
-              print('IconButton pressed ...');
-            },
-          ),
-          title: Text(
-            'Gerenciador de Tarefas',
-            style: FlutterFlowTheme.of(context).titleLarge.override(
-                  font: GoogleFonts.interTight(
-                    fontWeight: FontWeight.w600,
-                    fontStyle:
-                        FlutterFlowTheme.of(context).titleLarge.fontStyle,
-                  ),
-                  letterSpacing: 0.0,
-                  fontWeight: FontWeight.w600,
-                  fontStyle: FlutterFlowTheme.of(context).titleLarge.fontStyle,
-                ),
-          ),
-          actions: [
-            Padding(
-              padding: EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
-              child: FlutterFlowIconButton(
-                borderColor: FlutterFlowTheme.of(context).alternate,
-                borderRadius: 20.0,
-                borderWidth: 1.0,
-                buttonSize: 40.0,
-                icon: Icon(
-                  Icons.settings_rounded,
-                  color: FlutterFlowTheme.of(context).primaryText,
-                  size: 24.0,
-                ),
-                onPressed: () {
-                  print('IconButton pressed ...');
-                },
-              ),
-            ),
-          ],
-          centerTitle: false,
           elevation: 0.0,
+          scrolledUnderElevation: 0.0,
+          surfaceTintColor: Colors.transparent,
+          centerTitle: false,
+          titleSpacing: 0.0,
+          toolbarHeight: 58.0,
+          iconTheme: const IconThemeData(color: Colors.white),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: _voltarParaRelatorio,
+          ),
+          title: Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Gerenciador de Tarefas',
+                  style: GoogleFonts.interTight(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  'Vincule a atividade a uma tarefa da obra',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
         body: SafeArea(
           top: true,
-          child: Padding(
-            padding: EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.max,
-                crossAxisAlignment: CrossAxisAlignment.start,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.max,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _cardOrigem(),
+                const SizedBox(height: 12),
+                _cardTarefaSelecionada(),
+              ],
+            ),
+          ),
+        ),
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: theme.secondaryBackground,
+            border: Border(top: BorderSide(color: theme.alternate)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Row(
                 children: [
-                  Padding(
-                    padding: EdgeInsets.all(8.0),
-                    child: Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: FlutterFlowTheme.of(context).primaryBackground,
-                        borderRadius: BorderRadius.circular(12.0),
-                        border: Border.all(
-                          color: FlutterFlowTheme.of(context).alternate,
-                          width: 1.0,
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _salvando ? null : _voltarParaRelatorio,
+                      icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                      label: const Text('Voltar'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: theme.secondaryText,
+                        minimumSize: const Size(0, 42),
+                        side: BorderSide(color: theme.alternate),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.max,
-                          children: [
-                            Text(
-                              'Tipo de Busca',
-                              style: FlutterFlowTheme.of(context)
-                                  .titleMedium
-                                  .override(
-                                    font: GoogleFonts.interTight(
-                                      fontWeight: FontWeight.w500,
-                                      fontStyle: FlutterFlowTheme.of(context)
-                                          .titleMedium
-                                          .fontStyle,
-                                    ),
-                                    letterSpacing: 0.0,
-                                    fontWeight: FontWeight.w500,
-                                    fontStyle: FlutterFlowTheme.of(context)
-                                        .titleMedium
-                                        .fontStyle,
-                                  ),
-                            ),
-                            Row(
-                              mainAxisSize: MainAxisSize.max,
-                              children: [
-                                Switch(
-                                  value: _model.switchOrdemValue!,
-                                  onChanged: (newValue) async {
-                                    safeSetState(() {
-                                      _model.switchOrdemValue = newValue!;
-                                      if (!newValue) {
-                                        _model.dropDownOrdemValue = null;
-                                        _model.ordemSelected = null;
-                                        _model.dropDownOrdemValueController
-                                            ?.value = null;
-                                        _model.usarTarefaListaOrdem = true;
-                                        _model.dropDownEtapaValue = null;
-                                        _model.etapaSelected = null;
-                                        _model.dropDownEtapaValueController
-                                            ?.value = null;
-                                      } else {
-                                        _model.usarTarefaListaOrdem = true;
-                                      }
-                                      _limparSelecaoTarefa();
-                                    });
-                                  },
-                                  activeColor:
-                                      FlutterFlowTheme.of(context).primary,
-                                  activeTrackColor:
-                                      FlutterFlowTheme.of(context).accent1,
-                                  inactiveTrackColor:
-                                      FlutterFlowTheme.of(context).alternate,
-                                  inactiveThumbColor:
-                                      FlutterFlowTheme.of(context)
-                                          .secondaryText,
-                                ),
-                                Expanded(
-                                  child: Text(
-                                    'Vincular ordem de serviço',
-                                    style: FlutterFlowTheme.of(context)
-                                        .bodyMedium
-                                        .override(
-                                          font: GoogleFonts.inter(
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodyMedium
-                                                    .fontStyle,
-                                          ),
-                                          letterSpacing: 0.0,
-                                          fontWeight:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontWeight,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontStyle,
-                                        ),
-                                  ),
-                                ),
-                              ].divide(SizedBox(width: 12.0)),
-                            ),
-                          ].divide(SizedBox(height: 16.0)),
+                        textStyle: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
                   ),
-                  Builder(
-                    builder: (context) {
-                      if (_model.switchOrdemValue ?? false) {
-                        return Column(
-                          mainAxisSize: MainAxisSize.max,
-                          children: [
-                            Text(
-                              'Ordem de serviço (vínculo no RDO)',
-                              style: FlutterFlowTheme.of(context)
-                                  .titleMedium
-                                  .override(
-                                    font: GoogleFonts.interTight(
-                                      fontWeight: FontWeight.w500,
-                                      fontStyle: FlutterFlowTheme.of(context)
-                                          .titleMedium
-                                          .fontStyle,
-                                    ),
-                                    letterSpacing: 0.0,
-                                    fontWeight: FontWeight.w500,
-                                    fontStyle: FlutterFlowTheme.of(context)
-                                        .titleMedium
-                                        .fontStyle,
-                                  ),
-                            ),
-                            FutureBuilder<List<GetOrdensServicoRow>>(
-                              future: SQLiteManager.instance.getOrdensServico(
-                                obraUuid: widget!.obraUuid!,
-                                userId: FFAppState().creatorId,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton.icon(
+                      onPressed: (_temTarefa && !_salvando) ? _avancar : null,
+                      icon: _salvando
+                          ? const SizedBox(
+                              width: 15,
+                              height: 15,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
                               ),
-                              builder: (context, snapshot) {
-                                // Customize what your widget looks like when it's loading.
-                                if (!snapshot.hasData) {
-                                  return Center(
-                                    child: LinearProgressIndicator(
-                                      color:
-                                          FlutterFlowTheme.of(context).primary,
-                                    ),
-                                  );
-                                }
-                                final dropDownOrdemGetOrdensServicoRowList =
-                                    snapshot.data!;
-
-                                return FlutterFlowDropDown<String>(
-                                  controller:
-                                      _model.dropDownOrdemValueController ??=
-                                          FormFieldController<String>(
-                                    _model.dropDownOrdemValue ??= '0',
-                                  ),
-                                  options: List<String>.from(
-                                      dropDownOrdemGetOrdensServicoRowList
-                                          .map((e) => e.uuid)
-                                          .toList()),
-                                  optionLabels:
-                                      dropDownOrdemGetOrdensServicoRowList
-                                          .map((e) => e.codigo)
-                                          .toList(),
-                                  onChanged: (val) async {
-                                    safeSetState(
-                                        () => _model.dropDownOrdemValue = val);
-                                    _model.ordemSelected =
-                                        valueOrDefault<String>(
-                                      _model.dropDownOrdemValue,
-                                      '0',
-                                    );
-                                    _limparSelecaoTarefa();
-                                    safeSetState(() {});
-                                  },
-                                  width: double.infinity,
-                                  height: 50.0,
-                                  searchHintTextStyle:
-                                      FlutterFlowTheme.of(context)
-                                          .labelMedium
-                                          .override(
-                                            font: GoogleFonts.inter(
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelMedium
-                                                      .fontStyle,
-                                            ),
-                                            letterSpacing: 0.0,
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .labelMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .labelMedium
-                                                    .fontStyle,
-                                          ),
-                                  searchTextStyle: FlutterFlowTheme.of(context)
-                                      .bodyMedium
-                                      .override(
-                                        font: GoogleFonts.inter(
-                                          fontWeight:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontWeight,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontStyle,
-                                        ),
-                                        letterSpacing: 0.0,
-                                        fontWeight: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontWeight,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontStyle,
-                                      ),
-                                  textStyle: FlutterFlowTheme.of(context)
-                                      .bodyMedium
-                                      .override(
-                                        font: GoogleFonts.inter(
-                                          fontWeight:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontWeight,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontStyle,
-                                        ),
-                                        color: FlutterFlowTheme.of(context)
-                                            .primaryText,
-                                        letterSpacing: 0.0,
-                                        fontWeight: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontWeight,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontStyle,
-                                      ),
-                                  hintText: 'Escolha uma ordem de serviço...',
-                                  searchHintText: 'Buscar ordem...',
-                                  icon: Icon(
-                                    Icons.keyboard_arrow_down_rounded,
-                                    color: FlutterFlowTheme.of(context)
-                                        .primaryText,
-                                    size: 24.0,
-                                  ),
-                                  fillColor: FlutterFlowTheme.of(context)
-                                      .secondaryBackground,
-                                  elevation: 2.0,
-                                  borderColor:
-                                      FlutterFlowTheme.of(context).alternate,
-                                  borderWidth: 1.0,
-                                  borderRadius: 8.0,
-                                  margin: EdgeInsetsDirectional.fromSTEB(
-                                      0.0, 0.0, 0.0, 0.0),
-                                  hidesUnderline: true,
-                                  isOverButton: false,
-                                  isSearchable: true,
-                                  isMultiSelect: false,
-                                );
-                              },
-                            ),
-                            Padding(
-                              padding: EdgeInsetsDirectional.fromSTEB(
-                                  0.0, 0.0, 0.0, 4.0),
-                              child: Text(
-                                'Com a ordem acima como vínculo no RDO, escolha como localizar a tarefa: pela lista desta OS ou por etapa.',
-                                style: FlutterFlowTheme.of(context)
-                                    .bodySmall
-                                    .override(
-                                      font: GoogleFonts.inter(
-                                        fontWeight: FlutterFlowTheme.of(context)
-                                            .bodySmall
-                                            .fontWeight,
-                                        fontStyle:
-                                            FlutterFlowTheme.of(context)
-                                                .bodySmall
-                                                .fontStyle,
-                                      ),
-                                      color: FlutterFlowTheme.of(context)
-                                          .secondaryText,
-                                      letterSpacing: 0.0,
-                                    ),
-                              ),
-                            ),
-                            Center(
-                              child: SegmentedButton<bool>(
-                                segments: const [
-                                  ButtonSegment<bool>(
-                                    value: true,
-                                    label: Text('Lista da ordem'),
-                                    icon: Icon(
-                                      Icons.playlist_add_check_rounded,
-                                      size: 18,
-                                    ),
-                                  ),
-                                  ButtonSegment<bool>(
-                                    value: false,
-                                    label: Text('Por etapa'),
-                                    icon: Icon(
-                                      Icons.stairs_rounded,
-                                      size: 18,
-                                    ),
-                                  ),
-                                ],
-                                emptySelectionAllowed: false,
-                                selected: {_model.usarTarefaListaOrdem ?? true},
-                                onSelectionChanged: (Set<bool> newSelection) {
-                                  final next = newSelection.first;
-                                  safeSetState(() {
-                                    if ((_model.usarTarefaListaOrdem ?? true) ==
-                                        next) {
-                                      return;
-                                    }
-                                    _model.usarTarefaListaOrdem = next;
-                                    _limparSelecaoTarefa();
-                                    _model.dropDownEtapaValue = null;
-                                    _model.etapaSelected = null;
-                                    _model.dropDownEtapaValueController?.value =
-                                        null;
-                                  });
-                                },
-                              ),
-                            ),
-                            if (_model.usarTarefaListaOrdem ?? true) ...[
-                            Text(
-                              'Tarefas da Ordem de Serviço',
-                              style: FlutterFlowTheme.of(context)
-                                  .titleMedium
-                                  .override(
-                                    font: GoogleFonts.interTight(
-                                      fontWeight: FontWeight.w500,
-                                      fontStyle: FlutterFlowTheme.of(context)
-                                          .titleMedium
-                                          .fontStyle,
-                                    ),
-                                    letterSpacing: 0.0,
-                                    fontWeight: FontWeight.w500,
-                                    fontStyle: FlutterFlowTheme.of(context)
-                                        .titleMedium
-                                        .fontStyle,
-                                  ),
-                            ),
-                            FutureBuilder<List<GetTarefasOrdemRow>>(
-                              future: SQLiteManager.instance.getTarefasOrdem(
-                                ordemUuid: valueOrDefault<String>(
-                                  _model.ordemSelected != null &&
-                                          _model.ordemSelected != ''
-                                      ? _model.ordemSelected
-                                      : '0',
-                                  '0',
-                                ),
-                              ),
-                              builder: (context, snapshot) {
-                                // Customize what your widget looks like when it's loading.
-                                if (!snapshot.hasData) {
-                                  return Center(
-                                    child: LinearProgressIndicator(
-                                      color:
-                                          FlutterFlowTheme.of(context).primary,
-                                    ),
-                                  );
-                                }
-                                final dropDownTarefasOrdemGetTarefasOrdemRowList =
-                                    snapshot.data!;
-
-                                return FlutterFlowDropDown<String>(
-                                  controller: _model
-                                          .dropDownTarefasOrdemValueController ??=
-                                      FormFieldController<String>(
-                                    _model.dropDownTarefasOrdemValue ??= '0',
-                                  ),
-                                  options: List<String>.from(
-                                      dropDownTarefasOrdemGetTarefasOrdemRowList
-                                          .map((e) => valueOrDefault<String>(
-                                                e.uuid,
-                                                '0',
-                                              ))
-                                          .toList()),
-                                  optionLabels:
-                                      dropDownTarefasOrdemGetTarefasOrdemRowList
-                                          .map((e) => e.nome)
-                                          .withoutNulls
-                                          .toList(),
-                                  onChanged: (val) async {
-                                    safeSetState(() =>
-                                        _model.dropDownTarefasOrdemValue = val);
-                                    _model.tarefaSelected =
-                                        _model.dropDownTarefasOrdemValue;
-                                    safeSetState(() {});
-                                  },
-                                  width: double.infinity,
-                                  height: 50.0,
-                                  searchHintTextStyle:
-                                      FlutterFlowTheme.of(context)
-                                          .labelMedium
-                                          .override(
-                                            font: GoogleFonts.inter(
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelMedium
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .labelMedium
-                                                      .fontStyle,
-                                            ),
-                                            letterSpacing: 0.0,
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .labelMedium
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .labelMedium
-                                                    .fontStyle,
-                                          ),
-                                  searchTextStyle: FlutterFlowTheme.of(context)
-                                      .bodyMedium
-                                      .override(
-                                        font: GoogleFonts.inter(
-                                          fontWeight:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontWeight,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontStyle,
-                                        ),
-                                        letterSpacing: 0.0,
-                                        fontWeight: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontWeight,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontStyle,
-                                      ),
-                                  textStyle: FlutterFlowTheme.of(context)
-                                      .bodyMedium
-                                      .override(
-                                        font: GoogleFonts.inter(
-                                          fontWeight:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontWeight,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontStyle,
-                                        ),
-                                        color: FlutterFlowTheme.of(context)
-                                            .primaryText,
-                                        letterSpacing: 0.0,
-                                        fontWeight: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontWeight,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontStyle,
-                                      ),
-                                  hintText:
-                                      'Selecione uma tarefa específica...',
-                                  searchHintText: 'Buscar tarefa...',
-                                  icon: Icon(
-                                    Icons.keyboard_arrow_down_rounded,
-                                    color: FlutterFlowTheme.of(context)
-                                        .primaryText,
-                                    size: 24.0,
-                                  ),
-                                  fillColor: FlutterFlowTheme.of(context)
-                                      .secondaryBackground,
-                                  elevation: 2.0,
-                                  borderColor:
-                                      FlutterFlowTheme.of(context).alternate,
-                                  borderWidth: 1.0,
-                                  borderRadius: 8.0,
-                                  margin: EdgeInsetsDirectional.fromSTEB(
-                                      0.0, 0.0, 0.0, 0.0),
-                                  hidesUnderline: true,
-                                  isOverButton: false,
-                                  isSearchable: true,
-                                  isMultiSelect: false,
-                                );
-                              },
-                            ),
-                            ],
-                            if (!(_model.usarTarefaListaOrdem ?? true))
-                              _buildSelecaoPorEtapa(context),
-                          ].divide(SizedBox(height: 16.0)),
-                        );
-                      } else {
-                        return _buildSelecaoPorEtapa(context);
-                      }
-                    },
-                  ),
-                  if (_model.tarefaSelected != null &&
-                          _model.tarefaSelected != ''
-                      ? true
-                      : false)
-                    Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: FutureBuilder<List<GetDetalhesTarefaRow>>(
-                        future: SQLiteManager.instance.getDetalhesTarefa(
-                          uuid: _model.tarefaSelected != null &&
-                                  _model.tarefaSelected != ''
-                              ? _model.tarefaSelected!
-                              : '0',
+                            )
+                          : const Icon(Icons.arrow_forward_rounded, size: 17),
+                      label: Text(
+                          _salvando ? 'Criando...' : 'Avançar para atividade'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: theme.primary,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: theme.alternate,
+                        disabledForegroundColor: theme.secondaryText,
+                        minimumSize: const Size(0, 42),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        builder: (context, snapshot) {
-                          // Customize what your widget looks like when it's loading.
-                          if (!snapshot.hasData) {
-                            return Center(
-                              child: LinearProgressIndicator(
-                                color: FlutterFlowTheme.of(context).primary,
-                              ),
-                            );
-                          }
-                          final containerGetDetalhesTarefaRowList =
-                              snapshot.data!;
-                          final tarefa =
-                              containerGetDetalhesTarefaRowList.firstOrNull;
-
-                          return Container(
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: FlutterFlowTheme.of(context)
-                                  .primaryBackground,
-                              borderRadius: BorderRadius.circular(12.0),
-                              border: Border.all(
-                                color: FlutterFlowTheme.of(context).alternate,
-                                width: 1.0,
-                              ),
-                            ),
-                            child: Padding(
-                              padding: EdgeInsets.all(16.0),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.max,
-                                children: [
-                                  Row(
-                                    mainAxisSize: MainAxisSize.max,
-                                    children: [
-                                      Icon(
-                                        Icons.check_circle_rounded,
-                                        color: FlutterFlowTheme.of(context)
-                                            .success,
-                                        size: 20.0,
-                                      ),
-                                      Text(
-                                        'Tarefa Selecionada:',
-                                        style: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight: FontWeight.w500,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMedium
-                                                        .fontStyle,
-                                              ),
-                                              letterSpacing: 0.0,
-                                              fontWeight: FontWeight.w500,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .fontStyle,
-                                            ),
-                                      ),
-                                    ].divide(SizedBox(width: 8.0)),
-                                  ),
-                                  Text(
-                                    valueOrDefault<String>(
-                                      containerGetDetalhesTarefaRowList
-                                          .firstOrNull?.descricao,
-                                      'ND',
-                                    ),
-                                    style: FlutterFlowTheme.of(context)
-                                        .titleSmall
-                                        .override(
-                                          font: GoogleFonts.interTight(
-                                            fontWeight: FontWeight.w600,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .titleSmall
-                                                    .fontStyle,
-                                          ),
-                                          color: FlutterFlowTheme.of(context)
-                                              .primary,
-                                          letterSpacing: 0.0,
-                                          fontWeight: FontWeight.w600,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .titleSmall
-                                                  .fontStyle,
-                                        ),
-                                  ),
-                                  Text(
-                                    'Local: ${valueOrDefault<String>(tarefa?.local, 'Não informado')}',
-                                    style: FlutterFlowTheme.of(context)
-                                        .bodySmall
-                                        .override(
-                                          font: GoogleFonts.inter(
-                                            fontWeight:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodySmall
-                                                    .fontWeight,
-                                            fontStyle:
-                                                FlutterFlowTheme.of(context)
-                                                    .bodySmall
-                                                    .fontStyle,
-                                          ),
-                                          color: FlutterFlowTheme.of(context)
-                                              .secondaryText,
-                                          letterSpacing: 0.0,
-                                          fontWeight:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodySmall
-                                                  .fontWeight,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodySmall
-                                                  .fontStyle,
-                                        ),
-                                  ),
-                                  Divider(
-                                    height: 1.0,
-                                    thickness: 1.0,
-                                    color:
-                                        FlutterFlowTheme.of(context).alternate,
-                                  ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.max,
-                                    children: [
-                                      Container(
-                                        width: 12.0,
-                                        height: 12.0,
-                                        decoration: BoxDecoration(
-                                          color: (tarefa?.status == 2)
-                                              ? FlutterFlowTheme.of(context)
-                                                  .success
-                                              : (tarefa?.status == 1)
-                                                  ? FlutterFlowTheme.of(context)
-                                                      .warning
-                                                  : FlutterFlowTheme.of(context)
-                                                      .secondaryText,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                      Text(
-                                        'Status: ${_statusTarefaLabel(tarefa?.status)}',
-                                        style: FlutterFlowTheme.of(context)
-                                            .bodySmall
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodySmall
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodySmall
-                                                        .fontStyle,
-                                              ),
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .secondaryText,
-                                              letterSpacing: 0.0,
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodySmall
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodySmall
-                                                      .fontStyle,
-                                            ),
-                                      ),
-                                    ].divide(SizedBox(width: 12.0)),
-                                  ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.max,
-                                    children: [
-                                      Container(
-                                        width: 12.0,
-                                        height: 12.0,
-                                        decoration: BoxDecoration(
-                                          color: _prioridadeTarefaColor(
-                                            context,
-                                            tarefa?.porcentagem,
-                                          ),
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                      Text(
-                                        'Prioridade: ${_prioridadeTarefaLabel(tarefa?.porcentagem)}',
-                                        style: FlutterFlowTheme.of(context)
-                                            .bodySmall
-                                            .override(
-                                              font: GoogleFonts.inter(
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodySmall
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodySmall
-                                                        .fontStyle,
-                                              ),
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .secondaryText,
-                                              letterSpacing: 0.0,
-                                              fontWeight:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodySmall
-                                                      .fontWeight,
-                                              fontStyle:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodySmall
-                                                      .fontStyle,
-                                            ),
-                                      ),
-                                    ].divide(SizedBox(width: 12.0)),
-                                  ),
-                                ].divide(SizedBox(height: 12.0)),
-                              ),
-                            ),
-                          );
-                        },
+                        textStyle: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
-                  Row(
-                    mainAxisSize: MainAxisSize.max,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: FFButtonWidget(
-                          onPressed: () async {
-                            context.pushNamed(
-                              ObraAddRelatorioWidget.routeName,
-                              queryParameters: {
-                                'id': serializeParam(
-                                  widget!.relatorioID,
-                                  ParamType.int,
-                                ),
-                                'uuid': serializeParam(
-                                  '',
-                                  ParamType.String,
-                                ),
-                              }.withoutNulls,
-                            );
-                          },
-                          text: 'Voltar',
-                          icon: Icon(
-                            Icons.arrow_back_rounded,
-                            size: 20.0,
-                          ),
-                          options: FFButtonOptions(
-                            height: 48.0,
-                            padding: EdgeInsetsDirectional.fromSTEB(
-                                20.0, 0.0, 20.0, 0.0),
-                            iconPadding: EdgeInsetsDirectional.fromSTEB(
-                                0.0, 0.0, 8.0, 0.0),
-                            iconColor: FlutterFlowTheme.of(context).primaryText,
-                            color: FlutterFlowTheme.of(context)
-                                .secondaryBackground,
-                            textStyle: FlutterFlowTheme.of(context)
-                                .titleSmall
-                                .override(
-                                  font: GoogleFonts.interTight(
-                                    fontWeight: FlutterFlowTheme.of(context)
-                                        .titleSmall
-                                        .fontWeight,
-                                    fontStyle: FlutterFlowTheme.of(context)
-                                        .titleSmall
-                                        .fontStyle,
-                                  ),
-                                  color:
-                                      FlutterFlowTheme.of(context).primaryText,
-                                  letterSpacing: 0.0,
-                                  fontWeight: FlutterFlowTheme.of(context)
-                                      .titleSmall
-                                      .fontWeight,
-                                  fontStyle: FlutterFlowTheme.of(context)
-                                      .titleSmall
-                                      .fontStyle,
-                                ),
-                            elevation: 0.0,
-                            borderSide: BorderSide(
-                              color: FlutterFlowTheme.of(context).alternate,
-                              width: 1.0,
-                            ),
-                            borderRadius: BorderRadius.circular(8.0),
-                          ),
-                        ),
-                      ),
-                      if (_model.tarefaSelected != null &&
-                          _model.tarefaSelected != '')
-                        Expanded(
-                          child: FutureBuilder<List<GetDetalhesTarefaRow>>(
-                            future: SQLiteManager.instance.getDetalhesTarefa(
-                              uuid: _model.tarefaSelected != null &&
-                                      _model.tarefaSelected != ''
-                                  ? _model.tarefaSelected!
-                                  : '0',
-                            ),
-                            builder: (context, snapshot) {
-                              // Customize what your widget looks like when it's loading.
-                              if (!snapshot.hasData) {
-                                return Center(
-                                  child: LinearProgressIndicator(
-                                    color: FlutterFlowTheme.of(context).primary,
-                                  ),
-                                );
-                              }
-                              final buttonGetDetalhesTarefaRowList =
-                                  snapshot.data!;
-
-                              return FFButtonWidget(
-                                onPressed: () async {
-                                  _model.relatorioDetalhes = await SQLiteManager
-                                      .instance
-                                      .relatorioDetalhes(
-                                    uuid: widget!.relatorioUuid!,
-                                    userUuid: FFAppState().creatorUuid,
-                                    accountOwnerUuid: FFAppState().creatorUuid,
-                                  );
-                                  _model.uuid = await actions.generateUuid();
-
-                                  int? ordemIdInsert;
-                                  String? ordemUuidInsert;
-                                  if (_model.switchOrdemValue == true) {
-                                    final sel = (_model.dropDownOrdemValue ??
-                                            _model.ordemSelected ??
-                                            '')
-                                        .trim();
-                                    if (sel.isNotEmpty && sel != '0') {
-                                      ordemUuidInsert = sel;
-                                      final obraUuid = widget.obraUuid;
-                                      if (obraUuid != null &&
-                                          obraUuid.isNotEmpty) {
-                                        final ordensRows =
-                                            await SQLiteManager.instance
-                                                .getOrdensServico(
-                                          obraUuid: obraUuid,
-                                          userId: FFAppState().creatorId,
-                                        );
-                                        ordemIdInsert = ordensRows
-                                            .where(
-                                                (o) => o.uuid == ordemUuidInsert)
-                                            .firstOrNull
-                                            ?.id;
-                                      }
-                                    }
-                                  }
-
-                                  await SQLiteManager.instance
-                                      .insertAtividadeRelatorio(
-                                    userId: FFAppState().UserID,
-                                    relatorioId: widget!.relatorioID!,
-                                    createdBy: FFAppState().UserID.toString(),
-                                    local: buttonGetDetalhesTarefaRowList
-                                        .firstOrNull?.local,
-                                    descricao: buttonGetDetalhesTarefaRowList
-                                        .firstOrNull?.descricao,
-                                    quantidade: 0,
-                                    unidade: buttonGetDetalhesTarefaRowList
-                                        .firstOrNull?.unidade,
-                                    item: buttonGetDetalhesTarefaRowList
-                                        .firstOrNull?.item,
-                                    tarefaId: buttonGetDetalhesTarefaRowList
-                                        .firstOrNull?.id,
-                                    ordemId: ordemIdInsert,
-                                    ordemUuid: ordemUuidInsert,
-                                    relatorioUuid: _model
-                                        .relatorioDetalhes?.firstOrNull?.uuid,
-                                    uuid: _model.uuid!,
-                                    userUuid: FFAppState().creatorUuid,
-                                    tarefaUuid: buttonGetDetalhesTarefaRowList
-                                        .firstOrNull?.uuid,
-                                  );
-                                  _model.atividadeResult = await SQLiteManager
-                                      .instance
-                                      .carregaUltimaAtividadeRelatorio();
-
-                                  context.pushNamed(
-                                    AddAtividadeRelatorioWidget.routeName,
-                                    queryParameters: {
-                                      'relatorioId': serializeParam(
-                                        widget!.relatorioID,
-                                        ParamType.int,
-                                      ),
-                                      'obraId': serializeParam(
-                                        widget!.obraId,
-                                        ParamType.int,
-                                      ),
-                                      'atividadeId': serializeParam(
-                                        _model.atividadeResult?.firstOrNull?.id,
-                                        ParamType.int,
-                                      ),
-                                      'atividadeUuid': serializeParam(
-                                        _model
-                                            .atividadeResult?.firstOrNull?.uuid,
-                                        ParamType.String,
-                                      ),
-                                      'relatorioUuid': serializeParam(
-                                        widget!.relatorioUuid,
-                                        ParamType.String,
-                                      ),
-                                      'obraUuid': serializeParam(
-                                        widget!.obraUuid,
-                                        ParamType.String,
-                                      ),
-                                    }.withoutNulls,
-                                  );
-
-                                  safeSetState(() {});
-                                },
-                                text: 'Avançar',
-                                icon: Icon(
-                                  Icons.arrow_forward_rounded,
-                                  size: 20.0,
-                                ),
-                                options: FFButtonOptions(
-                                  height: 48.0,
-                                  padding: EdgeInsetsDirectional.fromSTEB(
-                                      20.0, 0.0, 20.0, 0.0),
-                                  iconPadding: EdgeInsetsDirectional.fromSTEB(
-                                      8.0, 0.0, 0.0, 0.0),
-                                  iconColor: Colors.white,
-                                  color: FlutterFlowTheme.of(context).primary,
-                                  textStyle: FlutterFlowTheme.of(context)
-                                      .titleSmall
-                                      .override(
-                                        font: GoogleFonts.interTight(
-                                          fontWeight:
-                                              FlutterFlowTheme.of(context)
-                                                  .titleSmall
-                                                  .fontWeight,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .titleSmall
-                                                  .fontStyle,
-                                        ),
-                                        color: Colors.white,
-                                        letterSpacing: 0.0,
-                                        fontWeight: FlutterFlowTheme.of(context)
-                                            .titleSmall
-                                            .fontWeight,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .titleSmall
-                                            .fontStyle,
-                                      ),
-                                  elevation: 0.0,
-                                  borderSide: BorderSide(
-                                    color: Colors.transparent,
-                                    width: 1.0,
-                                  ),
-                                  borderRadius: BorderRadius.circular(8.0),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                    ].divide(SizedBox(width: 16.0)),
                   ),
-                ]
-                    .divide(SizedBox(height: 20.0))
-                    .addToStart(SizedBox(height: 24.0))
-                    .addToEnd(SizedBox(height: 24.0)),
+                ],
               ),
             ),
           ),

@@ -60,3 +60,23 @@ double parseQuantidadeRelatorio(dynamic value) {
   if (s.isEmpty) return 0;
   return double.tryParse(s) ?? 0;
 }
+
+/// Igual ao acima, mas devolve `null` quando o texto não é um número válido.
+double? tryParseQuantidadeRelatorio(dynamic value) {
+  if (value == null) return null;
+  if (value is num) return value.toDouble();
+  final s = value.toString().trim().replaceAll(',', '.');
+  if (s.isEmpty) return null;
+  return double.tryParse(s);
+}
+
+/// Exibição pt-BR: esconde as casas decimais quando a quantidade é inteira.
+String formatQuantidadeRelatorio(dynamic value, {int casas = 2}) {
+  final v = parseQuantidadeRelatorio(value);
+  if (v == v.roundToDouble()) return v.toStringAsFixed(0);
+  return v
+      .toStringAsFixed(casas)
+      .replaceAll(RegExp(r'0+$'), '')
+      .replaceAll(RegExp(r'\.$'), '')
+      .replaceAll('.', ',');
+}

@@ -25,7 +25,7 @@ class BotaoCadastroObraAtalhoWidget extends StatelessWidget {
     final theme = FlutterFlowTheme.of(context);
 
     return Padding(
-      padding: margin ?? const EdgeInsets.only(top: 10, bottom: 4),
+      padding: margin ?? const EdgeInsets.only(top: 6, bottom: 2),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -33,43 +33,21 @@ class BotaoCadastroObraAtalhoWidget extends StatelessWidget {
             if (!await garantirInternetParaCadastroObra(context)) return;
             onPressed();
           },
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           child: Ink(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              color: theme.secondaryBackground,
+              borderRadius: BorderRadius.circular(8),
+              color: theme.primary.withValues(alpha: 0.04),
               border: Border.all(
-                color: theme.primary.withValues(alpha: 0.2),
+                color: theme.primary.withValues(alpha: 0.18),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: theme.primaryText.withValues(alpha: 0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
             ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               child: Row(
                 children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          theme.primary.withValues(alpha: 0.14),
-                          theme.primary.withValues(alpha: 0.06),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(11),
-                    ),
-                    child: Icon(icon, size: 22, color: theme.primary),
-                  ),
-                  const SizedBox(width: 12),
+                  Icon(icon, size: 15, color: theme.primary),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -77,49 +55,38 @@ class BotaoCadastroObraAtalhoWidget extends StatelessWidget {
                         Text(
                           titulo,
                           style: GoogleFonts.inter(
-                            fontSize: 14,
+                            fontSize: 12.5,
                             fontWeight: FontWeight.w600,
-                            color: theme.primaryText,
+                            color: theme.primary,
+                            height: 1.2,
+                          ),
+                        ),
+                        Text(
+                          subtitulo,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            color: theme.secondaryText,
                             height: 1.25,
                           ),
                         ),
-                        const SizedBox(height: 3),
-                        Text(
-                          subtitulo,
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w400,
-                            color: theme.secondaryText,
-                            height: 1.35,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.wifi_rounded,
-                              size: 14,
-                              color: theme.primary.withValues(alpha: 0.75),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Requer conexão com a internet',
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                color: theme.primary.withValues(alpha: 0.85),
-                                height: 1.2,
-                              ),
-                            ),
-                          ],
-                        ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: 'Requer conexão com a internet',
+                    child: Icon(
+                      Icons.wifi_rounded,
+                      size: 13,
+                      color: theme.secondaryText,
                     ),
                   ),
                   const SizedBox(width: 8),
                   Icon(
                     Icons.add_circle_outline_rounded,
-                    size: 22,
+                    size: 17,
                     color: theme.primary,
                   ),
                 ],

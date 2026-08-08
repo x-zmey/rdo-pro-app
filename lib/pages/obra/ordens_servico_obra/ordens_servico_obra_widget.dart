@@ -1,11 +1,11 @@
 import '/auth/membership_access.dart';
-import '/backend/sqlite/sqlite_manager.dart';
+import '/backend/sqlite/sqlite_manager.dart' show SQLiteManager;
+import '/backend/sqlite/queries/read.dart'
+    show GetOrdensServicoRow, GetTarefasOrdemRow;
 import '/componentes/navegacao/barra_navegacao_principal.dart';
-import '/flutter_flow/flutter_flow_icon_button.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
-import 'dart:ui';
 import '/index.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -15,7 +15,7 @@ export 'ordens_servico_obra_model.dart';
 
 String _formatOrdemServicoDate(String raw) {
   final s = raw.trim();
-  if (s.isEmpty) return '---';
+  if (s.isEmpty) return '—';
   if (s.contains('/')) return s.split(' ').first;
   if (RegExp(r'^\d{4}-\d{2}-\d{2}').hasMatch(s)) {
     try {
@@ -38,7 +38,7 @@ String _labelSituacaoOrdemServico(int situacao) {
     case 1:
       return 'Preenchendo';
     case 2:
-      return 'Aguardando Aprovação';
+      return 'Aguardando';
     case 3:
       return 'Aprovado';
     case 4:
@@ -53,14 +53,22 @@ Color _corSituacaoOrdemServico(int situacao) {
     case 1:
       return const Color(0xFF2196F3);
     case 2:
-      return const Color(0xFF6200EE);
+      return const Color(0xFF7B1FA2);
     case 3:
-      return const Color(0xFF4CAF50);
+      return const Color(0xFF2E7D32);
     case 4:
-      return const Color(0xFFE53935);
+      return const Color(0xFFC62828);
     default:
       return Colors.grey;
   }
+}
+
+String _tituloOrdem(GetOrdensServicoRow ordem) {
+  final nome = ordem.nome?.trim() ?? '';
+  if (nome.isNotEmpty) return nome;
+  final obs = ordem.observacoes?.trim() ?? '';
+  if (obs.isNotEmpty) return obs;
+  return 'Ordem de serviço';
 }
 
 class OrdensServicoObraWidget extends StatefulWidget {
@@ -81,22 +89,24 @@ class OrdensServicoObraWidget extends StatefulWidget {
       _OrdensServicoObraWidgetState();
 }
 
-class _OrdensServicoObraWidgetState extends State<OrdensServicoObraWidget>
-    with SingleTickerProviderStateMixin {
+class _OrdensServicoObraWidgetState extends State<OrdensServicoObraWidget> {
   late OrdensServicoObraModel _model;
-  late AnimationController _animationController;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
-  final Set<int> _expandedOrdens = {};
+  final Set<String> _expandedOrdens = {};
+
+  String _obraNome = '';
+  late Future<List<_OrdemComTarefas>> _ordensFuture;
+
+  /// `null` = todas; senão filtra por [GetOrdensServicoRow.statusId].
+  int? _filtroStatus;
 
   @override
   void initState() {
     super.initState();
     _model = createModel(context, () => OrdensServicoObraModel());
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
+    _ordensFuture = _fetchOrdensComTarefas();
+    _carregarNomeObra();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!MembershipAccess.canPermission('view_ordens_servico')) {
         MembershipAccess.showDenied(
@@ -108,19 +118,35 @@ class _OrdensServicoObraWidgetState extends State<OrdensServicoObraWidget>
         }
       }
     });
-    _animationController.forward();
   }
 
   @override
   void dispose() {
-    _animationController.dispose();
     _model.dispose();
     super.dispose();
   }
 
+  Future<void> _carregarNomeObra() async {
+    final uuid = (widget.obraUuid ?? '').trim();
+    if (uuid.isEmpty) return;
+    try {
+      final rows = await SQLiteManager.instance.obraDetalhes(
+        uuid: uuid,
+        userId: FFAppState().creatorId,
+        accountOwnerUuid: FFAppState().creatorUuid,
+      );
+      final nome = rows.firstOrNull?.nome.trim() ?? '';
+      if (!mounted || nome.isEmpty) return;
+      setState(() => _obraNome = nome);
+    } catch (_) {}
+  }
+
   Future<List<_OrdemComTarefas>> _fetchOrdensComTarefas() async {
+    final obraUuid = (widget.obraUuid ?? '').trim();
+    if (obraUuid.isEmpty) return const [];
+
     final ordens = await SQLiteManager.instance.getOrdensServico(
-      obraUuid: widget.obraUuid!,
+      obraUuid: obraUuid,
       userId: FFAppState().creatorId,
     );
     final out = <_OrdemComTarefas>[];
@@ -133,6 +159,44 @@ class _OrdensServicoObraWidgetState extends State<OrdensServicoObraWidget>
     return out;
   }
 
+  Future<void> _refresh() async {
+    setState(() {
+      _ordensFuture = _fetchOrdensComTarefas();
+    });
+    await _ordensFuture;
+  }
+
+  void _voltarParaDetalhes() {
+    context.pushNamed(
+      DetalhesObraWidget.routeName,
+      queryParameters: {
+        'obraId': serializeParam(widget.obraId, ParamType.int),
+        'obraUuid': serializeParam(widget.obraUuid, ParamType.String),
+      }.withoutNulls,
+      extra: <String, dynamic>{
+        '__transition_info__': const TransitionInfo(
+          hasTransition: true,
+          transitionType: PageTransitionType.rightToLeft,
+        ),
+      },
+    );
+  }
+
+  void _abrirDetalhes(GetOrdensServicoRow ordem) {
+    context.pushNamed(
+      OrdemServicoDetalhesWidget.routeName,
+      queryParameters: {
+        'ordemUuid': serializeParam(ordem.uuid, ParamType.String),
+      }.withoutNulls,
+      extra: <String, dynamic>{
+        '__transition_info__': const TransitionInfo(
+          hasTransition: true,
+          transitionType: PageTransitionType.rightToLeft,
+        ),
+      },
+    );
+  }
+
   double _calcularProgressoOrdem(List<GetTarefasOrdemRow> tarefas) {
     if (tarefas.isEmpty) return 0;
     double totalRealizada = 0;
@@ -143,6 +207,38 @@ class _OrdensServicoObraWidgetState extends State<OrdensServicoObraWidget>
     }
     if (totalProgramada == 0) return 0;
     return (totalRealizada / totalProgramada) * 100;
+  }
+
+  double _calcularProgressoTarefa(GetTarefasOrdemRow tarefa) {
+    final programada = tarefa.qtdProgramada ?? 0;
+    final realizada = tarefa.qtdRealizada ?? 0;
+    if (programada == 0) return 0;
+    return (realizada / programada) * 100;
+  }
+
+  Color _getStatusTarefaColor(double progresso) {
+    if (progresso >= 100) return const Color(0xFF2E7D32);
+    if (progresso > 0) return const Color(0xFFEF6C00);
+    return const Color(0xFF757575);
+  }
+
+  String _getStatusTarefaTexto(double progresso) {
+    if (progresso >= 100) return 'Concluída';
+    if (progresso > 0) return 'Em andamento';
+    return 'Não iniciada';
+  }
+
+  String _formatNumero(dynamic valor) {
+    if (valor == null) return '0';
+    final n = double.tryParse(valor.toString());
+    if (n == null) return valor.toString();
+    return n.toStringAsFixed(n.truncateToDouble() == n ? 0 : 2);
+  }
+
+  List<_OrdemComTarefas> _aplicarFiltro(List<_OrdemComTarefas> todas) {
+    final f = _filtroStatus;
+    if (f == null) return todas;
+    return todas.where((e) => e.ordem.statusId == f).toList();
   }
 
   @override
@@ -158,134 +254,213 @@ class _OrdensServicoObraWidgetState extends State<OrdensServicoObraWidget>
       child: Scaffold(
         key: scaffoldKey,
         backgroundColor: theme.primaryBackground,
-        appBar: _buildAppBar(theme),
-        body: FadeTransition(
-          opacity: _animationController,
-          child: _buildBody(theme),
+        appBar: AppBar(
+          backgroundColor: theme.primary,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          centerTitle: false,
+          titleSpacing: 0,
+          toolbarHeight: 58,
+          iconTheme: const IconThemeData(color: Colors.white),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: _voltarParaDetalhes,
+          ),
+          title: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Ordens de Serviço',
+                  style: GoogleFonts.interTight(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  _obraNome.isEmpty
+                      ? 'Planejamento e execução da obra'
+                      : _obraNome,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            IconButton(
+              tooltip: 'Atualizar',
+              icon: const Icon(Icons.refresh_rounded,
+                  color: Colors.white, size: 21),
+              onPressed: _refresh,
+            ),
+            const SizedBox(width: 4),
+          ],
         ),
-        bottomNavigationBar: const BarraNavegacaoPrincipal(),
+        body: Column(
+          children: [
+            Expanded(child: _body(theme)),
+            const BarraNavegacaoPrincipal(),
+          ],
+        ),
       ),
     );
   }
 
-  PreferredSizeWidget _buildAppBar(FlutterFlowTheme theme) {
-    return AppBar(
-      backgroundColor: Colors.transparent,
-      toolbarHeight: 52,
-      elevation: 0,
-      scrolledUnderElevation: 0,
-      surfaceTintColor: Colors.transparent,
-      centerTitle: false,
-      leading: Container(
-        margin: const EdgeInsets.only(left: 10),
-        decoration: BoxDecoration(
-          color: theme.primary.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(10),
+  Widget _body(FlutterFlowTheme theme) {
+    final u = (widget.obraUuid ?? '').trim();
+    if (u.isEmpty) {
+      return Center(
+        child: Text(
+          'Obra sem identificador.',
+          style: GoogleFonts.inter(fontSize: 13, color: theme.secondaryText),
         ),
-        child: IconButton(
-          icon: Icon(Icons.arrow_back_rounded, color: theme.primary, size: 20),
-          onPressed: () {
-            context.pushNamed(
-              DetalhesObraWidget.routeName,
-              queryParameters: {
-                'obraId': serializeParam(widget.obraId, ParamType.int),
-                'obraUuid': serializeParam(widget.obraUuid, ParamType.String),
-              }.withoutNulls,
-            );
-          },
-        ),
-      ),
-      title: Text(
-        'Ordens de Serviço',
-        style: GoogleFonts.inter(
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-          color: theme.primaryText,
-          letterSpacing: -0.3,
-        ),
-      ),
-      actions: [
-        Container(
-          margin: const EdgeInsets.only(right: 10),
-          decoration: BoxDecoration(
-            color: theme.primary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: IconButton(
-            icon: Icon(Icons.refresh_rounded, color: theme.primary, size: 20),
-            onPressed: () => setState(() {}),
-          ),
-        ),
-      ],
-    );
-  }
+      );
+    }
 
-  Widget _buildBody(FlutterFlowTheme theme) {
-    return SafeArea(
-      top: true,
+    return RefreshIndicator(
+      color: theme.primary,
+      onRefresh: _refresh,
       child: FutureBuilder<List<_OrdemComTarefas>>(
-        future: _fetchOrdensComTarefas(),
+        future: _ordensFuture,
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return _buildLoadingState(theme);
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: const [
+                SizedBox(height: 120),
+                Center(
+                  child: SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                ),
+              ],
+            );
           }
 
           if (snapshot.hasError) {
-            return _buildErrorState(theme, snapshot.error.toString());
-          }
-
-          final ordens = snapshot.data!;
-
-          if (ordens.isEmpty) {
-            return _buildEmptyState(theme);
-          }
-
-          return CustomScrollView(
-            physics: const BouncingScrollPhysics(),
-            slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(
-                  16,
-                  16,
-                  16,
-                  kBarraNavegacaoPrincipalReservaScroll,
-                ),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final com = ordens[index];
-                      final ordem = com.ordem;
-                      final tarefas = com.tarefas;
-                      final isExpanded = _expandedOrdens.contains(index);
-                      final situacaoOrdem = ordem.statusId;
-                      final corSituacaoOrdem =
-                          _corSituacaoOrdemServico(situacaoOrdem);
-                      final progresso = _calcularProgressoOrdem(tarefas);
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        child: Column(
-                          children: [
-                            _buildOrdemCard(
-                              theme,
-                              context,
-                              ordem,
-                              tarefas,
-                              isExpanded,
-                              corSituacaoOrdem,
-                              situacaoOrdem,
-                              progresso,
-                              index,
-                            ),
-                            if (isExpanded && tarefas.isNotEmpty)
-                              _buildTarefasList(context, theme, tarefas),
-                          ],
-                        ),
-                      );
-                    },
-                    childCount: ordens.length,
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 40, 16, 16),
+              children: [
+                Icon(Icons.error_outline_rounded,
+                    size: 40, color: theme.error.withValues(alpha: 0.7)),
+                const SizedBox(height: 12),
+                Text(
+                  'Erro ao carregar ordens',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: theme.primaryText,
                   ),
                 ),
+                const SizedBox(height: 6),
+                Text(
+                  '${snapshot.error}',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: theme.secondaryText,
+                  ),
+                ),
+              ],
+            );
+          }
+
+          final todas = snapshot.data ?? const <_OrdemComTarefas>[];
+          final filtradas = _aplicarFiltro(todas);
+
+          return ListView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            padding: const EdgeInsets.fromLTRB(
+              16,
+              10,
+              16,
+              kBarraNavegacaoPrincipalReservaScroll,
+            ),
+            children: [
+              if (todas.isNotEmpty) ...[
+                _buildResumoCard(theme, todas),
+                const SizedBox(height: 10),
+                _buildFiltros(theme, todas),
+                const SizedBox(height: 10),
+              ],
+              RdoSectionCard(
+                title: 'Lista de ordens',
+                icon: Icons.assignment_outlined,
+                subtitle: todas.isEmpty
+                    ? 'Nenhuma ordem nesta obra'
+                    : filtradas.length == todas.length
+                        ? 'Toque para abrir os detalhes'
+                        : '${filtradas.length} de ${todas.length} exibidas',
+                margin: EdgeInsets.zero,
+                trailing: filtradas.isEmpty
+                    ? null
+                    : RdoContadorChip('${filtradas.length}'),
+                contentPadding: EdgeInsets.zero,
+                child: filtradas.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 28, 16, 28),
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.assignment_outlined,
+                              size: 40,
+                              color:
+                                  theme.secondaryText.withValues(alpha: 0.4),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              todas.isEmpty
+                                  ? 'Nenhuma ordem de serviço'
+                                  : 'Nenhuma ordem neste filtro',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: theme.primaryText,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              todas.isEmpty
+                                  ? 'As ordens sincronizadas desta obra aparecem aqui.'
+                                  : 'Altere o filtro de status para ver outras ordens.',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                color: theme.secondaryText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : Column(
+                        children: [
+                          for (var i = 0; i < filtradas.length; i++) ...[
+                            if (i > 0)
+                              Divider(
+                                height: 1,
+                                thickness: 1,
+                                color: theme.alternate,
+                              ),
+                            _buildOrdemItem(theme, filtradas[i]),
+                          ],
+                        ],
+                      ),
               ),
             ],
           );
@@ -294,643 +469,431 @@ class _OrdensServicoObraWidgetState extends State<OrdensServicoObraWidget>
     );
   }
 
-  Widget _buildLoadingState(FlutterFlowTheme theme) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: theme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const CircularProgressIndicator(strokeWidth: 3),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Carregando ordens',
-            style: GoogleFonts.inter(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: theme.primaryText,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Aguarde um momento...',
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              color: theme.secondaryText,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorState(FlutterFlowTheme theme, String error) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: theme.error.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(25),
-              ),
-              child: Icon(Icons.error_outline_rounded,
-                  size: 40, color: theme.error),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Erro ao carregar',
-              style: GoogleFonts.inter(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: theme.primaryText,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              error,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                color: theme.secondaryText,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(FlutterFlowTheme theme) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              color: theme.alternate.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(30),
-            ),
-            child: Icon(
-              Icons.assignment_outlined,
-              size: 50,
-              color: theme.secondaryText,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Nenhuma ordem de serviço',
-            style: GoogleFonts.inter(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: theme.primaryText,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Não há ordens de serviço cadastradas para esta obra.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              color: theme.secondaryText,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOrdemCard(
+  Widget _buildResumoCard(
     FlutterFlowTheme theme,
-    BuildContext context,
-    GetOrdensServicoRow ordem,
-    List<GetTarefasOrdemRow> tarefas,
-    bool isExpanded,
-    Color corSituacaoOrdem,
-    int situacaoOrdem,
-    double progresso,
-    int index,
+    List<_OrdemComTarefas> todas,
   ) {
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          if (_expandedOrdens.contains(index)) {
-            _expandedOrdens.remove(index);
-          } else {
-            _expandedOrdens.add(index);
-          }
-        });
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: theme.secondaryBackground,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+    var aprovadas = 0;
+    var aguardando = 0;
+    var preenchendo = 0;
+    var reprovadas = 0;
+    for (final o in todas) {
+      switch (o.ordem.statusId) {
+        case 3:
+          aprovadas++;
+          break;
+        case 2:
+          aguardando++;
+          break;
+        case 4:
+          reprovadas++;
+          break;
+        default:
+          preenchendo++;
+      }
+    }
+
+    return RdoSectionCard(
+      title: 'Resumo',
+      icon: Icons.insights_outlined,
+      margin: EdgeInsets.zero,
+      contentPadding: EdgeInsets.zero,
+      child: RdoKpiStrip(
+        itens: [
+          RdoKpiData(label: 'Total', value: '${todas.length}', destaque: true),
+          RdoKpiData(label: 'Aprovadas', value: '$aprovadas'),
+          RdoKpiData(
+            label: 'Pendentes',
+            value: '${aguardando + preenchendo}',
+            hint: reprovadas > 0 ? '$reprovadas reprovada(s)' : null,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFiltros(
+    FlutterFlowTheme theme,
+    List<_OrdemComTarefas> todas,
+  ) {
+    int count(int? status) {
+      if (status == null) return todas.length;
+      return todas.where((e) => e.ordem.statusId == status).length;
+    }
+
+    Widget chip(String label, int? status) {
+      final selected = _filtroStatus == status;
+      final n = count(status);
+      final cor = status == null
+          ? theme.primary
+          : _corSituacaoOrdemServico(status);
+      return FilterChip(
+        selected: selected,
+        showCheckmark: false,
+        label: Text(
+          '$label ($n)',
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: selected ? Colors.white : theme.primaryText,
+          ),
         ),
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: () {
-              setState(() {
-                if (_expandedOrdens.contains(index)) {
-                  _expandedOrdens.remove(index);
-                } else {
-                  _expandedOrdens.add(index);
-                }
-              });
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        selectedColor: cor,
+        backgroundColor: theme.secondaryBackground,
+        side: BorderSide(
+          color: selected ? cor : theme.alternate,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        visualDensity: VisualDensity.compact,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        onSelected: (_) {
+          setState(() => _filtroStatus = status);
+        },
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          chip('Todas', null),
+          const SizedBox(width: 6),
+          chip('Preenchendo', 1),
+          const SizedBox(width: 6),
+          chip('Aguardando', 2),
+          const SizedBox(width: 6),
+          chip('Aprovado', 3),
+          const SizedBox(width: 6),
+          chip('Reprovado', 4),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOrdemItem(FlutterFlowTheme theme, _OrdemComTarefas com) {
+    final ordem = com.ordem;
+    final tarefas = com.tarefas;
+    final statusId = ordem.statusId;
+    final corStatus = _corSituacaoOrdemServico(statusId);
+    final progresso = _calcularProgressoOrdem(tarefas);
+    final uuid = ordem.uuid;
+    final expanded = _expandedOrdens.contains(uuid);
+    final titulo = _tituloOrdem(ordem);
+
+    return Material(
+      color: theme.secondaryBackground,
+      child: InkWell(
+        onTap: () => _abrirDetalhes(ordem),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              ordem.codigo,
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: theme.secondaryText,
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              (ordem.observacoes != null &&
-                                      ordem.observacoes!.trim().isNotEmpty)
-                                  ? ordem.observacoes!.trim()
-                                  : 'Ordem de serviço',
-                              style: GoogleFonts.inter(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700,
-                                color: theme.primaryText,
-                                letterSpacing: -0.3,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: corSituacaoOrdem.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: corSituacaoOrdem.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Text(
-                          _labelSituacaoOrdemServico(situacaoOrdem),
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: corSituacaoOrdem,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Icon(Icons.calendar_today,
-                          size: 14, color: theme.secondaryText),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Início: ${_formatOrdemServicoDate(ordem.dataInicio)}',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: theme.secondaryText,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Icon(Icons.calendar_today,
-                          size: 14, color: theme.secondaryText),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Fim: ${_formatOrdemServicoDate(ordem.dataFim)}',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: theme.secondaryText,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Container(width: 3, color: corStatus),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 10, 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Progresso',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: theme.secondaryText,
-                            ),
-                          ),
-                          Text(
-                            '${progresso.toStringAsFixed(1)}%',
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: progresso >= 100
-                                  ? Colors.green.shade700
-                                  : theme.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: LinearProgressIndicator(
-                          value: progresso / 100,
-                          minHeight: 8,
-                          backgroundColor:
-                              theme.alternate.withValues(alpha: 0.5),
-                          color: progresso >= 100
-                              ? Colors.green.shade700
-                              : theme.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: () {
-                        context.pushNamed(
-                          OrdemServicoDetalhesWidget.routeName,
-                          queryParameters: {
-                            'ordemUuid': serializeParam(
-                              ordem.uuid,
-                              ParamType.String,
-                            ),
-                          }.withoutNulls,
-                          extra: <String, dynamic>{
-                            '__transition_info__': TransitionInfo(
-                              hasTransition: true,
-                              transitionType: PageTransitionType.rightToLeft,
-                            ),
-                          },
-                        );
-                      },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: theme.primary,
-                        foregroundColor: theme.primaryBackground,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.visibility_outlined, size: 18),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Ver detalhes',
-                            style: GoogleFonts.inter(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          decoration: BoxDecoration(
-                            color: theme.alternate.withValues(alpha: 0.3),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(Icons.task_alt,
-                                  size: 16, color: theme.primary),
-                              const SizedBox(width: 6),
-                              Text(
-                                '${tarefas.length} tarefas',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: theme.primaryText,
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      ordem.codigo,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.2,
+                                        color: theme.secondaryText,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      titulo,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 14.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: theme.primaryText,
+                                        height: 1.25,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: corStatus.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: corStatus.withValues(alpha: 0.28),
+                                  ),
+                                ),
+                                child: Text(
+                                  _labelSituacaoOrdemServico(statusId),
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: corStatus,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (tarefas.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          isExpanded ? Icons.expand_less : Icons.expand_more,
-                          size: 20,
-                          color: theme.primary,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          isExpanded ? 'Ocultar tarefas' : 'Ver tarefas',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: theme.primary,
-                            fontWeight: FontWeight.w500,
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Icon(Icons.event_outlined,
+                                  size: 13, color: theme.secondaryText),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  '${_formatOrdemServicoDate(ordem.dataInicio)}'
+                                  ' → '
+                                  '${_formatOrdemServicoDate(ordem.dataFim)}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: theme.secondaryText,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                '${tarefas.length} tarefa${tarefas.length == 1 ? '' : 's'}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: theme.secondaryText,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: LinearProgressIndicator(
+                                    value: (progresso / 100).clamp(0.0, 1.0),
+                                    minHeight: 6,
+                                    backgroundColor:
+                                        theme.alternate.withValues(alpha: 0.7),
+                                    color: progresso >= 100
+                                        ? const Color(0xFF2E7D32)
+                                        : theme.primary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                '${progresso.toStringAsFixed(0)}%',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: progresso >= 100
+                                      ? const Color(0xFF2E7D32)
+                                      : theme.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Text(
+                                'Abrir detalhes',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: theme.primary,
+                                ),
+                              ),
+                              Icon(Icons.chevron_right_rounded,
+                                  size: 16, color: theme.primary),
+                              const Spacer(),
+                              if (tarefas.isNotEmpty)
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(6),
+                                  onTap: () {
+                                    setState(() {
+                                      if (expanded) {
+                                        _expandedOrdens.remove(uuid);
+                                      } else {
+                                        _expandedOrdens.add(uuid);
+                                      }
+                                    });
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                      vertical: 2,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          expanded
+                                              ? 'Ocultar tarefas'
+                                              : 'Ver tarefas',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w500,
+                                            color: theme.secondaryText,
+                                          ),
+                                        ),
+                                        Icon(
+                                          expanded
+                                              ? Icons.expand_less_rounded
+                                              : Icons.expand_more_rounded,
+                                          size: 18,
+                                          color: theme.secondaryText,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),
-          ),
+            if (expanded && tarefas.isNotEmpty)
+              _buildTarefasPreview(theme, tarefas),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildTarefasList(
-    BuildContext context,
+  Widget _buildTarefasPreview(
     FlutterFlowTheme theme,
     List<GetTarefasOrdemRow> tarefas,
   ) {
     return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.alternate.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(16),
-      ),
+      width: double.infinity,
+      color: theme.primaryBackground.withValues(alpha: 0.55),
+      padding: const EdgeInsets.fromLTRB(15, 0, 12, 12),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Text(
-              'Tarefas da Ordem',
-              style: GoogleFonts.inter(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: theme.primaryText,
-              ),
-            ),
-          ),
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: tarefas.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final tarefa = tarefas[index];
-              final progressoTarefa = _calcularProgressoTarefa(tarefa);
-
-              return Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.secondaryBackground,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Theme.of(context)
-                        .dividerColor
-                        .withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 4,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: _getStatusTarefaColor(progressoTarefa),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                tarefa.nome ?? 'Tarefa',
-                                style: GoogleFonts.inter(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: theme.primaryText,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _getStatusTarefaColor(progressoTarefa)
-                                .withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            _getStatusTarefaTexto(progressoTarefa),
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: _getStatusTarefaColor(progressoTarefa),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildInfoTarefa(
-                            theme,
-                            'Quantidade Programada',
-                            '${_formatNumero(tarefa.qtdProgramada)} ${tarefa.unidade ?? ''}',
-                            Icons.assignment_turned_in,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildInfoTarefa(
-                            theme,
-                            'Quantidade Realizada',
-                            '${_formatNumero(tarefa.qtdRealizada)} ${tarefa.unidade ?? ''}',
-                            Icons.check_circle_outline,
-                            highlight: true,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Progresso da tarefa',
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                color: theme.secondaryText,
-                              ),
-                            ),
-                            Text(
-                              '${progressoTarefa.toStringAsFixed(1)}%',
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: progressoTarefa >= 100
-                                    ? Colors.green.shade700
-                                    : theme.primary,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: LinearProgressIndicator(
-                            value: progressoTarefa / 100,
-                            minHeight: 6,
-                            backgroundColor: theme.alternate,
-                            color: progressoTarefa >= 100
-                                ? Colors.green.shade700
-                                : theme.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
+          for (var i = 0; i < tarefas.length; i++) ...[
+            if (i > 0) const SizedBox(height: 8),
+            _buildTarefaMini(theme, tarefas[i]),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildInfoTarefa(
+  Widget _buildTarefaMini(
     FlutterFlowTheme theme,
-    String label,
-    String value,
-    IconData icon, {
-    bool highlight = false,
-  }) {
+    GetTarefasOrdemRow tarefa,
+  ) {
+    final progresso = _calcularProgressoTarefa(tarefa);
+    final cor = _getStatusTarefaColor(progresso);
+    final unidade = (tarefa.unidade ?? '').trim();
+
     return Container(
-      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: highlight
-            ? theme.primary.withValues(alpha: 0.05)
-            : theme.alternate.withValues(alpha: 0.3),
+        color: theme.secondaryBackground,
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.alternate),
       ),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 14, color: theme.secondaryText),
-              const SizedBox(width: 4),
+              Container(
+                width: 3,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: cor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  label,
+                  tarefa.nome ?? 'Tarefa',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.inter(
-                    fontSize: 10,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: theme.primaryText,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _getStatusTarefaTexto(progresso),
+                style: GoogleFonts.inter(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  color: cor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Prog. ${_formatNumero(tarefa.qtdProgramada)}'
+                  '${unidade.isEmpty ? '' : ' $unidade'}',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
                     color: theme.secondaryText,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  'Real. ${_formatNumero(tarefa.qtdRealizada)}'
+                  '${unidade.isEmpty ? '' : ' $unidade'}',
+                  textAlign: TextAlign.end,
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: theme.primaryText,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              fontWeight: highlight ? FontWeight.w700 : FontWeight.w600,
-              color: highlight ? theme.primary : theme.primaryText,
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: (progresso / 100).clamp(0.0, 1.0),
+              minHeight: 4,
+              backgroundColor: theme.alternate,
+              color: cor,
             ),
           ),
         ],
       ),
     );
-  }
-
-  double _calcularProgressoTarefa(GetTarefasOrdemRow tarefa) {
-    final programada = tarefa.qtdProgramada ?? 0;
-    final realizada = tarefa.qtdRealizada ?? 0;
-    if (programada == 0) return 0;
-    return (realizada / programada) * 100;
-  }
-
-  Color _getStatusTarefaColor(double progresso) {
-    if (progresso >= 100) return const Color(0xFF4CAF50);
-    if (progresso > 0) return const Color(0xFFFF9800);
-    return const Color(0xFF9E9E9E);
-  }
-
-  String _getStatusTarefaTexto(double progresso) {
-    if (progresso >= 100) return 'Concluída';
-    if (progresso > 0) return 'Em andamento';
-    return 'Não iniciada';
-  }
-
-  String _formatNumero(dynamic valor) {
-    if (valor == null) return '0';
-    final num = double.tryParse(valor.toString());
-    if (num == null) return valor.toString();
-    return num.toStringAsFixed(num.truncateToDouble() == num ? 0 : 2);
   }
 }

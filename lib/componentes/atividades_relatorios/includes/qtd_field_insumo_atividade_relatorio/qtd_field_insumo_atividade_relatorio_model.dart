@@ -13,7 +13,7 @@ class QtdFieldInsumoAtividadeRelatorioModel
     extends FlutterFlowModel<QtdFieldInsumoAtividadeRelatorioWidget> {
   ///  Local state fields for this component.
 
-  int? newValor = 0;
+  num? newValor = 0;
 
   ///  State fields for stateful widgets in this component.
 

@@ -5,6 +5,7 @@ import '/componentes/atividades_relatorios/includes/qtd_field_equipamento_realiz
 import '/componentes/atividades_relatorios/includes/qtd_field_produzida_item_atividade/qtd_field_produzida_item_atividade_widget.dart';
 import '/componentes/dialogs/cofirma_exclusao_item_atividade/cofirma_exclusao_item_atividade_widget.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';
@@ -24,11 +25,15 @@ class EquipamentosAtividadeRelatorioWidget extends StatefulWidget {
     required this.relatorioUuid,
     required this.atividadeUuid,
     this.listRefreshToken = 0,
+    this.qtdRealizadaAtividade,
   });
 
   final String? relatorioUuid;
   final String? atividadeUuid;
   final int listRefreshToken;
+
+  /// Valor digitado no topo do formulário da atividade (teto da Prod.).
+  final ValueGetter<num?>? qtdRealizadaAtividade;
 
   @override
   State<EquipamentosAtividadeRelatorioWidget> createState() =>
@@ -113,22 +118,13 @@ class _EquipamentosAtividadeRelatorioWidgetState
   }
 
   Widget _qtyLabel(String text) {
-    return SizedBox(
-      height: 32.0,
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Text(
-          text,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: FlutterFlowTheme.of(context).labelSmall.override(
-                font: GoogleFonts.inter(
-                  fontWeight:
-                      FlutterFlowTheme.of(context).labelSmall.fontWeight,
-                ),
-                letterSpacing: 0.0,
-              ),
-        ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3.0),
+      child: Text(
+        text.toUpperCase(),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: rdoColumnLabelStyle(context),
       ),
     );
   }
@@ -136,38 +132,12 @@ class _EquipamentosAtividadeRelatorioWidgetState
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        color: FlutterFlowTheme.of(context).secondaryBackground,
-        boxShadow: const [
-          BoxShadow(
-            blurRadius: 3.0,
-            color: Color(0x33000000),
-            offset: Offset(0.0, 1.0),
-          )
-        ],
-        borderRadius: BorderRadius.circular(12.0),
-      ),
+      decoration: const BoxDecoration(color: Colors.transparent),
       child: Padding(
-        padding: const EdgeInsets.all(8.0),
+        padding: EdgeInsets.zero,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Equipamentos Utilizados',
-                style: FlutterFlowTheme.of(context).headlineMedium.override(
-                      font: GoogleFonts.interTight(
-                        fontWeight: FlutterFlowTheme.of(context)
-                            .headlineMedium
-                            .fontWeight,
-                      ),
-                      fontSize: 20.0,
-                      letterSpacing: 0.0,
-                    ),
-              ),
-            ),
-            const SizedBox(height: 12.0),
             FutureBuilder<_EquipListaData>(
               key: ValueKey('equip_ativ_list_$_listReloadToken'),
               future: _itensFuture,
@@ -183,7 +153,10 @@ class _EquipamentosAtividadeRelatorioWidgetState
                 final itens = listaData.itens;
                 final atividade = listaData.atividade;
                 final unidadeProd = unidadeProdutividadeAtividade(atividade);
-                final limiteProd = qtdRealizadaAtividadeNum(atividade);
+                final limiteProd = limiteProdutividadeEfetivo(
+                  atividade: atividade,
+                  qtdRealizadaFormulario: widget.qtdRealizadaAtividade?.call(),
+                );
                 final totalProd = somaProdutividadeItens(itens);
                 final excede = totalProd - limiteProd > 1e-6;
 
@@ -195,7 +168,7 @@ class _EquipamentosAtividadeRelatorioWidgetState
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: itens.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8.0),
+                      separatorBuilder: (_, __) => const SizedBox(height: 6.0),
                       itemBuilder: (context, listViewIndex) {
                         final row = itens[listViewIndex];
                         return Container(
@@ -207,7 +180,8 @@ class _EquipamentosAtividadeRelatorioWidgetState
                               color: FlutterFlowTheme.of(context).alternate,
                             ),
                           ),
-                          padding: const EdgeInsets.all(8.0),
+                          padding:
+                              const EdgeInsets.fromLTRB(8.0, 4.0, 4.0, 8.0),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -219,26 +193,25 @@ class _EquipamentosAtividadeRelatorioWidgetState
                                         row.descricao,
                                         'N/A',
                                       ),
-                                      style: FlutterFlowTheme.of(context)
-                                          .bodyLarge
-                                          .override(
-                                            font: GoogleFonts.inter(
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                            letterSpacing: 0.0,
-                                            fontWeight: FontWeight.w600,
-                                          ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        height: 1.2,
+                                        color: FlutterFlowTheme.of(context)
+                                            .primaryText,
+                                      ),
                                     ),
                                   ),
                                   FlutterFlowIconButton(
                                     borderColor: Colors.transparent,
                                     borderRadius: 16.0,
-                                    buttonSize: 32.0,
-                                    fillColor:
-                                        FlutterFlowTheme.of(context).error,
+                                    buttonSize: 30.0,
+                                    fillColor: Colors.transparent,
                                     icon: Icon(
-                                      Icons.delete_outline,
-                                      color: FlutterFlowTheme.of(context).info,
+                                      Icons.delete_outline_rounded,
+                                      color: FlutterFlowTheme.of(context).error,
                                       size: 18.0,
                                     ),
                                     onPressed: () async {
@@ -247,7 +220,7 @@ class _EquipamentosAtividadeRelatorioWidgetState
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 8.0),
+                              const SizedBox(height: 4.0),
                               Row(
                                 children: [
                                   Expanded(
@@ -270,7 +243,7 @@ class _EquipamentosAtividadeRelatorioWidgetState
                                             key: Key('Keyq86_${row.id}'),
                                             uuid: row.uuid!,
                                             valor: valueOrDefault<int>(
-                                              row.qtdUtilizada,
+                                              row.qtdUtilizada?.round(),
                                               0,
                                             ),
                                           ),
@@ -299,7 +272,7 @@ class _EquipamentosAtividadeRelatorioWidgetState
                                             key: Key('Keylib_${row.id}'),
                                             uuid: row.uuid!,
                                             valor: valueOrDefault<int>(
-                                              row.qtdRealizada,
+                                              row.qtdRealizada?.round(),
                                               0,
                                             ),
                                           ),
@@ -309,7 +282,7 @@ class _EquipamentosAtividadeRelatorioWidgetState
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 8.0),
+                              const SizedBox(height: 6.0),
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -331,6 +304,8 @@ class _EquipamentosAtividadeRelatorioWidgetState
                                       valor: row.qtdProduzida ?? 0,
                                       tipo: 'equipamento',
                                       unidade: unidadeProd,
+                                      qtdRealizadaAtividade:
+                                          widget.qtdRealizadaAtividade,
                                       onSaved: _recarregarLista,
                                     ),
                                   ),

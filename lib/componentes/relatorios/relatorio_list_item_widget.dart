@@ -1,3 +1,4 @@
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -19,6 +20,19 @@ Color corStatusRelatorioChip(BuildContext context, int? statusId) {
       return t.error;
     default:
       return t.secondaryText;
+  }
+}
+
+IconData iconeStatusRelatorio(int? statusId) {
+  switch (statusId ?? 1) {
+    case 2:
+      return Icons.hourglass_top_rounded;
+    case 3:
+      return Icons.check_circle_rounded;
+    case 4:
+      return Icons.cancel_rounded;
+    default:
+      return Icons.edit_note_rounded;
   }
 }
 
@@ -51,7 +65,30 @@ String formatDataResumoRelatorio(String? raw) {
   return s;
 }
 
-/// Card compacto de relatório (RDO): faixa de status, 2 linhas de info, ações à direita.
+bool _pareceUuidOuIdTecnico(String value) {
+  final s = value.trim();
+  if (s.isEmpty) return false;
+  if (RegExp(
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+      ).hasMatch(s)) {
+    return true;
+  }
+  // id numérico puro (legado) — não exibir como nome
+  if (RegExp(r'^\d+$').hasMatch(s)) return true;
+  return false;
+}
+
+/// Nome para listagem: usa [criadorNome] resolvido; nunca mostra UUID/id bruto.
+String? nomeExibicaoCriadorRelatorio(String? criadorNome, [String? criadorRaw]) {
+  final nome = (criadorNome ?? '').trim();
+  if (nome.isNotEmpty && !_pareceUuidOuIdTecnico(nome)) return nome;
+  final raw = (criadorRaw ?? '').trim();
+  if (raw.isNotEmpty && !_pareceUuidOuIdTecnico(raw)) return raw;
+  return null;
+}
+
+/// Item de relatório no estilo da identidade RDO: faixa de status, título,
+/// data/autor e ações compactas.
 class RelatorioListItemWidget extends StatelessWidget {
   const RelatorioListItemWidget({
     super.key,
@@ -66,7 +103,7 @@ class RelatorioListItemWidget extends StatelessWidget {
     this.onEditar,
     this.onApagar,
     this.podeEditar,
-    this.marginBottom = 5,
+    this.marginBottom = 6,
   });
 
   final int? numero;
@@ -74,6 +111,7 @@ class RelatorioListItemWidget extends StatelessWidget {
   final int? statusId;
   final String statusLabel;
   final String? criador;
+
   /// Ex.: nome da obra (lista global).
   final String? subtitulo;
   final VoidCallback onTap;
@@ -84,26 +122,23 @@ class RelatorioListItemWidget extends StatelessWidget {
   final double marginBottom;
 
   Widget _statusChip(BuildContext context, Color statusCor) {
-    final id = statusId ?? 1;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         color: statusCor.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: statusCor.withValues(alpha: 0.28)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (id == 2)
-            Icon(Icons.hourglass_top, size: 10, color: statusCor),
-          if (id == 3) Icon(Icons.check_circle, size: 10, color: statusCor),
-          if (id == 4) Icon(Icons.cancel, size: 10, color: statusCor),
-          const SizedBox(width: 2),
+          Icon(iconeStatusRelatorio(statusId), size: 11, color: statusCor),
+          const SizedBox(width: 4),
           Text(
             statusLabel,
             style: GoogleFonts.inter(
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
               color: statusCor,
             ),
           ),
@@ -112,23 +147,50 @@ class RelatorioListItemWidget extends StatelessWidget {
     );
   }
 
+  Widget _metaItem(
+    BuildContext context, {
+    required IconData icon,
+    required String text,
+  }) {
+    final theme = FlutterFlowTheme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: theme.secondaryText),
+        const SizedBox(width: 3),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: theme.secondaryText,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _iconAction(
     BuildContext context, {
     required IconData icon,
     required VoidCallback? onPressed,
+    required Color color,
     String? tooltip,
   }) {
-    final t = FlutterFlowTheme.of(context);
     final btn = Material(
-      color: t.alternate.withValues(alpha: 0.55),
-      borderRadius: BorderRadius.circular(6),
+      color: color.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(7),
       child: InkWell(
         onTap: onPressed,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(7),
         child: SizedBox(
-          width: 26,
-          height: 26,
-          child: Icon(icon, size: 14, color: t.primary),
+          width: 28,
+          height: 28,
+          child: Icon(icon, size: 15, color: color),
         ),
       ),
     );
@@ -143,154 +205,132 @@ class RelatorioListItemWidget extends StatelessWidget {
     final criadorTxt = (criador ?? '').trim();
     final subtituloTxt = (subtitulo ?? '').trim();
     final editar = podeEditar ?? relatorioPodeEditarOuApagar(statusId);
-    final borderColor = theme.primaryText.withValues(alpha: 0.06);
+    final dataTxt = dataLabel.trim().isEmpty ? '—' : dataLabel.trim();
 
     return Padding(
       padding: EdgeInsets.only(bottom: marginBottom),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: onTap,
-          child: Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: theme.secondaryBackground,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: borderColor),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 4,
-                  offset: const Offset(0, 1),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(9),
-              child: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(width: 3.5, color: statusCor),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(9, 5, 4, 5),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: theme.primary.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                'RDO #${numero?.toString() ?? '—'}',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: theme.primary,
-                                  height: 1,
-                                ),
-                              ),
-                            ),
-                            if (subtituloTxt.isNotEmpty) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                subtituloTxt,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  height: 1.1,
-                                  color: theme.primary,
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 3),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Text(
-                                  dataLabel.isNotEmpty ? dataLabel : '—',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 10,
-                                    height: 1.1,
-                                    color: theme.secondaryText,
-                                  ),
-                                ),
-                                if (criadorTxt.isNotEmpty) ...[
-                                  const SizedBox(width: 6),
-                                  Icon(
-                                    Icons.person_outline_rounded,
-                                    size: 11,
-                                    color: theme.secondaryText,
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Flexible(
-                                    child: Text(
-                                      criadorTxt,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.w500,
-                                        height: 1.1,
-                                        color: theme.secondaryText,
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: rdoCardDecoration(context),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(width: 3.5, color: statusCor),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        'RDO #${numero?.toString() ?? '—'}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.interTight(
+                                          fontSize: 13.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: theme.primaryText,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                                const SizedBox(width: 5),
-                                _statusChip(context, statusCor),
+                                    const SizedBox(width: 8),
+                                    _statusChip(context, statusCor),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              _iconAction(
+                                context,
+                                icon: Icons.visibility_outlined,
+                                tooltip: 'Visualizar',
+                                color: theme.primary,
+                                onPressed: onVisualizar,
+                              ),
+                              if (editar && onEditar != null) ...[
+                                const SizedBox(width: 4),
+                                _iconAction(
+                                  context,
+                                  icon: Icons.edit_outlined,
+                                  tooltip: 'Editar',
+                                  color: theme.primary,
+                                  onPressed: onEditar,
+                                ),
                               ],
+                              if (editar && onApagar != null) ...[
+                                const SizedBox(width: 4),
+                                _iconAction(
+                                  context,
+                                  icon: Icons.delete_outline_rounded,
+                                  tooltip: 'Apagar',
+                                  color: theme.error,
+                                  onPressed: () => onApagar!(),
+                                ),
+                              ],
+                            ],
+                          ),
+                          if (subtituloTxt.isNotEmpty) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              subtituloTxt,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: theme.primary,
+                              ),
                             ),
                           ],
-                        ),
+                          const SizedBox(height: 5),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: _metaItem(
+                                  context,
+                                  icon: Icons.calendar_today_outlined,
+                                  text: dataTxt,
+                                ),
+                              ),
+                              if (criadorTxt.isNotEmpty) ...[
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 6),
+                                  child: Text(
+                                    '·',
+                                    style: GoogleFonts.inter(
+                                      color: theme.secondaryText
+                                          .withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                                ),
+                                Flexible(
+                                  flex: 2,
+                                  child: _metaItem(
+                                    context,
+                                    icon: Icons.person_outline_rounded,
+                                    text: criadorTxt,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 4, 6, 4),
-                      child: Center(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _iconAction(
-                              context,
-                              icon: Icons.visibility_outlined,
-                              tooltip: 'Visualizar',
-                              onPressed: onVisualizar,
-                            ),
-                            if (editar && onEditar != null) ...[
-                              const SizedBox(width: 3),
-                              _iconAction(
-                                context,
-                                icon: Icons.edit_outlined,
-                                tooltip: 'Editar',
-                                onPressed: onEditar,
-                              ),
-                            ],
-                            if (editar && onApagar != null) ...[
-                              const SizedBox(width: 3),
-                              _iconAction(
-                                context,
-                                icon: Icons.delete_outline,
-                                tooltip: 'Apagar',
-                                onPressed: () => onApagar!(),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),

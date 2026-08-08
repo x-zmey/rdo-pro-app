@@ -166,6 +166,7 @@ class _ShowOrdensCustoRelatorioWidgetState
                       return ListView.builder(
                         padding: EdgeInsets.zero,
                         shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
                         scrollDirection: Axis.vertical,
                         itemCount:
                             listViewGetOrdensServicoRelatorioRowList.length,
@@ -428,6 +429,8 @@ class _ShowOrdensCustoRelatorioWidgetState
                                                 return ListView.builder(
                                                   padding: EdgeInsets.zero,
                                                   shrinkWrap: true,
+                                                  physics:
+                                                      const NeverScrollableScrollPhysics(),
                                                   scrollDirection:
                                                       Axis.vertical,
                                                   itemCount:

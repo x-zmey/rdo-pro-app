@@ -1,15 +1,13 @@
 import '/backend/sqlite/sqlite_manager.dart';
 import '/componentes/dialogs/cofirma_exclusao_custo_relatorio/cofirma_exclusao_custo_relatorio_widget.dart';
 import '/componentes/forms/qtd_custo_item_ordem_relatorio/qtd_custo_item_ordem_relatorio_widget.dart';
-import '/flutter_flow/flutter_flow_icon_button.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 import 'ordens_custo_relatorio_model.dart';
 export 'ordens_custo_relatorio_model.dart';
 
@@ -89,525 +87,325 @@ class _OrdensCustoRelatorioWidgetState
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.transparent,
+    final theme = FlutterFlowTheme.of(context);
+
+    return FutureBuilder<List<GetOrdensServicoRelatorioRow>>(
+      future: SQLiteManager.instance.getOrdensServicoRelatorio(
+        relatorioUuid: widget!.relatorioUuid!,
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: FlutterFlowTheme.of(context).secondaryBackground,
-          boxShadow: [
-            BoxShadow(
-              blurRadius: 4.0,
-              color: Color(0x33000000),
-              offset: Offset(
-                0.0,
-                2.0,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Center(
+            child: LinearProgressIndicator(color: theme.primary),
+          );
+        }
+        final ordens = snapshot.data!;
+        if (ordens.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: Text(
+              'Nenhuma ordem de serviço vinculada',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: theme.secondaryText,
               ),
-              spreadRadius: 0.0,
-            )
+            ),
+          );
+        }
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < ordens.length; i++)
+              Padding(
+                padding: EdgeInsets.only(
+                  bottom: i == ordens.length - 1 ? 0 : 10,
+                ),
+                child: _buildOrdemCard(context, ordens[i]),
+              ),
           ],
-          borderRadius: BorderRadius.circular(12.0),
-        ),
-        child: Padding(
-          padding: EdgeInsetsDirectional.fromSTEB(0, 0, 0, 0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FutureBuilder<List<GetOrdensServicoRelatorioRow>>(
-                    future: SQLiteManager.instance.getOrdensServicoRelatorio(
-                      relatorioUuid: widget!.relatorioUuid!,
-                    ),
-                    builder: (context, snapshot) {
-                      // Customize what your widget looks like when it's loading.
-                      if (!snapshot.hasData) {
-                        return Center(
-                          child: LinearProgressIndicator(
-                            color: FlutterFlowTheme.of(context).primary,
-                          ),
-                        );
-                      }
-                      final listViewGetOrdensServicoRelatorioRowList =
-                          snapshot.data!;
+        );
+      },
+    );
+  }
 
-                      return ListView.builder(
-                        padding: EdgeInsets.zero,
-                        shrinkWrap: true,
-                        scrollDirection: Axis.vertical,
-                        itemCount:
-                            listViewGetOrdensServicoRelatorioRowList.length,
-                        itemBuilder: (context, listViewIndex) {
-                          final listViewGetOrdensServicoRelatorioRow =
-                              listViewGetOrdensServicoRelatorioRowList[
-                                  listViewIndex];
-                          return Padding(
-                            padding: EdgeInsetsDirectional.fromSTEB(
-                                0.0, 0.0, 0.0, 8.0),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: FlutterFlowTheme.of(context)
-                                    .primaryBackground,
-                                borderRadius: BorderRadius.circular(8.0),
-                                border: Border.all(
-                                  color: FlutterFlowTheme.of(context).alternate,
-                                  width: 1.0,
-                                ),
-                              ),
-                              child: Padding(
-                                padding: EdgeInsets.all(4.0),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Row(
-                                      mainAxisSize: MainAxisSize.max,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Expanded(
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                valueOrDefault<String>(
-                                                  listViewGetOrdensServicoRelatorioRow
-                                                      .codigo,
-                                                  'N/A',
-                                                ),
-                                                style:
-                                                    FlutterFlowTheme.of(context)
-                                                        .titleSmall
-                                                        .override(
-                                                          font: GoogleFonts
-                                                              .interTight(
-                                                            fontWeight:
-                                                                FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .titleSmall
-                                                                    .fontWeight,
-                                                            fontStyle:
-                                                                FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .titleSmall
-                                                                    .fontStyle,
-                                                          ),
-                                                          color: FlutterFlowTheme
-                                                                  .of(context)
-                                                              .primary,
-                                                          letterSpacing: 0.0,
-                                                          fontSize: 13,
-                                                          fontWeight:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .titleSmall
-                                                                  .fontWeight,
-                                                          fontStyle:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .titleSmall
-                                                                  .fontStyle,
-                                                        ),
-                                              ),
-                                              Text(
-                                                _labelNomeOrdem(
-                                                  listViewGetOrdensServicoRelatorioRow,
-                                                ),
-                                                style:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodySmall
-                                                        .override(
-                                                          font:
-                                                              GoogleFonts.inter(
-                                                            fontWeight:
-                                                                FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .bodySmall
-                                                                    .fontWeight,
-                                                            fontStyle:
-                                                                FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .bodySmall
-                                                                    .fontStyle,
-                                                          ),
-                                                          letterSpacing: 0.0,
-                                                          fontWeight:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .bodySmall
-                                                                  .fontWeight,
-                                                          fontStyle:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .bodySmall
-                                                                  .fontStyle,
-                                                        ),
-                                              ),
-                                              Text(
-                                                'Período: ${_formatarDataOrdemServico(listViewGetOrdensServicoRelatorioRow.dataInicio)} – ${_formatarDataOrdemServico(listViewGetOrdensServicoRelatorioRow.dataFim)}',
-                                                style: FlutterFlowTheme.of(
-                                                        context)
-                                                    .labelSmall
-                                                    .override(
-                                                      font: GoogleFonts.inter(
-                                                        fontWeight:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .labelSmall
-                                                                .fontWeight,
-                                                        fontStyle:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .labelSmall
-                                                                .fontStyle,
-                                                      ),
-                                                      color:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .secondaryText,
-                                                      letterSpacing: 0.0,
-                                                      fontWeight:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .labelSmall
-                                                              .fontWeight,
-                                                      fontStyle:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .labelSmall
-                                                              .fontStyle,
-                                                    ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Column(
-                                          mainAxisSize: MainAxisSize.max,
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.end,
-                                          children: [
-                                            Align(
-                                              alignment: AlignmentDirectional(
-                                                  0.0, 0.0),
-                                              child: Builder(
-                                                builder: (context) =>
-                                                    FlutterFlowIconButton(
-                                                  borderRadius: 8.0,
-                                                  buttonSize: 30.0,
-                                                  icon: FaIcon(
-                                                    FontAwesomeIcons.trashAlt,
-                                                    color: FlutterFlowTheme.of(
-                                                            context)
-                                                        .primary,
-                                                    size: 14.0,
-                                                  ),
-                                                  onPressed: () async {
-                                                    await showDialog(
-                                                      context: context,
-                                                      builder: (dialogContext) {
-                                                        return Dialog(
-                                                          elevation: 0,
-                                                          insetPadding:
-                                                              EdgeInsets.zero,
-                                                          backgroundColor:
-                                                              Colors
-                                                                  .transparent,
-                                                          alignment: AlignmentDirectional(
-                                                                  0.0, 0.0)
-                                                              .resolve(
-                                                                  Directionality.of(
-                                                                      context)),
-                                                          child:
-                                                              CofirmaExclusaoCustoRelatorioWidget(
-                                                            uuid:
-                                                                listViewGetOrdensServicoRelatorioRow
-                                                                    .uuid!,
-                                                          ),
-                                                        );
-                                                      },
-                                                    );
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                    Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          'Itens de Custo Previstos',
-                                          style: FlutterFlowTheme.of(context)
-                                              .bodySmall
-                                              .override(
-                                                font: GoogleFonts.inter(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontStyle:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .bodySmall
-                                                          .fontStyle,
-                                                ),
-                                                letterSpacing: 0.0,
-                                                fontWeight: FontWeight.bold,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodySmall
-                                                        .fontStyle,
-                                              ),
-                                        ),
-                                        Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            FutureBuilder<
-                                                List<
-                                                    GetCustosOrdensRelatoriosRow>>(
-                                              future: SQLiteManager.instance
-                                                  .getCustosOrdensRelatorios(
-                                                ordemRelatorioUuid:
-                                                    listViewGetOrdensServicoRelatorioRow
-                                                        .uuid!,
-                                              ),
-                                              builder: (context, snapshot) {
-                                                // Customize what your widget looks like when it's loading.
-                                                if (!snapshot.hasData) {
-                                                  return Center(
-                                                    child:
-                                                        LinearProgressIndicator(
-                                                      color:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .primary,
-                                                    ),
-                                                  );
-                                                }
-                                                final listViewGetCustosOrdensRelatoriosRowList =
-                                                    snapshot.data!;
+  Widget _buildOrdemCard(
+    BuildContext context,
+    GetOrdensServicoRelatorioRow ordem,
+  ) {
+    final theme = FlutterFlowTheme.of(context);
 
-                                                return ListView.builder(
-                                                  padding: EdgeInsets.zero,
-                                                  shrinkWrap: true,
-                                                  scrollDirection:
-                                                      Axis.vertical,
-                                                  itemCount:
-                                                      listViewGetCustosOrdensRelatoriosRowList
-                                                          .length,
-                                                  itemBuilder:
-                                                      (context, listViewIndex) {
-                                                    final listViewGetCustosOrdensRelatoriosRow =
-                                                        listViewGetCustosOrdensRelatoriosRowList[
-                                                            listViewIndex];
-                                                    final custoItemId =
-                                                        listViewGetCustosOrdensRelatoriosRow
-                                                            .id;
-                                                    final qtdPrevista =
-                                                        listViewGetCustosOrdensRelatoriosRow
-                                                                .qtdPrevista ??
-                                                            0.0;
-                                                    final qtdDigitada =
-                                                        _qtdRealizadaDigitadaPorItemId
-                                                                .containsKey(
-                                                                    custoItemId)
-                                                            ? _qtdRealizadaDigitadaPorItemId[
-                                                                custoItemId]!
-                                                            : (listViewGetCustosOrdensRelatoriosRow
-                                                                    .qtdRealizada ??
-                                                                0);
-                                                    final saldoCusto =
-                                                        qtdPrevista -
-                                                            qtdDigitada;
-                                                    final unidadeStr =
-                                                        valueOrDefault<String>(
-                                                      listViewGetCustosOrdensRelatoriosRow
-                                                          .unidade,
-                                                      '',
-                                                    );
-                                                    return Padding(
-                                                      padding:
-                                                          EdgeInsetsDirectional
-                                                              .fromSTEB(
-                                                                  0, 0, 0, 0),
-                                                      child: Container(
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color: FlutterFlowTheme
-                                                                  .of(context)
-                                                              .secondaryBackground,
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(
-                                                                      4.0),
-                                                        ),
-                                                        child: Padding(
-                                                          padding:
-                                                              EdgeInsetsDirectional
-                                                                  .fromSTEB(
-                                                                      4.0,
-                                                                      4.0,
-                                                                      4.0,
-                                                                      4.0),
-                                                          child: Row(
-                                                            mainAxisSize:
-                                                                MainAxisSize
-                                                                    .max,
-                                                            mainAxisAlignment:
-                                                                MainAxisAlignment
-                                                                    .spaceBetween,
-                                                            children: [
-                                                              Expanded(
-                                                                child: Column(
-                                                                  mainAxisSize:
-                                                                      MainAxisSize
-                                                                          .min,
-                                                                  crossAxisAlignment:
-                                                                      CrossAxisAlignment
-                                                                          .start,
-                                                                  children: [
-                                                                    Text(
-                                                                      valueOrDefault<
-                                                                          String>(
-                                                                        listViewGetCustosOrdensRelatoriosRow
-                                                                            .descricao,
-                                                                        'N/A',
-                                                                      ),
-                                                                      style: FlutterFlowTheme.of(
-                                                                              context)
-                                                                          .bodyMedium
-                                                                          .override(
-                                                                            font:
-                                                                                GoogleFonts.inter(
-                                                                              fontWeight: FlutterFlowTheme.of(context).bodyMedium.fontWeight,
-                                                                              fontStyle: FlutterFlowTheme.of(context).bodyMedium.fontStyle,
-                                                                            ),
-                                                                            letterSpacing:
-                                                                                0.0,
-                                                                            fontWeight:
-                                                                                FlutterFlowTheme.of(context).bodyMedium.fontWeight,
-                                                                            fontStyle:
-                                                                                FlutterFlowTheme.of(context).bodyMedium.fontStyle,
-                                                                          ),
-                                                                    ),
-                                                                    Row(
-                                                                      mainAxisSize:
-                                                                          MainAxisSize
-                                                                              .max,
-                                                                      children:
-                                                                          [
-                                                                        Text(
-                                                                          'Qtd planejada: ${_formatarQuantidadeCusto(qtdPrevista)}${unidadeStr.isNotEmpty ? ' $unidadeStr' : ''}',
-                                                                          style: FlutterFlowTheme.of(context)
-                                                                              .labelSmall
-                                                                              .override(
-                                                                                font: GoogleFonts.inter(
-                                                                                  fontWeight: FlutterFlowTheme.of(context).labelSmall.fontWeight,
-                                                                                  fontStyle: FlutterFlowTheme.of(context).labelSmall.fontStyle,
-                                                                                ),
-                                                                                color: FlutterFlowTheme.of(context).secondaryText,
-                                                                                letterSpacing: 0.0,
-                                                                                fontWeight: FlutterFlowTheme.of(context).labelSmall.fontWeight,
-                                                                                fontStyle: FlutterFlowTheme.of(context).labelSmall.fontStyle,
-                                                                              ),
-                                                                        ),
-                                                                        Text(
-                                                                          'Saldo: ${_formatarQuantidadeCusto(saldoCusto)}${unidadeStr.isNotEmpty ? ' $unidadeStr' : ''}',
-                                                                          style: FlutterFlowTheme.of(context)
-                                                                              .labelSmall
-                                                                              .override(
-                                                                                font: GoogleFonts.inter(
-                                                                                  fontWeight: FlutterFlowTheme.of(context).labelSmall.fontWeight,
-                                                                                  fontStyle: FlutterFlowTheme.of(context).labelSmall.fontStyle,
-                                                                                ),
-                                                                                color: FlutterFlowTheme.of(context).tertiary,
-                                                                                letterSpacing: 0.0,
-                                                                                fontWeight: FlutterFlowTheme.of(context).labelSmall.fontWeight,
-                                                                                fontStyle: FlutterFlowTheme.of(context).labelSmall.fontStyle,
-                                                                              ),
-                                                                        ),
-                                                                      ].divide(SizedBox(
-                                                                              width: 8.0)),
-                                                                    ),
-                                                                  ],
-                                                                ),
-                                                              ),
-                                                              Row(
-                                                                mainAxisSize:
-                                                                    MainAxisSize
-                                                                        .max,
-                                                                children: [
-                                                                  wrapWithModel(
-                                                                    model: _model
-                                                                        .qtdCustoItemOrdemRelatorioModels
-                                                                        .getModel(
-                                                                      listViewGetCustosOrdensRelatoriosRow
-                                                                          .id
-                                                                          .toString(),
-                                                                      listViewIndex,
-                                                                    ),
-                                                                    updateCallback: () =>
-                                                                        safeSetState(
-                                                                            () {}),
-                                                                    child:
-                                                                        QtdCustoItemOrdemRelatorioWidget(
-                                                                      key: Key(
-                                                                        'Keyglh_${listViewGetCustosOrdensRelatoriosRow.id.toString()}',
-                                                                      ),
-                                                                      uuid: listViewGetCustosOrdensRelatoriosRow
-                                                                          .uuid!,
-                                                                      relatorioUuid:
-                                                                          widget!
-                                                                              .relatorioUuid!,
-                                                                      valor: valueOrDefault<
-                                                                          int>(
-                                                                        listViewGetCustosOrdensRelatoriosRow
-                                                                            .qtdRealizada,
-                                                                        0,
-                                                                      ),
-                                                                      onQuantidadeChanged:
-                                                                          (v) {
-                                                                        safeSetState(
-                                                                            () {
-                                                                          _qtdRealizadaDigitadaPorItemId[custoItemId] =
-                                                                              v ?? 0;
-                                                                        });
-                                                                      },
-                                                                    ),
-                                                                  ),
-                                                                ].divide(SizedBox(
-                                                                    width:
-                                                                        8.0)),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    );
-                                                  },
-                                                );
-                                              },
-                                            ),
-                                          ].divide(SizedBox(height: 4.0)),
-                                        ),
-                                      ].divide(SizedBox(height: 6.0)),
-                                    ),
-                                  ].divide(SizedBox(height: 8.0)),
-                                ),
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: theme.secondaryBackground,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: theme.alternate),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(10, 6, 4, 6),
+            decoration: BoxDecoration(
+              color: theme.primaryBackground.withValues(alpha: 0.5),
+              border: Border(bottom: BorderSide(color: theme.alternate)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              valueOrDefault<String>(ordem.codigo, 'N/A'),
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.3,
+                                color: theme.primary,
                               ),
                             ),
-                          );
-                        },
-                      );
-                    },
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _labelNomeOrdem(ordem),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                color: theme.primaryText,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Período: ${_formatarDataOrdemServico(ordem.dataInicio)} – ${_formatarDataOrdemServico(ordem.dataFim)}',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: theme.secondaryText,
+                        ),
+                      ),
+                    ],
                   ),
-                ].divide(SizedBox(height: 12.0)),
-              ),
-            ].divide(SizedBox(height: 16.0)),
+                ),
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                  tooltip: 'Desvincular ordem',
+                  icon: FaIcon(
+                    FontAwesomeIcons.trashCan,
+                    size: 14,
+                    color: theme.error,
+                  ),
+                  onPressed: () async {
+                    await showDialog(
+                      context: context,
+                      builder: (dialogContext) {
+                        return Dialog(
+                          elevation: 0,
+                          insetPadding: EdgeInsets.zero,
+                          backgroundColor: Colors.transparent,
+                          alignment: const AlignmentDirectional(0.0, 0.0)
+                              .resolve(Directionality.of(context)),
+                          child: CofirmaExclusaoCustoRelatorioWidget(
+                            uuid: ordem.uuid!,
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
-        ),
+          FutureBuilder<List<GetCustosOrdensRelatoriosRow>>(
+            future: SQLiteManager.instance.getCustosOrdensRelatorios(
+              ordemRelatorioUuid: ordem.uuid!,
+            ),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: LinearProgressIndicator(color: theme.primary),
+                );
+              }
+              final itens = snapshot.data!;
+              if (itens.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  child: Text(
+                    'Sem itens de custo previstos',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: theme.secondaryText,
+                    ),
+                  ),
+                );
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: theme.alternate),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'ITEM DE CUSTO',
+                            style: rdoColumnLabelStyle(context),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 66,
+                          child: Text(
+                            'PLANEJ.',
+                            textAlign: TextAlign.end,
+                            style: rdoColumnLabelStyle(context),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 60,
+                          child: Text(
+                            'SALDO',
+                            textAlign: TextAlign.end,
+                            style: rdoColumnLabelStyle(context),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 84,
+                          child: Text(
+                            'REALIZADO',
+                            textAlign: TextAlign.center,
+                            style: rdoColumnLabelStyle(context),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  for (var i = 0; i < itens.length; i++)
+                    _buildCustoRow(
+                      context,
+                      itens[i],
+                      i,
+                      i == itens.length - 1,
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCustoRow(
+    BuildContext context,
+    GetCustosOrdensRelatoriosRow item,
+    int index,
+    bool ultimo,
+  ) {
+    final theme = FlutterFlowTheme.of(context);
+    final custoItemId = item.id;
+    final qtdPrevista = item.qtdPrevista ?? 0.0;
+    final qtdDigitada = _qtdRealizadaDigitadaPorItemId.containsKey(custoItemId)
+        ? _qtdRealizadaDigitadaPorItemId[custoItemId]!
+        : (item.qtdRealizada ?? 0);
+    final saldo = qtdPrevista - qtdDigitada;
+    final unidade = valueOrDefault<String>(item.unidade, '');
+    final sufixo = unidade.isNotEmpty ? ' $unidade' : '';
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
+      decoration: BoxDecoration(
+        border:
+            ultimo ? null : Border(bottom: BorderSide(color: theme.alternate)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              valueOrDefault<String>(item.descricao, 'N/A'),
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: theme.primaryText,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 66,
+            child: Text(
+              '${_formatarQuantidadeCusto(qtdPrevista)}$sufixo',
+              textAlign: TextAlign.end,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: theme.secondaryText,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 60,
+            child: Text(
+              '${_formatarQuantidadeCusto(saldo)}$sufixo',
+              textAlign: TextAlign.end,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: saldo < 0 ? theme.error : theme.tertiary,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 84,
+            child: wrapWithModel(
+              model: _model.qtdCustoItemOrdemRelatorioModels.getModel(
+                item.id.toString(),
+                index,
+              ),
+              updateCallback: () => safeSetState(() {}),
+              child: QtdCustoItemOrdemRelatorioWidget(
+                key: Key('Keyglh_${item.id}'),
+                uuid: item.uuid!,
+                relatorioUuid: widget!.relatorioUuid!,
+                valor: valueOrDefault<int>(item.qtdRealizada, 0),
+                onQuantidadeChanged: (v) {
+                  safeSetState(() {
+                    _qtdRealizadaDigitadaPorItemId[custoItemId] = v ?? 0;
+                  });
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

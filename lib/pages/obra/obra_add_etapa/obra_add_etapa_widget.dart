@@ -1,10 +1,9 @@
 import '/auth/membership_access.dart';
 import '/backend/api_requests/api_calls.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/custom_code/actions/index.dart' as actions;
-import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -176,20 +175,18 @@ class _ObraAddEtapaWidgetState extends State<ObraAddEtapaWidget> {
 
     if (widget.obraServidorId <= 0 && widget.obraUuid.trim().isEmpty) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Nova etapa'),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.safePop(),
-          ),
-        ),
+        backgroundColor: theme.primaryBackground,
+        appBar: _buildAppBar(theme),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Text(
               'Obra sem identificador no servidor. Sincronize as obras e tente de novo.',
               textAlign: TextAlign.center,
-              style: theme.bodyMedium,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: theme.secondaryText,
+              ),
             ),
           ),
         ),
@@ -203,108 +200,179 @@ class _ObraAddEtapaWidgetState extends State<ObraAddEtapaWidget> {
       },
       child: Scaffold(
         backgroundColor: theme.primaryBackground,
-        appBar: AppBar(
-          backgroundColor: theme.secondaryBackground,
-          elevation: 0,
-          leading: FlutterFlowIconButton(
-            borderColor: Colors.transparent,
-            borderRadius: 30,
-            buttonSize: 48,
-            icon: Icon(Icons.chevron_left_rounded,
-                color: theme.primaryText, size: 28),
-            onPressed: () => context.safePop(),
-          ),
-          title: Text(
-            'Nova etapa',
-            style: theme.titleLarge.override(
-              font: GoogleFonts.interTight(fontWeight: FontWeight.w600),
-              color: theme.primaryText,
-            ),
-          ),
-        ),
+        appBar: _buildAppBar(theme),
         body: SafeArea(
           child: Form(
             key: _model.formKey,
-            child: ListView(
-              padding: const EdgeInsets.all(24),
+            child: Column(
               children: [
-                Text(
-                  'A etapa é criada no servidor e depois baixada para o app.',
-                  style: theme.bodySmall.override(
-                    font: GoogleFonts.inter(),
-                    color: theme.secondaryText,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                TextFormField(
-                  controller: _model.itemTextController,
-                  focusNode: _model.itemFocusNode,
-                  decoration: InputDecoration(
-                    labelText: 'Nº item',
-                    hintText: 'Ex.: 1 ou 2.1',
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Informe o item';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _model.nomeTextController,
-                  focusNode: _model.nomeFocusNode,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: InputDecoration(
-                    labelText: 'Nome da etapa',
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Informe o nome';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 28),
-                Row(
-                  children: [
-                    Expanded(
-                      child: FFButtonWidget(
-                        onPressed:
-                            _model.salvando ? null : () => context.safePop(),
-                        text: 'Cancelar',
-                        options: FFButtonOptions(
-                          height: 48,
-                          color: theme.alternate,
-                          textStyle: theme.titleSmall.override(
-                            font: GoogleFonts.interTight(),
-                            color: theme.primary,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                    children: [
+                      RdoSectionCard(
+                        title: 'Dados da etapa',
+                        icon: Icons.add_chart_outlined,
+                        subtitle:
+                            'Criada no servidor e sincronizada para o app',
+                        margin: EdgeInsets.zero,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            TextFormField(
+                              controller: _model.itemTextController,
+                              focusNode: _model.itemFocusNode,
+                              style: rdoFormFieldTextStyle(context),
+                              decoration: rdoFormFieldDecoration(
+                                context,
+                                label: 'Nº item',
+                                hint: 'Ex.: 1 ou 2.1',
+                              ),
+                              validator: (v) {
+                                if (v == null || v.trim().isEmpty) {
+                                  return 'Informe o item';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: _model.nomeTextController,
+                              focusNode: _model.nomeFocusNode,
+                              textCapitalization: TextCapitalization.sentences,
+                              style: rdoFormFieldTextStyle(context),
+                              decoration: rdoFormFieldDecoration(
+                                context,
+                                label: 'Nome da etapa',
+                                hint: 'Ex.: Fundação',
+                              ),
+                              validator: (v) {
+                                if (v == null || v.trim().isEmpty) {
+                                  return 'Informe o nome';
+                                }
+                                return null;
+                              },
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FFButtonWidget(
-                        onPressed: _model.salvando ? null : _salvar,
-                        text: _model.salvando ? 'Salvando…' : 'Salvar',
-                        options: FFButtonOptions(
-                          height: 48,
-                          color: theme.primary,
-                          textStyle: theme.titleSmall.override(
-                            font: GoogleFonts.interTight(color: Colors.white),
-                            color: Colors.white,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
+                _buildBarraAcoes(theme),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(FlutterFlowTheme theme) {
+    return AppBar(
+      backgroundColor: theme.primary,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      surfaceTintColor: Colors.transparent,
+      centerTitle: false,
+      titleSpacing: 0,
+      toolbarHeight: 58,
+      iconTheme: const IconThemeData(color: Colors.white),
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+        onPressed: () => context.safePop(),
+      ),
+      title: Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Nova etapa',
+              style: GoogleFonts.interTight(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+            Text(
+              'Planejamento da obra',
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBarraAcoes(FlutterFlowTheme theme) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      decoration: BoxDecoration(
+        color: theme.secondaryBackground,
+        border: Border(top: BorderSide(color: theme.alternate)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _model.salvando ? null : () => context.safePop(),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: theme.primaryText,
+                  side: BorderSide(color: theme.alternate),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Text(
+                  'Cancelar',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              flex: 2,
+              child: FilledButton.icon(
+                onPressed: _model.salvando ? null : _salvar,
+                icon: _model.salvando
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.check_rounded, size: 18),
+                label: Text(
+                  _model.salvando ? 'Salvando…' : 'Salvar etapa',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: theme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

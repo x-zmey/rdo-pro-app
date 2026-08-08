@@ -1,13 +1,13 @@
 import '/auth/membership_access.dart';
 import '/backend/sqlite/situacao_soft_delete.dart';
+import '/backend/sqlite/sqlite_manager.dart' show SQLiteManager;
 import '/componentes/navegacao/barra_navegacao_principal.dart';
 import '/componentes/obra/obra_item_list_tile_widget.dart';
 import '/componentes/obra/obra_item_metas_fields_widget.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/custom_code/actions/index.dart' as actions;
-import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import '/index.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -46,6 +46,7 @@ class _EquipamentosObraWidgetState extends State<EquipamentosObraWidget> {
   final Set<String> _deletingIds = <String>{};
   List<Map<String, dynamic>> _registros = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _equipamentosCatalogo = <Map<String, dynamic>>[];
+  String _obraNome = '';
 
   String _tipoEquipamento = 'avulso';
   String? _equipamentoSelecionadoId;
@@ -71,8 +72,40 @@ class _EquipamentosObraWidgetState extends State<EquipamentosObraWidget> {
   void initState() {
     super.initState();
     _model = createModel(context, () => EquipamentosObraModel());
+    _carregarNomeObra();
     WidgetsBinding.instance
         .addPostFrameCallback((_) => _fetchRegistros(silent: false));
+  }
+
+  Future<void> _carregarNomeObra() async {
+    final uuid = (widget.obraUuid ?? '').trim();
+    if (uuid.isEmpty) return;
+    try {
+      final rows = await SQLiteManager.instance.obraDetalhes(
+        uuid: uuid,
+        userId: FFAppState().creatorId,
+        accountOwnerUuid: FFAppState().creatorUuid,
+      );
+      final nome = rows.firstOrNull?.nome.trim() ?? '';
+      if (!mounted || nome.isEmpty) return;
+      setState(() => _obraNome = nome);
+    } catch (_) {}
+  }
+
+  void _voltarParaDetalhes() {
+    context.pushNamed(
+      DetalhesObraWidget.routeName,
+      queryParameters: {
+        'obraId': serializeParam(widget.obraId, ParamType.int),
+        'obraUuid': serializeParam(widget.obraUuid, ParamType.String),
+      }.withoutNulls,
+      extra: <String, dynamic>{
+        '__transition_info__': const TransitionInfo(
+          hasTransition: true,
+          transitionType: PageTransitionType.rightToLeft,
+        ),
+      },
+    );
   }
 
   @override
@@ -274,67 +307,87 @@ class _EquipamentosObraWidgetState extends State<EquipamentosObraWidget> {
     FlutterFlowTheme theme,
     void Function(String value) onSelect,
   ) {
-    Widget tab(String value, String label, IconData icon) {
-      final selected = _tipoEquipamento == value;
-      return Expanded(
-        child: Material(
-          color: selected ? theme.secondaryBackground : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          elevation: selected ? 1 : 0,
-          shadowColor: Colors.black.withValues(alpha: 0.08),
-          child: InkWell(
-            onTap: () => onSelect(value),
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    icon,
-                    size: 20,
-                    color: selected ? theme.primary : theme.secondaryText,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.labelSmall.override(
-                      font: GoogleFonts.inter(
-                        fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.w500,
-                      ),
-                      color: selected ? theme.primary : theme.secondaryText,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
+    const opcoes = [
+      ('avulso', 'Avulso', 'Só na obra', Icons.handyman_outlined),
+      ('novo_equipamento', 'Novo', 'Catálogo', Icons.tune_outlined),
+      (
+        'equipamento_existente',
+        'Cadastrado',
+        'Do sistema',
+        Icons.build_circle_outlined
+      ),
+    ];
 
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: theme.primaryBackground,
-        borderRadius: BorderRadius.circular(12),
+        color: theme.primaryBackground.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: theme.alternate),
       ),
+      padding: const EdgeInsets.all(4),
       child: Row(
         children: [
-          tab('avulso', 'Avulso', Icons.handyman_outlined),
-          tab('novo_equipamento', 'Personalizado', Icons.tune_outlined),
-          tab(
-            'equipamento_existente',
-            'Cadastrado',
-            Icons.build_circle_outlined,
-          ),
+          for (var i = 0; i < opcoes.length; i++) ...[
+            if (i > 0) const SizedBox(width: 4),
+            Expanded(
+              child: Builder(
+                builder: (context) {
+                  final opt = opcoes[i];
+                  final selected = _tipoEquipamento == opt.$1;
+                  return Material(
+                    color: selected ? theme.primary : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    child: InkWell(
+                      onTap: () => onSelect(opt.$1),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 10, horizontal: 4),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              opt.$4,
+                              size: 16,
+                              color: selected
+                                  ? Colors.white
+                                  : theme.primary,
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              opt.$2,
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: selected
+                                    ? Colors.white
+                                    : theme.primaryText,
+                              ),
+                            ),
+                            Text(
+                              opt.$3,
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 9.5,
+                                color: selected
+                                    ? Colors.white.withValues(alpha: 0.85)
+                                    : theme.secondaryText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -368,6 +421,7 @@ class _EquipamentosObraWidgetState extends State<EquipamentosObraWidget> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return StatefulBuilder(
@@ -376,46 +430,59 @@ class _EquipamentosObraWidgetState extends State<EquipamentosObraWidget> {
             InputDecoration fieldDeco({
               required String label,
               String? hint,
-              IconData? icon,
             }) {
-              return InputDecoration(
-                labelText: label,
-                hintText: hint,
-                isDense: true,
-                filled: true,
-                fillColor: theme.primaryBackground,
-                prefixIcon: icon != null
-                    ? Icon(icon, size: 20, color: theme.secondaryText)
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12.0),
-                  borderSide: BorderSide(color: theme.alternate, width: 1.0),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12.0),
-                  borderSide: BorderSide(color: theme.alternate, width: 1.0),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12.0),
-                  borderSide: BorderSide(color: theme.primary, width: 1.5),
-                ),
-                labelStyle: theme.labelMedium,
-                hintStyle: theme.labelMedium.override(
-                  color: theme.secondaryText,
-                ),
+              return rdoFormFieldDecoration(
+                context,
+                label: label,
+                hint: hint,
               );
             }
 
             String hintTipo() {
               switch (_tipoEquipamento) {
                 case 'equipamento_existente':
-                  return 'Vincular a um equipamento já cadastrado no sistema.';
+                  return 'Vincular um equipamento já cadastrado no sistema.';
                 case 'novo_equipamento':
-                  return 'Criar um novo equipamento e vincular à obra.';
+                  return 'Criar no catálogo e vincular à obra.';
                 case 'avulso':
                 default:
-                  return 'Apenas descrição na obra, sem cadastro no catálogo.';
+                  return 'Somente na obra, sem cadastro no catálogo.';
               }
+            }
+
+            Future<void> tentarSalvar() async {
+              final desc = _descricaoParaApi();
+              if (desc.isEmpty) {
+                ScaffoldMessenger.of(sheetContext).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Preencha a descrição ou selecione o equipamento.',
+                    ),
+                  ),
+                );
+                return;
+              }
+              if (_tipoEquipamento == 'equipamento_existente' &&
+                  (_equipamentoSelecionadoId == null ||
+                      _equipamentoSelecionadoId!.isEmpty)) {
+                ScaffoldMessenger.of(sheetContext).showSnackBar(
+                  const SnackBar(content: Text('Selecione um equipamento.')),
+                );
+                return;
+              }
+              if (_tipoEquipamento == 'novo_equipamento' &&
+                  _novoNomeController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(sheetContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('Informe o nome do equipamento.'),
+                  ),
+                );
+                return;
+              }
+              await _cadastrarEquipamentoApi(
+                closeModal: () => Navigator.pop(sheetContext),
+              );
+              if (mounted) setModalState(() {});
             }
 
             return Padding(
@@ -423,419 +490,404 @@ class _EquipamentosObraWidgetState extends State<EquipamentosObraWidget> {
                 bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
               ),
               child: Container(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.92,
-                ),
+                height: MediaQuery.sizeOf(sheetContext).height * 0.94,
                 decoration: BoxDecoration(
-                  color: theme.secondaryBackground,
+                  color: theme.primaryBackground,
                   borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(20.0)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.12),
-                      blurRadius: 16,
-                      offset: const Offset(0, -4),
-                    ),
-                  ],
+                      const BorderRadius.vertical(top: Radius.circular(16)),
                 ),
+                clipBehavior: Clip.antiAlias,
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const SizedBox(height: 10),
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: theme.alternate,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    Container(
+                      width: double.infinity,
+                      color: theme.primary,
+                      padding: const EdgeInsets.fromLTRB(4, 6, 4, 12),
+                      child: Column(
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(10),
+                            width: 36,
+                            height: 4,
+                            margin: const EdgeInsets.only(bottom: 8),
                             decoration: BoxDecoration(
-                              color: theme.primary.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              Icons.construction_rounded,
-                              color: theme.primary,
-                              size: 26,
+                              color: Colors.white.withValues(alpha: 0.35),
+                              borderRadius: BorderRadius.circular(999),
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Novo equipamento',
-                                  style: theme.headlineSmall.override(
-                                    font: GoogleFonts.interTight(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Cadastro na API e sincronização com o app.',
-                                  style: theme.bodySmall.override(
-                                    color: theme.secondaryText,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: _isSaving
-                                ? null
-                                : () => Navigator.pop(sheetContext),
-                            icon: Icon(Icons.close_rounded,
-                                color: theme.secondaryText),
-                            tooltip: 'Fechar',
-                          ),
-                        ],
-                      ),
-                    ),
-                    Divider(height: 24, thickness: 1, color: theme.alternate),
-                    Flexible(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildTipoEquipamentoTabs(
-                              theme,
-                              (v) => setModalState(() => _tipoEquipamento = v),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              hintTipo(),
-                              style: theme.labelSmall.override(
-                                color: theme.secondaryText,
+                          Row(
+                            children: [
+                              IconButton(
+                                tooltip: 'Fechar',
+                                onPressed: _isSaving
+                                    ? null
+                                    : () => Navigator.pop(sheetContext),
+                                icon: const Icon(Icons.close_rounded,
+                                    color: Colors.white),
                               ),
-                            ),
-                            const SizedBox(height: 16),
-                            if (_tipoEquipamento ==
-                                'equipamento_existente') ...[
-                              DropdownButtonFormField<String>(
-                                initialValue: _equipamentoSelecionadoId,
-                                decoration: fieldDeco(
-                                  label: 'Equipamento *',
-                                  hint: 'Selecione',
-                                  icon: Icons.search,
-                                ),
-                                items: _equipamentosCatalogo
-                                    .map(
-                                      (e) => DropdownMenuItem<String>(
-                                        value: e['id']?.toString(),
-                                        child: Text(
-                                          (e['nome'] ?? 'Sem nome').toString(),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (v) {
-                                  setModalState(() {
-                                    _equipamentoSelecionadoId = v;
-                                    if (v != null) {
-                                      final eq = _equipamentoPorId(v);
-                                      if (eq != null) {
-                                        _unidadeObra =
-                                            (eq['unidade_medida'] ?? 'h')
-                                                .toString();
-                                      }
-                                    }
-                                  });
-                                },
-                              ),
-                              const SizedBox(height: 12),
-                            ],
-                            if (_tipoEquipamento == 'novo_equipamento') ...[
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  color: theme.primaryBackground,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: theme.alternate),
-                                ),
+                              Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Novo equipamento (catálogo)',
-                                      style: theme.titleSmall.override(
-                                        font: GoogleFonts.interTight(
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                        color: theme.primary,
+                                      'Novo equipamento',
+                                      style: GoogleFonts.interTight(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white,
                                       ),
                                     ),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                      controller: _novoNomeController,
-                                      decoration: fieldDeco(
-                                        label: 'Nome *',
-                                        icon: Icons
-                                            .precision_manufacturing_outlined,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: TextFormField(
-                                            controller: _novoCodigoController,
-                                            decoration: fieldDeco(
-                                              label: 'Código',
-                                              icon: Icons.tag,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: TextFormField(
-                                            controller:
-                                                _novoCategoriaController,
-                                            decoration: fieldDeco(
-                                              label: 'Categoria',
-                                              icon: Icons.category_outlined,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: TextFormField(
-                                            controller: _novoMarcaController,
-                                            decoration: fieldDeco(
-                                              label: 'Marca',
-                                              icon: Icons.business_outlined,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: TextFormField(
-                                            controller: _novoModeloController,
-                                            decoration: fieldDeco(
-                                              label: 'Modelo',
-                                              icon: Icons.settings_outlined,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: TextFormField(
-                                            controller: _novoPlacaController,
-                                            decoration: fieldDeco(
-                                              label: 'Placa / identificação',
-                                              icon: Icons.pin_outlined,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: TextFormField(
-                                            controller: _novoSerieController,
-                                            decoration: fieldDeco(
-                                              label: 'Nº série',
-                                              icon: Icons.numbers,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 10),
-                                    DropdownButtonFormField<String>(
-                                      initialValue: _novoUnidadeMedida,
-                                      decoration: fieldDeco(
-                                        label: 'Unidade (catálogo)',
-                                        icon: Icons.straighten,
-                                      ),
-                                      items: const [
-                                        DropdownMenuItem(
-                                            value: 'h',
-                                            child: Text('Hora (h)')),
-                                        DropdownMenuItem(
-                                            value: 'dia', child: Text('Dia')),
-                                        DropdownMenuItem(
-                                            value: 'mes', child: Text('Mês')),
-                                        DropdownMenuItem(
-                                            value: 'un',
-                                            child: Text('Unidade')),
-                                      ],
-                                      onChanged: (v) => setModalState(
-                                        () => _novoUnidadeMedida =
-                                            v ?? _novoUnidadeMedida,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 10),
-                                    TextFormField(
-                                      controller: _novoDescricaoController,
-                                      maxLines: 2,
-                                      decoration: fieldDeco(
-                                        label: 'Observações',
-                                        icon: Icons.notes_outlined,
+                                    Text(
+                                      _obraNome.isEmpty
+                                          ? 'Vincular à obra'
+                                          : _obraNome,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11.5,
+                                        color: Colors.white
+                                            .withValues(alpha: 0.85),
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(width: 8),
                             ],
-                            if (_tipoEquipamento == 'avulso') ...[
-                              TextFormField(
-                                controller: _descricaoAvulsoController,
-                                maxLines: 2,
-                                decoration: fieldDeco(
-                                  label: 'Descrição *',
-                                  hint: 'Ex.: Betoneira 400 L',
-                                  icon: Icons.description_outlined,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                            ],
-                            DropdownButtonFormField<String>(
-                              initialValue: _unidadeObra,
-                              decoration: fieldDeco(
-                                label: 'Unidade *',
-                                icon: Icons.straighten,
-                              ),
-                              items: const [
-                                DropdownMenuItem(
-                                    value: 'h', child: Text('Hora (h)')),
-                                DropdownMenuItem(
-                                    value: 'dia', child: Text('Dia')),
-                                DropdownMenuItem(
-                                    value: 'mes', child: Text('Mês')),
-                                DropdownMenuItem(
-                                    value: 'un', child: Text('Unidade')),
-                              ],
-                              onChanged: (v) => setModalState(
-                                () => _unidadeObra = v ?? 'h',
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                        children: [
+                          RdoSectionCard(
+                            title: 'Tipo de cadastro',
+                            icon: Icons.category_outlined,
+                            subtitle: hintTipo(),
+                            margin: const EdgeInsets.only(bottom: 10),
+                            child: _buildTipoEquipamentoTabs(
+                              theme,
+                              (v) =>
+                                  setModalState(() => _tipoEquipamento = v),
+                            ),
+                          ),
+                          if (_tipoEquipamento == 'avulso')
+                            RdoSectionCard(
+                              title: 'Dados na obra',
+                              icon: Icons.handyman_outlined,
+                              margin: const EdgeInsets.only(bottom: 10),
+                              child: Column(
+                                children: [
+                                  TextFormField(
+                                    controller: _descricaoAvulsoController,
+                                    style: rdoFormFieldTextStyle(context),
+                                    maxLines: 2,
+                                    decoration: fieldDeco(
+                                      label: 'Descrição *',
+                                      hint: 'Ex.: Betoneira 400 L',
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  DropdownButtonFormField<String>(
+                                    initialValue: _unidadeObra,
+                                    decoration:
+                                        fieldDeco(label: 'Unidade *'),
+                                    items: const [
+                                      DropdownMenuItem(
+                                          value: 'h', child: Text('Hora (h)')),
+                                      DropdownMenuItem(
+                                          value: 'dia', child: Text('Dia')),
+                                      DropdownMenuItem(
+                                          value: 'mes', child: Text('Mês')),
+                                      DropdownMenuItem(
+                                          value: 'un', child: Text('Unidade')),
+                                    ],
+                                    onChanged: (v) => setModalState(
+                                      () => _unidadeObra = v ?? 'h',
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 16),
-                            ObraItemMetasFieldsWidget(
+                          if (_tipoEquipamento == 'equipamento_existente')
+                            RdoSectionCard(
+                              title: 'Equipamento do sistema',
+                              icon: Icons.build_circle_outlined,
+                              margin: const EdgeInsets.only(bottom: 10),
+                              child: Column(
+                                children: [
+                                  DropdownButtonFormField<String>(
+                                    initialValue: _equipamentoSelecionadoId,
+                                    isExpanded: true,
+                                    decoration: fieldDeco(
+                                      label: 'Equipamento *',
+                                      hint: 'Selecione',
+                                    ),
+                                    items: _equipamentosCatalogo
+                                        .map(
+                                          (e) => DropdownMenuItem<String>(
+                                            value: e['id']?.toString(),
+                                            child: Text(
+                                              (e['nome'] ?? 'Sem nome')
+                                                  .toString(),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (v) {
+                                      setModalState(() {
+                                        _equipamentoSelecionadoId = v;
+                                        if (v != null) {
+                                          final eq = _equipamentoPorId(v);
+                                          if (eq != null) {
+                                            _unidadeObra =
+                                                (eq['unidade_medida'] ?? 'h')
+                                                    .toString();
+                                          }
+                                        }
+                                      });
+                                    },
+                                  ),
+                                  const SizedBox(height: 12),
+                                  DropdownButtonFormField<String>(
+                                    initialValue: _unidadeObra,
+                                    decoration:
+                                        fieldDeco(label: 'Unidade na obra *'),
+                                    items: const [
+                                      DropdownMenuItem(
+                                          value: 'h', child: Text('Hora (h)')),
+                                      DropdownMenuItem(
+                                          value: 'dia', child: Text('Dia')),
+                                      DropdownMenuItem(
+                                          value: 'mes', child: Text('Mês')),
+                                      DropdownMenuItem(
+                                          value: 'un', child: Text('Unidade')),
+                                    ],
+                                    onChanged: (v) => setModalState(
+                                      () => _unidadeObra = v ?? 'h',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (_tipoEquipamento == 'novo_equipamento') ...[
+                            RdoSectionCard(
+                              title: 'Catálogo',
+                              icon: Icons.tune_outlined,
+                              subtitle: 'Dados do novo equipamento',
+                              margin: const EdgeInsets.only(bottom: 10),
+                              child: Column(
+                                children: [
+                                  TextFormField(
+                                    controller: _novoNomeController,
+                                    style: rdoFormFieldTextStyle(context),
+                                    decoration: fieldDeco(label: 'Nome *'),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextFormField(
+                                          controller: _novoCodigoController,
+                                          style: rdoFormFieldTextStyle(context),
+                                          decoration:
+                                              fieldDeco(label: 'Código'),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: TextFormField(
+                                          controller:
+                                              _novoCategoriaController,
+                                          style: rdoFormFieldTextStyle(context),
+                                          decoration:
+                                              fieldDeco(label: 'Categoria'),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextFormField(
+                                          controller: _novoMarcaController,
+                                          style: rdoFormFieldTextStyle(context),
+                                          decoration: fieldDeco(label: 'Marca'),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: TextFormField(
+                                          controller: _novoModeloController,
+                                          style: rdoFormFieldTextStyle(context),
+                                          decoration:
+                                              fieldDeco(label: 'Modelo'),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextFormField(
+                                          controller: _novoPlacaController,
+                                          style: rdoFormFieldTextStyle(context),
+                                          decoration: fieldDeco(
+                                            label: 'Placa / identificação',
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: TextFormField(
+                                          controller: _novoSerieController,
+                                          style: rdoFormFieldTextStyle(context),
+                                          decoration:
+                                              fieldDeco(label: 'Nº série'),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  DropdownButtonFormField<String>(
+                                    initialValue: _novoUnidadeMedida,
+                                    decoration: fieldDeco(
+                                      label: 'Unidade (catálogo)',
+                                    ),
+                                    items: const [
+                                      DropdownMenuItem(
+                                          value: 'h', child: Text('Hora (h)')),
+                                      DropdownMenuItem(
+                                          value: 'dia', child: Text('Dia')),
+                                      DropdownMenuItem(
+                                          value: 'mes', child: Text('Mês')),
+                                      DropdownMenuItem(
+                                          value: 'un', child: Text('Unidade')),
+                                    ],
+                                    onChanged: (v) => setModalState(
+                                      () => _novoUnidadeMedida =
+                                          v ?? _novoUnidadeMedida,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextFormField(
+                                    controller: _novoDescricaoController,
+                                    style: rdoFormFieldTextStyle(context),
+                                    maxLines: 2,
+                                    decoration:
+                                        fieldDeco(label: 'Observações'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            RdoSectionCard(
+                              title: 'Na obra',
+                              icon: Icons.apartment_outlined,
+                              margin: const EdgeInsets.only(bottom: 10),
+                              child: DropdownButtonFormField<String>(
+                                initialValue: _unidadeObra,
+                                decoration:
+                                    fieldDeco(label: 'Unidade na obra *'),
+                                items: const [
+                                  DropdownMenuItem(
+                                      value: 'h', child: Text('Hora (h)')),
+                                  DropdownMenuItem(
+                                      value: 'dia', child: Text('Dia')),
+                                  DropdownMenuItem(
+                                      value: 'mes', child: Text('Mês')),
+                                  DropdownMenuItem(
+                                      value: 'un', child: Text('Unidade')),
+                                ],
+                                onChanged: (v) => setModalState(
+                                  () => _unidadeObra = v ?? 'h',
+                                ),
+                              ),
+                            ),
+                          ],
+                          RdoSectionCard(
+                            title: 'Metas',
+                            icon: Icons.flag_outlined,
+                            subtitle: 'Opcional',
+                            margin: EdgeInsets.zero,
+                            child: ObraItemMetasFieldsWidget(
                               obraId: _obraApiIdentifier(),
                               controller: _metasController,
                             ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: FFButtonWidget(
-                                    onPressed: _isSaving
-                                        ? null
-                                        : () => Navigator.pop(sheetContext),
-                                    text: 'Cancelar',
-                                    options: FFButtonOptions(
-                                      height: 48,
-                                      color: theme.secondaryBackground,
-                                      borderSide: BorderSide(
-                                        color: theme.alternate,
-                                        width: 1,
-                                      ),
-                                      borderRadius: BorderRadius.circular(12),
-                                      textStyle: theme.titleSmall,
-                                    ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                      decoration: BoxDecoration(
+                        color: theme.secondaryBackground,
+                        border:
+                            Border(top: BorderSide(color: theme.alternate)),
+                      ),
+                      child: SafeArea(
+                        top: false,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: _isSaving
+                                    ? null
+                                    : () => Navigator.pop(sheetContext),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: theme.primaryText,
+                                  side: BorderSide(color: theme.alternate),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: FFButtonWidget(
-                                    onPressed: _isSaving
-                                        ? null
-                                        : () async {
-                                            final desc = _descricaoParaApi();
-                                            if (desc.isEmpty) {
-                                              ScaffoldMessenger.of(sheetContext)
-                                                  .showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                    'Preencha a descrição ou selecione o equipamento.',
-                                                  ),
-                                                ),
-                                              );
-                                              return;
-                                            }
-                                            if (_tipoEquipamento ==
-                                                    'equipamento_existente' &&
-                                                (_equipamentoSelecionadoId ==
-                                                        null ||
-                                                    _equipamentoSelecionadoId!
-                                                        .isEmpty)) {
-                                              ScaffoldMessenger.of(sheetContext)
-                                                  .showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                    'Selecione um equipamento.',
-                                                  ),
-                                                ),
-                                              );
-                                              return;
-                                            }
-                                            if (_tipoEquipamento ==
-                                                    'novo_equipamento' &&
-                                                _novoNomeController.text
-                                                    .trim()
-                                                    .isEmpty) {
-                                              ScaffoldMessenger.of(sheetContext)
-                                                  .showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                    'Informe o nome do equipamento.',
-                                                  ),
-                                                ),
-                                              );
-                                              return;
-                                            }
-                                            await _cadastrarEquipamentoApi(
-                                              closeModal: () =>
-                                                  Navigator.pop(sheetContext),
-                                            );
-                                            if (mounted) setModalState(() {});
-                                          },
-                                    text: _isSaving ? 'Salvando...' : 'Salvar',
-                                    icon: _isSaving
-                                        ? null
-                                        : Icon(
-                                            Icons.check_rounded,
-                                            size: 18,
-                                            color: theme.info,
-                                          ),
-                                    options: FFButtonOptions(
-                                      height: 48,
-                                      color: theme.primary,
-                                      borderRadius: BorderRadius.circular(12),
-                                      textStyle: theme.titleSmall.override(
-                                        font: GoogleFonts.interTight(
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                        color: theme.info,
-                                      ),
-                                    ),
+                                child: Text(
+                                  'Cancelar',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 2,
+                              child: FilledButton.icon(
+                                onPressed: _isSaving ? null : tentarSalvar,
+                                icon: _isSaving
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Icon(Icons.check_rounded, size: 18),
+                                label: Text(
+                                  _isSaving ? 'Salvando…' : 'Salvar',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: theme.primary,
+                                  foregroundColor: Colors.white,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -1050,6 +1102,10 @@ class _EquipamentosObraWidgetState extends State<EquipamentosObraWidget> {
   @override
   Widget build(BuildContext context) {
     context.watch<FFAppState>();
+    final theme = FlutterFlowTheme.of(context);
+    final canCreate =
+        MembershipAccess.canPermission('create_equipamentos');
+
     return GestureDetector(
       onTap: () {
         FocusScope.of(context).unfocus();
@@ -1057,195 +1113,198 @@ class _EquipamentosObraWidgetState extends State<EquipamentosObraWidget> {
       },
       child: Scaffold(
         key: scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
+        backgroundColor: theme.primaryBackground,
         appBar: AppBar(
-          backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
-          automaticallyImplyLeading: false,
-          leading: FlutterFlowIconButton(
-            borderColor: FlutterFlowTheme.of(context).alternate,
-            borderRadius: 12.0,
-            borderWidth: 1.0,
-            buttonSize: 40.0,
-            fillColor: FlutterFlowTheme.of(context).secondaryBackground,
-            icon: Icon(
-              Icons.arrow_back_ios,
-              color: FlutterFlowTheme.of(context).primaryText,
-              size: 20.0,
-            ),
-            onPressed: () async {
-              context.pushNamed(
-                DetalhesObraWidget.routeName,
-                queryParameters: {
-                  'obraId': serializeParam(
-                    widget.obraId,
-                    ParamType.int,
-                  ),
-                  'obraUuid': serializeParam(
-                    widget.obraUuid,
-                    ParamType.String,
-                  ),
-                }.withoutNulls,
-                extra: <String, dynamic>{
-                  '__transition_info__': TransitionInfo(
-                    hasTransition: true,
-                    transitionType: PageTransitionType.rightToLeft,
-                  ),
-                },
-              );
-            },
+          backgroundColor: theme.primary,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          centerTitle: false,
+          titleSpacing: 0,
+          toolbarHeight: 58,
+          iconTheme: const IconThemeData(color: Colors.white),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: _voltarParaDetalhes,
           ),
-          title: Text(
-            'Equipamentos',
-            style: FlutterFlowTheme.of(context).headlineMedium.override(
-                  font: GoogleFonts.interTight(
-                    fontWeight: FontWeight.w600,
-                    fontStyle:
-                        FlutterFlowTheme.of(context).headlineMedium.fontStyle,
+          title: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Equipamentos',
+                  style: GoogleFonts.interTight(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
                   ),
-                  color: FlutterFlowTheme.of(context).primaryText,
-                  fontSize: 22.0,
-                  letterSpacing: 0.0,
-                  fontWeight: FontWeight.w600,
-                  fontStyle:
-                      FlutterFlowTheme.of(context).headlineMedium.fontStyle,
                 ),
+                Text(
+                  _obraNome.isEmpty
+                      ? 'Equipamentos vinculados à obra'
+                      : _obraNome,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
           ),
-          actions: [],
-          centerTitle: true,
-          elevation: 0.0,
+          actions: [
+            IconButton(
+              tooltip: 'Atualizar',
+              icon: _isRefreshingSilently
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.refresh_rounded,
+                      color: Colors.white, size: 21),
+              onPressed: (_isLoading || _isRefreshingSilently)
+                  ? null
+                  : () => _fetchRegistros(silent: true),
+            ),
+            if (canCreate)
+              IconButton(
+                tooltip: 'Novo equipamento',
+                icon: const Icon(Icons.add_rounded,
+                    color: Colors.white, size: 24),
+                onPressed: _abrirCadastroEquipamento,
+              ),
+            const SizedBox(width: 4),
+          ],
         ),
-        body: SafeArea(
-          top: true,
-          child: Column(
-            mainAxisSize: MainAxisSize.max,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: Row(
+        body: Column(
+          children: [
+            Expanded(
+              child: RefreshIndicator(
+                color: theme.primary,
+                onRefresh: () => _fetchRegistros(silent: true),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(
+                    16,
+                    10,
+                    16,
+                    kBarraNavegacaoPrincipalReservaScroll,
+                  ),
                   children: [
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${_registros.length} ${_registros.length == 1 ? 'item encontrado' : 'itens encontrados'}',
-                              style: FlutterFlowTheme.of(context).labelMedium,
+                    if (canCreate)
+                      RdoSectionCard(
+                        title: 'Incluir equipamento',
+                        icon: Icons.add_circle_outline_rounded,
+                        subtitle: 'Avulso, novo no catálogo ou já cadastrado',
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: FilledButton.icon(
+                          onPressed: _abrirCadastroEquipamento,
+                          icon: const Icon(Icons.construction_rounded, size: 18),
+                          label: Text(
+                            'Novo equipamento',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                          if (_isRefreshingSilently)
-                            SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: FlutterFlowTheme.of(context).primary,
-                              ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: theme.primary,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(double.infinity, 42),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                        ],
-                      ),
-                    ),
-                    FlutterFlowIconButton(
-                      borderRadius: 20,
-                      buttonSize: 38,
-                      icon: Icon(
-                        Icons.refresh_rounded,
-                        color: FlutterFlowTheme.of(context).primary,
-                      ),
-                      onPressed: (_isLoading || _isRefreshingSilently)
-                          ? null
-                          : () => _fetchRegistros(silent: true),
-                    ),
-                    const SizedBox(width: 8),
-                    if (MembershipAccess.canPermission('create_equipamentos'))
-                      FFButtonWidget(
-                        onPressed: _abrirCadastroEquipamento,
-                        text: 'Novo',
-                        icon: const Icon(Icons.add, size: 18),
-                        options: FFButtonOptions(
-                          height: 38,
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          color: FlutterFlowTheme.of(context).primary,
-                          textStyle:
-                              FlutterFlowTheme.of(context).labelMedium.override(
-                                    font: GoogleFonts.inter(
-                                      fontWeight: FontWeight.w600,
-                                      fontStyle: FlutterFlowTheme.of(context)
-                                          .labelMedium
-                                          .fontStyle,
-                                    ),
-                                    color: FlutterFlowTheme.of(context).info,
-                                  ),
-                          borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
                       ),
+                    RdoSectionCard(
+                      title: 'Lista da obra',
+                      icon: Icons.construction_outlined,
+                      margin: EdgeInsets.zero,
+                      trailing: _registros.isEmpty
+                          ? null
+                          : RdoContadorChip('${_registros.length}'),
+                      contentPadding: EdgeInsets.zero,
+                      child: _isLoading
+                          ? const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 36),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 32,
+                                  height: 32,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2.5),
+                                ),
+                              ),
+                            )
+                          : _registros.isEmpty
+                              ? Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                      16, 28, 16, 28),
+                                  child: Column(
+                                    children: [
+                                      Icon(
+                                        Icons.construction_outlined,
+                                        size: 40,
+                                        color: theme.secondaryText
+                                            .withValues(alpha: 0.4),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'Nenhum equipamento na obra',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: theme.primaryText,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Cadastre um equipamento para vincular a esta obra.',
+                                        textAlign: TextAlign.center,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12.5,
+                                          color: theme.secondaryText,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : Column(
+                                  children: [
+                                    for (var i = 0;
+                                        i < _registros.length;
+                                        i++) ...[
+                                      if (i > 0)
+                                        Divider(
+                                          height: 1,
+                                          thickness: 1,
+                                          color: theme.alternate,
+                                        ),
+                                      _buildEquipamentoListItem(
+                                        context,
+                                        item: _registros[i],
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                    ),
                   ],
                 ),
               ),
-              Expanded(
-                child: Padding(
-                  padding:
-                      EdgeInsetsDirectional.fromSTEB(16.0, 16.0, 16.0, 16.0),
-                  child: _isLoading
-                      ? Center(
-                          child: LinearProgressIndicator(
-                            color: FlutterFlowTheme.of(context).primary,
-                          ),
-                        )
-                      : _registros.isEmpty
-                          ? Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: FlutterFlowTheme.of(context)
-                                    .secondaryBackground,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: FlutterFlowTheme.of(context).alternate,
-                                ),
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.construction_outlined,
-                                    color: FlutterFlowTheme.of(context)
-                                        .secondaryText,
-                                    size: 36,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Nenhum equipamento na obra',
-                                    style: FlutterFlowTheme.of(context)
-                                        .titleMedium,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Use Novo para cadastrar e vincular equipamentos à obra.',
-                                    style:
-                                        FlutterFlowTheme.of(context).bodySmall,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
-                            )
-                          : ListView.builder(
-                              padding: const EdgeInsets.only(
-                                bottom: kBarraNavegacaoPrincipalReservaScroll,
-                              ),
-                              itemCount: _registros.length,
-                              itemBuilder: (context, listViewIndex) {
-                                return _buildEquipamentoListItem(
-                                  context,
-                                  item: _registros[listViewIndex],
-                                );
-                              },
-                            ),
-                ),
-              ),
-            ],
-          ),
+            ),
+            const BarraNavegacaoPrincipal(),
+          ],
         ),
-        bottomNavigationBar: const BarraNavegacaoPrincipal(),
       ),
     );
   }
@@ -1258,8 +1317,8 @@ class _EquipamentosObraWidgetState extends State<EquipamentosObraWidget> {
     final qtd = _asDouble(item['qtd']) ?? 0;
     final realizada = _asDouble(item['qtd_realizada']) ?? 0;
     final unidade = (item['unidade'] ?? 'un').toString();
-    final isDeleting = itemIdentifier != null &&
-        _deletingIds.contains(itemIdentifier);
+    final isDeleting =
+        itemIdentifier != null && _deletingIds.contains(itemIdentifier);
     final vinc = _itemVinculadoOrcamento(item);
     final canDelete = MembershipAccess.canPermission('delete_equipamentos');
     final podeExcluir = canDelete &&
@@ -1270,6 +1329,7 @@ class _EquipamentosObraWidgetState extends State<EquipamentosObraWidget> {
 
     return ObraItemListTileWidget(
       titulo: (item['descricao'] ?? 'Sem nome').toString(),
+      subtitulo: vinc ? 'Vinculado ao orçamento' : null,
       qtd: qtd,
       qtdRealizada: realizada,
       unidade: unidade,

@@ -133,6 +133,7 @@ class _ShowAnexosRelatoriosWidgetState
                       return ListView.builder(
                         padding: EdgeInsets.zero,
                         shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
                         scrollDirection: Axis.vertical,
                         itemCount: listViewCarregaAnexosRelatorioRowList.length,
                         itemBuilder: (context, listViewIndex) {

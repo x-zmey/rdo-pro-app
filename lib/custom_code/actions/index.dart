@@ -4,6 +4,10 @@ export 'soft_delete_foto_atividade.dart' show softDeleteFotoAtividade;
 export 'check_internet_connection.dart' show checkInternetConnection;
 export 'sync_push_runner.dart' show runFullSyncPipelineFromPush;
 export 'sync_obras.dart' show syncObras;
+export 'download_obra_foto_local.dart' show downloadObraFotoLocal;
+export 'ensure_obras_fotos_locais.dart'
+    show ensureObrasFotosLocais, resetObrasFotosLocaisCache;
+export 'obra_foto_url.dart' show resolveObraFotoNetworkUrl, kObrasFotoS3BaseUrl;
 export 'check_sync_status.dart' show checkSyncStatus;
 export 'sync_grupos_obras.dart' show syncGruposObras;
 export 'sync_clientes.dart' show syncClientes;
@@ -54,4 +58,5 @@ export 'sync_empresa_user_permissions.dart' show syncEmpresaUserPermissions;
 export 'sync_relatorio_ocorrencias.dart' show syncRelatorioOcorrencias;
 export 'sync_tipo_ocorrencias.dart' show syncTipoOcorrencias;
 export 'incrise_relatorio_numero.dart' show incriseRelatorioNumero;
+export 'copiar_dados_relatorio_anterior.dart' show copiarDadosRelatorioAnterior;
 export 'sync_obra_locais.dart' show syncObraLocais;

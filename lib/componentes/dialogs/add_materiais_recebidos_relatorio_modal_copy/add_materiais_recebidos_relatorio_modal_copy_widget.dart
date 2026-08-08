@@ -63,7 +63,10 @@ class _AddMateriaisRecebidosRelatorioModalCopyWidgetState
     return qtd > 0 ? qtd : 1;
   }
 
-  Future<bool> _inserirMaterialNoRelatorio(String obraItemUuid) async {
+  Future<bool> _inserirMaterialNoRelatorio(
+    String obraItemUuid, {
+    bool mostrarFeedback = true,
+  }) async {
     if (obraItemUuid.trim().isEmpty || obraItemUuid == '0') return false;
     _model.uuidResult = await actions.generateUuid();
     await SQLiteManager.instance.cadastraEquipamentoRecebidoRelatorio(
@@ -76,17 +79,36 @@ class _AddMateriaisRecebidosRelatorioModalCopyWidgetState
       uuid: _model.uuidResult!,
     );
     if (!mounted) return false;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Material incluído no relatório!',
-          style: TextStyle(color: FlutterFlowTheme.of(context).primaryText),
+    if (mostrarFeedback) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Material incluído no relatório!',
+            style: TextStyle(color: FlutterFlowTheme.of(context).primaryText),
+          ),
+          duration: const Duration(milliseconds: 4000),
+          backgroundColor: FlutterFlowTheme.of(context).secondary,
         ),
-        duration: const Duration(milliseconds: 4000),
-        backgroundColor: FlutterFlowTheme.of(context).secondary,
-      ),
-    );
+      );
+    }
     return true;
+  }
+
+  Future<int> _inserirVariosMateriais(Iterable<String> obraItemUuids) async {
+    final candidatos = obraItemUuids
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty && e != '0')
+        .toSet()
+        .toList();
+    var count = 0;
+    for (final uuid in candidatos) {
+      final ok = await _inserirMaterialNoRelatorio(
+        uuid,
+        mostrarFeedback: false,
+      );
+      if (ok) count++;
+    }
+    return count;
   }
 
   Future<void> _abrirCadastroInsumoNaObra() async {
@@ -97,13 +119,21 @@ class _AddMateriaisRecebidosRelatorioModalCopyWidgetState
     if (!mounted || novoUuid == null || novoUuid.trim().isEmpty) return;
 
     _reloadItensObra();
+    final selecionados = List<String>.from(_model.dropDownValue ?? const []);
+    if (!selecionados.contains(novoUuid)) {
+      selecionados.add(novoUuid);
+    }
     safeSetState(() {
-      _model.dropDownValue = novoUuid;
-      _model.materialSelecionado = novoUuid;
-      _model.dropDownValueController?.value = novoUuid;
+      _model.dropDownValue = selecionados;
+      _model.materiaisSelecionados = selecionados;
+      _model.dropDownValueController =
+          FormFieldController<List<String>?>(selecionados);
     });
 
-    final inseriu = await _inserirMaterialNoRelatorio(novoUuid);
+    final inseriu = await _inserirMaterialNoRelatorio(
+      novoUuid,
+      mostrarFeedback: true,
+    );
     if (!mounted) return;
     if (inseriu) {
       FFAppState().update(() {});
@@ -252,9 +282,10 @@ class _AddMateriaisRecebidosRelatorioModalCopyWidgetState
                                     snapshot.data!;
 
                                 return FlutterFlowDropDown<String>(
-                                  controller: _model.dropDownValueController ??=
-                                      FormFieldController<String>(
-                                    _model.dropDownValue ??= '0',
+                                  multiSelectController:
+                                      _model.dropDownValueController ??=
+                                          FormFieldController<List<String>?>(
+                                    _model.dropDownValue ??= <String>[],
                                   ),
                                   options: List<String>.from(
                                       dropDownCarregaItensObraRowList
@@ -275,12 +306,16 @@ class _AddMateriaisRecebidosRelatorioModalCopyWidgetState
                                         return nome.isEmpty ? 'sem nome' : nome;
                                       })
                                       .toList(),
-                                  onChanged: (val) async {
-                                    safeSetState(
-                                        () => _model.dropDownValue = val);
-                                    _model.materialSelecionado =
-                                        _model.dropDownValue;
-                                    safeSetState(() {});
+                                  onMultiSelectChanged: (vals) {
+                                    final lista = (vals ?? [])
+                                        .map((e) => e.trim())
+                                        .where((e) =>
+                                            e.isNotEmpty && e != '0')
+                                        .toList();
+                                    safeSetState(() {
+                                      _model.dropDownValue = lista;
+                                      _model.materiaisSelecionados = lista;
+                                    });
                                   },
                                   width: MediaQuery.sizeOf(context).width * 1.0,
                                   height: 52.48,
@@ -305,7 +340,7 @@ class _AddMateriaisRecebidosRelatorioModalCopyWidgetState
                                             .bodyMedium
                                             .fontStyle,
                                       ),
-                                  hintText: 'Seleciona material',
+                                  hintText: 'Selecione um ou mais materiais',
                                   icon: Icon(
                                     Icons.keyboard_arrow_down_rounded,
                                     color: FlutterFlowTheme.of(context)
@@ -323,8 +358,9 @@ class _AddMateriaisRecebidosRelatorioModalCopyWidgetState
                                       12.0, 0.0, 12.0, 0.0),
                                   hidesUnderline: true,
                                   isOverButton: false,
-                                  isSearchable: false,
-                                  isMultiSelect: false,
+                                  isSearchable: true,
+                                  searchHintText: 'Buscar material...',
+                                  isMultiSelect: true,
                                 );
                               },
                             ),
@@ -356,7 +392,7 @@ class _AddMateriaisRecebidosRelatorioModalCopyWidgetState
                                 autofocus: true,
                                 obscureText: false,
                                 decoration: InputDecoration(
-                                  labelText: 'Quantidade',
+                                  labelText: 'Quantidade (para cada material)',
                                   labelStyle: FlutterFlowTheme.of(context)
                                       .labelMedium
                                       .override(
@@ -535,25 +571,48 @@ class _AddMateriaisRecebidosRelatorioModalCopyWidgetState
                                 alignment: AlignmentDirectional(0.0, 0.05),
                                 child: FFButtonWidget(
                                   onPressed: () async {
-                                    final selected =
-                                        _model.materialSelecionado?.trim();
-                                    if (selected == null ||
-                                        selected.isEmpty ||
-                                        selected == '0') {
+                                    final selecionados =
+                                        (_model.materiaisSelecionados ??
+                                                _model.dropDownValue ??
+                                                const <String>[])
+                                            .map((e) => e.trim())
+                                            .where((e) =>
+                                                e.isNotEmpty && e != '0')
+                                            .toSet()
+                                            .toList();
+                                    if (selecionados.isEmpty) {
                                       ScaffoldMessenger.of(context)
                                           .showSnackBar(
                                         const SnackBar(
                                           content: Text(
-                                            'Selecione um material ou cadastre um novo.',
+                                            'Selecione um ou mais materiais ou cadastre um novo.',
                                           ),
                                         ),
                                       );
                                       return;
                                     }
-                                    final inseriu = await _inserirMaterialNoRelatorio(
-                                      selected,
+                                    final count = await _inserirVariosMateriais(
+                                      selecionados,
                                     );
-                                    if (!mounted || !inseriu) return;
+                                    if (!mounted || count == 0) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          count == 1
+                                              ? '1 material incluído no relatório!'
+                                              : '$count materiais incluídos no relatório!',
+                                          style: TextStyle(
+                                            color: FlutterFlowTheme.of(context)
+                                                .primaryText,
+                                          ),
+                                        ),
+                                        duration:
+                                            const Duration(milliseconds: 4000),
+                                        backgroundColor:
+                                            FlutterFlowTheme.of(context)
+                                                .secondary,
+                                      ),
+                                    );
                                     FFAppState().update(() {});
                                     Navigator.pop(context);
                                     safeSetState(() {});

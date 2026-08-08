@@ -8,6 +8,17 @@ double qtdRealizadaAtividadeNum(GetDadosAtividadeRow? atividade) {
   return parseQuantidadeRelatorio(atividade.data['qtd_realizada']);
 }
 
+/// Teto efetivo: prioriza o valor digitado no formulário (ainda não salvo no SQLite).
+double limiteProdutividadeEfetivo({
+  required GetDadosAtividadeRow? atividade,
+  num? qtdRealizadaFormulario,
+}) {
+  if (qtdRealizadaFormulario != null) {
+    return qtdRealizadaFormulario.toDouble();
+  }
+  return qtdRealizadaAtividadeNum(atividade);
+}
+
 String unidadeProdutividadeAtividade(GetDadosAtividadeRow? atividade) {
   final u = (atividade?.unidade ?? '').trim();
   return u.isEmpty ? 'un' : u;
@@ -28,9 +39,13 @@ double somaProdutividadeItens(
 double maxProdutividadeItem(
   List<GetItensAtividadeRow> itens,
   GetDadosAtividadeRow? atividade,
-  int? itemId,
-) {
-  final limite = qtdRealizadaAtividadeNum(atividade);
+  int? itemId, {
+  num? qtdRealizadaFormulario,
+}) {
+  final limite = limiteProdutividadeEfetivo(
+    atividade: atividade,
+    qtdRealizadaFormulario: qtdRealizadaFormulario,
+  );
   final outros = somaProdutividadeItens(itens, ignorarItemId: itemId);
   final max = limite - outros;
   return max > 0 ? max : 0;
@@ -67,8 +82,12 @@ ValidacaoProdutividadeResultado validarProdutividadeItem({
   required GetDadosAtividadeRow? atividade,
   required num qtdProduzida,
   String tipoLabel = 'recursos',
+  num? qtdRealizadaFormulario,
 }) {
-  final limite = qtdRealizadaAtividadeNum(atividade);
+  final limite = limiteProdutividadeEfetivo(
+    atividade: atividade,
+    qtdRealizadaFormulario: qtdRealizadaFormulario,
+  );
   final valor = qtdProduzida.toDouble();
   final somaOutros = somaProdutividadeItens(
     itens,

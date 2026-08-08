@@ -1,7 +1,7 @@
+import '/auth/fetch_allowed_obras.dart';
 import '/auth/membership_access.dart';
 import '/auth/tenant_auth_payload.dart';
 import '/backend/api_requests/api_calls.dart';
-import '/backend/sqlite/empresa_multi_tenant_sqlite.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
@@ -14,6 +14,7 @@ class TenantSwitcherWidget extends StatefulWidget {
     super.key,
     this.compact = true,
     this.fillWidth = false,
+    this.onPrimary = false,
   });
 
   /// `true` para AppBar; `false` para card no menu.
@@ -21,6 +22,9 @@ class TenantSwitcherWidget extends StatefulWidget {
 
   /// No modo compacto, ocupa a largura disponível (ex.: topo da Início).
   final bool fillWidth;
+
+  /// Modo compacto sobre fundo na cor primária (AppBar do novo padrão).
+  final bool onPrimary;
 
   @override
   State<TenantSwitcherWidget> createState() => _TenantSwitcherWidgetState();
@@ -195,6 +199,8 @@ class _TenantSwitcherWidgetState extends State<TenantSwitcherWidget> {
         return;
       }
 
+      // Limpa obras permitidas do tenant anterior antes de aplicar o novo.
+      clearAllowedObrasCache();
       await applyTenantAuthPayload(
         res.jsonBody,
         fallbackTenantUserId: tenantUserId,
@@ -238,14 +244,19 @@ class _TenantSwitcherWidgetState extends State<TenantSwitcherWidget> {
     final busy = _loading || _switching;
 
     if (widget.compact) {
+      final corConteudo = widget.onPrimary ? Colors.white : theme.primary;
       final chip = Material(
-        color: theme.primary.withValues(alpha: 0.08),
+        color: widget.onPrimary
+            ? Colors.white.withValues(alpha: 0.16)
+            : theme.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           onTap: busy ? null : _openPicker,
           borderRadius: BorderRadius.circular(10),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: widget.onPrimary
+                ? const EdgeInsets.symmetric(horizontal: 9, vertical: 6)
+                : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               mainAxisSize:
                   widget.fillWidth ? MainAxisSize.max : MainAxisSize.min,
@@ -256,11 +267,15 @@ class _TenantSwitcherWidgetState extends State<TenantSwitcherWidget> {
                     height: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: theme.primary,
+                      color: corConteudo,
                     ),
                   )
                 else
-                  Icon(Icons.business_outlined, size: 20, color: theme.primary),
+                  Icon(
+                    Icons.business_outlined,
+                    size: widget.onPrimary ? 17 : 20,
+                    color: corConteudo,
+                  ),
                 const SizedBox(width: 8),
                 if (widget.fillWidth)
                   Expanded(
@@ -270,27 +285,33 @@ class _TenantSwitcherWidgetState extends State<TenantSwitcherWidget> {
                       overflow: TextOverflow.ellipsis,
                       style: theme.labelLarge.override(
                         font: GoogleFonts.inter(fontWeight: FontWeight.w600),
-                        color: theme.primary,
+                        color: corConteudo,
                         letterSpacing: 0,
                       ),
                     ),
                   )
                 else
                   ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 148),
+                    constraints: BoxConstraints(
+                      maxWidth: widget.onPrimary ? 116 : 148,
+                    ),
                     child: Text(
                       _activeLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.labelMedium.override(
                         font: GoogleFonts.inter(fontWeight: FontWeight.w600),
-                        color: theme.primary,
+                        color: corConteudo,
                         letterSpacing: 0,
                       ),
                     ),
                   ),
                 if (_canSwitch)
-                  Icon(Icons.expand_more, size: 20, color: theme.primary),
+                  Icon(
+                    Icons.expand_more,
+                    size: widget.onPrimary ? 17 : 20,
+                    color: corConteudo,
+                  ),
               ],
             ),
           ),

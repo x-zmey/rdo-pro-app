@@ -1,12 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '/auth/membership_access.dart';
 import '/backend/api_requests/api_calls.dart';
 import '/backend/sqlite/sqlite_manager.dart';
+import '/componentes/navegacao/barra_navegacao_principal.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/custom_code/actions/index.dart' as custom_actions;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import 'package:easy_debounce/easy_debounce.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -79,18 +81,6 @@ String _isoDateToBrField(dynamic v) {
   return '';
 }
 
-String _formatDateTimeBrFromIso(dynamic v) {
-  if (v == null) return '—';
-  final s = v.toString().trim();
-  if (s.isEmpty) return '—';
-  try {
-    final dt = DateTime.parse(s.replaceFirst(' ', 'T'));
-    return DateFormat('dd/MM/yyyy HH:mm', 'pt_BR').format(dt.toLocal());
-  } catch (_) {
-    return s;
-  }
-}
-
 String _formatCpfDisplay(String? raw) {
   if (raw == null || raw.trim().isEmpty) return '—';
   final d = raw.replaceAll(RegExp(r'\D'), '');
@@ -137,7 +127,7 @@ String _statusMoLabel(String situacao) {
   }
 }
 
-Color _situacaoMoColor(BuildContext context, String s) {
+Color _situacaoMoColor(String s) {
   switch (s) {
     case 'ativo':
       return Colors.green.shade700;
@@ -148,7 +138,7 @@ Color _situacaoMoColor(BuildContext context, String s) {
     case 'inativo':
       return Colors.grey.shade700;
     default:
-      return FlutterFlowTheme.of(context).secondaryText;
+      return Colors.grey.shade600;
   }
 }
 
@@ -173,14 +163,13 @@ class _MaoObraCadastrosWidgetState extends State<MaoObraCadastrosWidget> {
   List<Map<String, dynamic>> _items = [];
   List<Map<String, dynamic>> _filteredAll = [];
   int _total = 0;
-  int _page = 1;
-  int _perPage = 10;
   String _sortBy = 'nome_completo';
   String _sortOrder = 'asc';
   String _filterSituacao = '';
   String _filterCargo = '';
   List<String> _cargos = [];
   List<String> _funcoesMaoObra = [];
+  String _busca = '';
 
   static const _debounceTag = 'mao-obra-search';
 
@@ -188,7 +177,19 @@ class _MaoObraCadastrosWidgetState extends State<MaoObraCadastrosWidget> {
   void initState() {
     super.initState();
     _model = createModel(context, () => MaoObraCadastrosModel());
-    _bootstrap();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!MembershipAccess.canPermission('view_mao_obra')) {
+        MembershipAccess.showDenied(
+          context,
+          'Sem permissão para visualizar mão de obra.',
+        );
+        if (context.mounted && context.canPop()) {
+          context.pop();
+        }
+        return;
+      }
+      _bootstrap();
+    });
   }
 
   Future<void> _bootstrap() async {
@@ -269,8 +270,14 @@ class _MaoObraCadastrosWidgetState extends State<MaoObraCadastrosWidget> {
     if (kIsWeb) return;
     try {
       final db = SQLiteManager.instance.database;
+      final owner = FFAppState().creatorUuid.trim();
+      if (owner.isEmpty) {
+        if (mounted) setState(() => _cargos = []);
+        return;
+      }
       final rows = await db.rawQuery(
-        "SELECT DISTINCT cargo_funcao FROM mao_obra_profissionais WHERE cargo_funcao IS NOT NULL AND TRIM(cargo_funcao) != '' ORDER BY cargo_funcao COLLATE NOCASE",
+        "SELECT DISTINCT cargo_funcao FROM mao_obra_profissionais WHERE created_by = ? AND cargo_funcao IS NOT NULL AND TRIM(cargo_funcao) != '' ORDER BY cargo_funcao COLLATE NOCASE",
+        [owner],
       );
       final list = <String>[];
       for (final r in rows) {
@@ -345,8 +352,9 @@ class _MaoObraCadastrosWidgetState extends State<MaoObraCadastrosWidget> {
               _moDouble(a['valor_diaria'])
                   .compareTo(_moDouble(b['valor_diaria']));
         case 'data_admissao':
-          return asc * '${a['data_admissao'] ?? ''}'
-              .compareTo('${b['data_admissao'] ?? ''}');
+          return asc *
+              '${a['data_admissao'] ?? ''}'
+                  .compareTo('${b['data_admissao'] ?? ''}');
         case 'situacao':
           return asc *
               '${a['situacao'] ?? ''}'.compareTo('${b['situacao'] ?? ''}');
@@ -408,7 +416,22 @@ class _MaoObraCadastrosWidgetState extends State<MaoObraCadastrosWidget> {
         }
       }
 
-      final rawAll = await db.query('mao_obra_profissionais');
+      final owner = FFAppState().creatorUuid.trim();
+      if (owner.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _filteredAll = [];
+          _items = [];
+          _total = 0;
+        });
+        return;
+      }
+      final rawAll = await db.query(
+        'mao_obra_profissionais',
+        where: 'created_by = ?',
+        whereArgs: [owner],
+      );
       final raw = rawAll.where((r) {
         final d = r['deleted_at'];
         if (d == null) return true;
@@ -426,16 +449,12 @@ class _MaoObraCadastrosWidgetState extends State<MaoObraCadastrosWidget> {
       final filtered = mapped.where(_rowMatchesFilters).toList();
       _sortFiltered(filtered);
 
-      final total = filtered.length;
-      final start = ((_page - 1) * _perPage).clamp(0, 1 << 30);
-      final pageItems = filtered.skip(start).take(_perPage).toList();
-
       if (!mounted) return;
       setState(() {
         _loading = false;
         _filteredAll = filtered;
-        _items = pageItems;
-        _total = total;
+        _items = filtered;
+        _total = filtered.length;
       });
     } catch (e) {
       if (!mounted) return;
@@ -465,6 +484,12 @@ class _MaoObraCadastrosWidgetState extends State<MaoObraCadastrosWidget> {
     if (mounted) await _loadFuncoesFromSqlite();
     if (mounted) await _loadCargosFromSqlite();
     if (mounted) await _fetchProfissionais();
+  }
+
+  int _serverId(Map<String, dynamic> m) {
+    final id = m['id'];
+    if (id is int) return id;
+    return int.tryParse('$id') ?? 0;
   }
 
   Future<void> _exportLocalCsv() async {
@@ -519,14 +544,12 @@ class _MaoObraCadastrosWidgetState extends State<MaoObraCadastrosWidget> {
     );
   }
 
-  void _onSearchChanged(String _) {
+  void _onSearchChanged(String value) {
+    setState(() => _busca = value);
     EasyDebounce.debounce(
       _debounceTag,
       const Duration(milliseconds: 450),
-      () {
-        _page = 1;
-        _fetchProfissionais();
-      },
+      () => _fetchProfissionais(),
     );
   }
 
@@ -541,6 +564,10 @@ class _MaoObraCadastrosWidgetState extends State<MaoObraCadastrosWidget> {
   @override
   Widget build(BuildContext context) {
     context.watch<FFAppState>();
+    final theme = FlutterFlowTheme.of(context);
+    final canCreate = MembershipAccess.canPermission('create_mao_obra');
+    final canEdit = MembershipAccess.canPermission('edit_mao_obra');
+    final canDelete = MembershipAccess.canPermission('delete_mao_obra');
 
     return GestureDetector(
       onTap: () {
@@ -549,607 +576,628 @@ class _MaoObraCadastrosWidgetState extends State<MaoObraCadastrosWidget> {
       },
       child: Scaffold(
         key: scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
+        backgroundColor: theme.primaryBackground,
         appBar: AppBar(
-          backgroundColor: FlutterFlowTheme.of(context).primary,
-          automaticallyImplyLeading: true,
-          title: Text(
-            'Mão de obra',
-            style: FlutterFlowTheme.of(context).titleLarge.override(
-                  font: GoogleFonts.interTight(fontWeight: FontWeight.w600),
-                  color: Colors.white,
-                  fontSize: 20,
+          backgroundColor: theme.primary,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          centerTitle: false,
+          titleSpacing: 0,
+          toolbarHeight: 58,
+          iconTheme: const IconThemeData(color: Colors.white),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: () => context.safePop(),
+          ),
+          title: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Mão de obra',
+                  style: GoogleFonts.interTight(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
                 ),
+                Text(
+                  'Cadastro de profissionais',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
           ),
           actions: [
             IconButton(
               tooltip: 'Sincronizar e atualizar',
               onPressed: _loading ? null : _syncAndReloadList,
               icon: _loading
-                  ? SizedBox(
-                      width: 22,
-                      height: 22,
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: FlutterFlowTheme.of(context).info,
+                        color: Colors.white,
                       ),
                     )
-                  : Icon(Icons.refresh, color: FlutterFlowTheme.of(context).info),
+                  : const Icon(Icons.refresh_rounded,
+                      color: Colors.white, size: 21),
             ),
             PopupMenuButton<String>(
-              tooltip: 'Exportar',
-              icon: Icon(Icons.ios_share, color: FlutterFlowTheme.of(context).info),
+              tooltip: 'Mais opções',
+              icon: const Icon(Icons.more_vert_rounded,
+                  color: Colors.white, size: 22),
               onSelected: (v) {
-                if (v == 'csv') _exportLocalCsv();
+                if (v == 'csv') {
+                  _exportLocalCsv();
+                  return;
+                }
+                if (v.startsWith('sort:')) {
+                  setState(() => _sortBy = v.substring(5));
+                  _fetchProfissionais();
+                  return;
+                }
+                if (v == 'order') {
+                  setState(() {
+                    _sortOrder = _sortOrder == 'asc' ? 'desc' : 'asc';
+                  });
+                  _fetchProfissionais();
+                }
               },
               itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'csv',
-                  child: Text('CSV (SQLite / filtros)'),
-                ),
-              ],
-            ),
-          ],
-          elevation: 0,
-        ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _openForm(context, null),
-          backgroundColor: FlutterFlowTheme.of(context).primary,
-          icon: Icon(Icons.add, color: FlutterFlowTheme.of(context).info),
-          label: Text(
-            'Novo profissional',
-            style: TextStyle(color: FlutterFlowTheme.of(context).info),
-          ),
-        ),
-        body: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildHeader(context),
-              _buildFilters(context),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.all(12),
+                PopupMenuItem(
+                  value: 'order',
                   child: Text(
-                    _error!,
-                    style: TextStyle(color: FlutterFlowTheme.of(context).error),
+                    _sortOrder == 'asc'
+                        ? 'Ordenar decrescente'
+                        : 'Ordenar crescente',
                   ),
                 ),
-              Expanded(child: _buildBody(context)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: FlutterFlowTheme.of(context).primary.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(Icons.groups_outlined,
-                color: FlutterFlowTheme.of(context).primary, size: 26),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Mão de obra',
-                  style: FlutterFlowTheme.of(context).headlineSmall.override(
-                        font: GoogleFonts.interTight(fontWeight: FontWeight.bold),
-                        color: FlutterFlowTheme.of(context).primary,
-                      ),
-                ),
-                Text(
-                  'Lista no SQLite; alterações vão à API e em seguida sincronizam o cadastro.',
-                  style: FlutterFlowTheme.of(context).bodySmall.override(
-                        color: FlutterFlowTheme.of(context).secondaryText,
-                      ),
-                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                    value: 'sort:nome_completo', child: Text('Ordenar por nome')),
+                const PopupMenuItem(
+                    value: 'sort:cpf', child: Text('Ordenar por CPF')),
+                const PopupMenuItem(
+                    value: 'sort:cargo_funcao', child: Text('Ordenar por cargo')),
+                const PopupMenuItem(
+                    value: 'sort:valor_hora',
+                    child: Text('Ordenar por valor hora')),
+                const PopupMenuItem(
+                    value: 'sort:valor_diaria',
+                    child: Text('Ordenar por valor diária')),
+                const PopupMenuItem(
+                    value: 'sort:data_admissao',
+                    child: Text('Ordenar por admissão')),
+                const PopupMenuItem(
+                    value: 'sort:situacao',
+                    child: Text('Ordenar por situação')),
+                const PopupMenuDivider(),
+                const PopupMenuItem(value: 'csv', child: Text('Exportar CSV')),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilters(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: FlutterFlowTheme.of(context).alternate,
+            if (canCreate)
+              IconButton(
+                tooltip: 'Novo profissional',
+                icon: const Icon(Icons.add_rounded,
+                    color: Colors.white, size: 24),
+                onPressed: () => _openForm(null),
+              ),
+            const SizedBox(width: 4),
+          ],
         ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
+        body: Column(
           children: [
-            TextField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: 'Buscar por nome, CPF, cargo ou e-mail...',
-                prefixIcon: Icon(Icons.search,
-                    color: FlutterFlowTheme.of(context).secondaryText),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            Expanded(
+              child: RefreshIndicator(
+                color: theme.primary,
+                onRefresh: _syncAndReloadList,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(
+                    16,
+                    10,
+                    16,
+                    kBarraNavegacaoPrincipalReservaScroll,
+                  ),
+                  children: [
+                    if (canCreate)
+                      RdoSectionCard(
+                        title: 'Incluir profissional',
+                        icon: Icons.person_add_alt_1_outlined,
+                        subtitle: 'Cadastrar no catálogo',
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: FilledButton.icon(
+                          onPressed: () => _openForm(null),
+                          icon: const Icon(Icons.add_rounded, size: 18),
+                          label: Text(
+                            'Novo profissional',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: theme.primary,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(double.infinity, 42),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    RdoSectionCard(
+                      title: 'Buscar e filtrar',
+                      icon: Icons.search_rounded,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: Column(
+                        children: [
+                          TextField(
+                            controller: _searchController,
+                            onChanged: _onSearchChanged,
+                            style: rdoFormFieldTextStyle(context),
+                            decoration: rdoFormFieldDecoration(
+                              context,
+                              label: 'Nome, CPF, cargo ou e-mail',
+                              hint: 'Digite para filtrar',
+                              suffixIcon: _busca.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      tooltip: 'Limpar',
+                                      icon: Icon(
+                                        Icons.close_rounded,
+                                        size: 18,
+                                        color: theme.secondaryText,
+                                      ),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        setState(() => _busca = '');
+                                        _fetchProfissionais();
+                                      },
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  key: ValueKey('f_sit_$_filterSituacao'),
+                                  initialValue: _filterSituacao,
+                                  style: rdoFormFieldTextStyle(context),
+                                  decoration: rdoFormFieldDecoration(
+                                    context,
+                                    label: 'Situação',
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(
+                                        value: '', child: Text('Todas')),
+                                    DropdownMenuItem(
+                                        value: 'ativo', child: Text('Ativo')),
+                                    DropdownMenuItem(
+                                        value: 'inativo',
+                                        child: Text('Inativo')),
+                                    DropdownMenuItem(
+                                        value: 'ferias', child: Text('Férias')),
+                                    DropdownMenuItem(
+                                        value: 'afastado',
+                                        child: Text('Afastado')),
+                                  ],
+                                  onChanged: (v) {
+                                    setState(() => _filterSituacao = v ?? '');
+                                    _fetchProfissionais();
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  key: ValueKey('f_car_$_filterCargo'),
+                                  initialValue: _filterCargo,
+                                  isExpanded: true,
+                                  style: rdoFormFieldTextStyle(context),
+                                  decoration: rdoFormFieldDecoration(
+                                    context,
+                                    label: 'Cargo / função',
+                                  ),
+                                  items: [
+                                    const DropdownMenuItem(
+                                        value: '', child: Text('Todos')),
+                                    ..._cargos.map(
+                                      (c) => DropdownMenuItem(
+                                        value: c,
+                                        child: Text(
+                                          c,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                    if (_filterCargo.isNotEmpty &&
+                                        !_cargos.contains(_filterCargo))
+                                      DropdownMenuItem(
+                                        value: _filterCargo,
+                                        child: Text(
+                                          _filterCargo,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                  ],
+                                  onChanged: (v) {
+                                    setState(() => _filterCargo = v ?? '');
+                                    _fetchProfissionais();
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_filterSituacao.isNotEmpty ||
+                              _filterCargo.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    _filterSituacao = '';
+                                    _filterCargo = '';
+                                  });
+                                  _fetchProfissionais();
+                                },
+                                icon: Icon(
+                                  Icons.filter_alt_off_rounded,
+                                  size: 16,
+                                  color: theme.secondaryText,
+                                ),
+                                label: Text(
+                                  'Limpar filtros',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.secondaryText,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    RdoSectionCard(
+                      title: 'Lista de profissionais',
+                      icon: Icons.groups_outlined,
+                      subtitle: _loading
+                          ? 'Carregando…'
+                          : _error != null
+                              ? 'Falha ao carregar'
+                              : _items.isEmpty
+                                  ? 'Nenhum profissional encontrado'
+                                  : _busca.trim().isEmpty &&
+                                          _filterSituacao.isEmpty &&
+                                          _filterCargo.isEmpty
+                                      ? 'Cadastro sincronizado'
+                                      : '$_total resultado${_total == 1 ? '' : 's'}',
+                      margin: EdgeInsets.zero,
+                      trailing:
+                          _items.isEmpty ? null : RdoContadorChip('$_total'),
+                      contentPadding: EdgeInsets.zero,
+                      child: _buildLista(theme, canCreate, canEdit, canDelete),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    key: ValueKey('f_sit_$_filterSituacao'),
-                    initialValue: _filterSituacao,
-                    decoration: InputDecoration(
-                      labelText: 'Situação',
-                      isDense: true,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: '', child: Text('Todas')),
-                      DropdownMenuItem(value: 'ativo', child: Text('Ativo')),
-                      DropdownMenuItem(value: 'inativo', child: Text('Inativo')),
-                      DropdownMenuItem(value: 'ferias', child: Text('Férias')),
-                      DropdownMenuItem(value: 'afastado', child: Text('Afastado')),
-                    ],
-                    onChanged: (v) {
-                      setState(() {
-                        _filterSituacao = v ?? '';
-                        _page = 1;
-                      });
-                      _fetchProfissionais();
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    key: ValueKey('f_car_$_filterCargo'),
-                    initialValue: _filterCargo,
-                    decoration: InputDecoration(
-                      labelText: 'Cargo / função',
-                      isDense: true,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    items: [
-                      const DropdownMenuItem(value: '', child: Text('Todos')),
-                      ..._cargos.map(
-                        (c) => DropdownMenuItem(value: c, child: Text(c)),
-                      ),
-                      if (_filterCargo.isNotEmpty && !_cargos.contains(_filterCargo))
-                        DropdownMenuItem(
-                          value: _filterCargo,
-                          child: Text(_filterCargo),
-                        ),
-                    ],
-                    onChanged: (v) {
-                      setState(() {
-                        _filterCargo = v ?? '';
-                        _page = 1;
-                      });
-                      _fetchProfissionais();
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Text('Ordenar:', style: FlutterFlowTheme.of(context).labelMedium),
-                const SizedBox(width: 8),
-                DropdownButton<String>(
-                  value: _sortBy,
-                  items: const [
-                    DropdownMenuItem(
-                        value: 'nome_completo', child: Text('Nome')),
-                    DropdownMenuItem(value: 'cpf', child: Text('CPF')),
-                    DropdownMenuItem(
-                        value: 'cargo_funcao', child: Text('Cargo')),
-                    DropdownMenuItem(
-                        value: 'valor_hora', child: Text('Valor hora')),
-                    DropdownMenuItem(
-                        value: 'valor_diaria', child: Text('Valor diária')),
-                    DropdownMenuItem(
-                        value: 'data_admissao', child: Text('Admissão')),
-                    DropdownMenuItem(value: 'situacao', child: Text('Situação')),
-                  ],
-                  onChanged: (v) {
-                    if (v == null) return;
-                    setState(() {
-                      _sortBy = v;
-                      _page = 1;
-                    });
-                    _fetchProfissionais();
-                  },
-                ),
-                IconButton(
-                  tooltip: _sortOrder == 'asc' ? 'Crescente' : 'Decrescente',
-                  onPressed: () {
-                    setState(() {
-                      _sortOrder = _sortOrder == 'asc' ? 'desc' : 'asc';
-                      _page = 1;
-                    });
-                    _fetchProfissionais();
-                  },
-                  icon: Icon(
-                    _sortOrder == 'asc' ? Icons.arrow_upward : Icons.arrow_downward,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                if (_filterSituacao.isNotEmpty || _filterCargo.isNotEmpty)
-                  ActionChip(
-                    avatar: const Icon(Icons.filter_alt_off, size: 18),
-                    label: const Text('Limpar filtros'),
-                    onPressed: () {
-                      setState(() {
-                        _filterSituacao = '';
-                        _filterCargo = '';
-                        _page = 1;
-                      });
-                      _fetchProfissionais();
-                    },
-                  ),
-                const Spacer(),
-                Chip(
-                  label: Text(
-                    '$_total ${_total == 1 ? 'profissional' : 'profissionais'}',
-                  ),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
-            ),
+            const BarraNavegacaoPrincipal(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBody(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_total == 0 && _error == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.people_outline, size: 56, color: Colors.grey.shade400),
-              const SizedBox(height: 12),
-              Text(
-                'Nenhum profissional encontrado',
-                style: FlutterFlowTheme.of(context).titleMedium,
-              ),
-              const SizedBox(height: 8),
-              FFButtonWidget(
-                onPressed: () => _openForm(context, null),
-                text: 'Novo profissional',
-                options: FFButtonOptions(
-                  color: FlutterFlowTheme.of(context).primary,
-                  textStyle: FlutterFlowTheme.of(context).titleSmall.override(
-                        color: FlutterFlowTheme.of(context).info,
-                      ),
-                ),
-              ),
-            ],
+  Widget _buildLista(
+    FlutterFlowTheme theme,
+    bool canCreate,
+    bool canEdit,
+    bool canDelete,
+  ) {
+    if (_loading && _items.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 36),
+        child: Center(
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
           ),
         ),
       );
     }
 
-    final lastPage = (_total / _perPage).ceil().clamp(1, 99999);
+    if (_error != null && _items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 28),
+        child: Column(
+          children: [
+            Icon(Icons.error_outline_rounded, size: 40, color: theme.error),
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(fontSize: 13, color: theme.error),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: _syncAndReloadList,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: Text(
+                'Tentar novamente',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: theme.primary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(160, 40),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 28, 16, 28),
+        child: Column(
+          children: [
+            Icon(
+              Icons.people_outline_rounded,
+              size: 40,
+              color: theme.secondaryText.withValues(alpha: 0.4),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _busca.trim().isEmpty &&
+                      _filterSituacao.isEmpty &&
+                      _filterCargo.isEmpty
+                  ? 'Nenhum profissional cadastrado'
+                  : 'Nenhum resultado nos filtros',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: theme.primaryText,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _busca.trim().isEmpty &&
+                      _filterSituacao.isEmpty &&
+                      _filterCargo.isEmpty
+                  ? (canCreate
+                      ? 'Cadastre o primeiro profissional.'
+                      : 'Não há profissionais disponíveis.')
+                  : 'Ajuste a busca ou limpe os filtros.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                color: theme.secondaryText,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Column(
       children: [
-        Expanded(
-          child: Scrollbar(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SingleChildScrollView(
-                child: DataTable(
-                  headingRowColor: WidgetStateProperty.all(
-                    FlutterFlowTheme.of(context).primary.withValues(alpha: 0.06),
-                  ),
-                  columns: [
-                    DataColumn(label: Text('Profissional', style: _th(context))),
-                    DataColumn(label: Text('CPF', style: _th(context))),
-                    DataColumn(label: Text('Cargo', style: _th(context))),
-                    DataColumn(label: Text('Contato', style: _th(context))),
-                    DataColumn(label: Text('Valores', style: _th(context))),
-                    DataColumn(label: Text('Admissão', style: _th(context))),
-                    DataColumn(label: Text('Situação', style: _th(context))),
-                    DataColumn(label: Text('Ações', style: _th(context))),
-                  ],
-                  rows: _items.map((m) => _buildRow(context, m)).toList(),
-                ),
-              ),
-            ),
-          ),
-        ),
-        _buildPagination(context, lastPage),
-      ],
-    );
-  }
-
-  TextStyle _th(BuildContext context) => FlutterFlowTheme.of(context).labelLarge
-      .override(fontWeight: FontWeight.w700, fontSize: 11);
-
-  DataRow _buildRow(BuildContext context, Map<String, dynamic> m) {
-    final id = m['id'];
-    final idInt = id is int ? id : int.tryParse('$id') ?? 0;
-    final situacao = '${m['situacao'] ?? ''}';
-    final chipColor = _situacaoMoColor(context, situacao);
-    final tel = '${m['telefone_formatado'] ?? '—'}';
-    final email = '${m['email'] ?? ''}';
-
-    return DataRow(
-      cells: [
-        DataCell(
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 200),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '${m['nome_completo'] ?? ''}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: FlutterFlowTheme.of(context).primary,
-                  ),
-                ),
-                if (email.isNotEmpty)
-                  Text(
-                    email,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: FlutterFlowTheme.of(context).labelSmall,
-                  ),
-              ],
-            ),
-          ),
-        ),
-        DataCell(Text('${m['cpf_formatado'] ?? '—'}',
-            style: const TextStyle(fontSize: 12))),
-        DataCell(Text('${m['cargo_funcao'] ?? '—'}')),
-        DataCell(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (tel != '—')
-                Text(tel, style: const TextStyle(fontSize: 12)),
-              if (tel == '—' && email.isEmpty)
-                Text(
-                  'Sem contato',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: FlutterFlowTheme.of(context).secondaryText,
-                  ),
-                ),
-            ],
-          ),
-        ),
-        DataCell(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (_moDouble(m['valor_hora']) > 0)
-                Text('H: ${m['valor_hora_formatado']}/h',
-                    style: const TextStyle(fontSize: 12)),
-              if (_moDouble(m['valor_diaria']) > 0)
-                Text('D: ${m['valor_diaria_formatado']}/dia',
-                    style: const TextStyle(fontSize: 12)),
-              if (_moDouble(m['valor_hora']) <= 0 &&
-                  _moDouble(m['valor_diaria']) <= 0)
-                Text(
-                  '—',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: FlutterFlowTheme.of(context).secondaryText,
-                  ),
-                ),
-            ],
-          ),
-        ),
-        DataCell(Text('${m['data_admissao_formatada'] ?? '—'}',
-            style: const TextStyle(fontSize: 12))),
-        DataCell(
-          Chip(
-            label: Text(
-              '${m['status_texto'] ?? _statusMoLabel(situacao)}',
-              style: const TextStyle(fontSize: 11, color: Colors.white),
-            ),
-            padding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            backgroundColor: chipColor.withValues(alpha: 0.9),
-          ),
-        ),
-        DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                tooltip: 'Ver',
-                icon: Icon(Icons.visibility_outlined,
-                    color: FlutterFlowTheme.of(context).primary, size: 20),
-                onPressed: () => _showView(context, m),
-              ),
-              IconButton(
-                tooltip: 'Editar',
-                icon: Icon(Icons.edit_outlined,
-                    color: Colors.orange.shade700, size: 20),
-                onPressed: () => _openForm(context, m),
-              ),
-              PopupMenuButton<String>(
-                onSelected: (v) {
-                  if (v == 'ativo' ||
-                      v == 'ferias' ||
-                      v == 'afastado' ||
-                      v == 'inativo') {
-                    _patchSituacao(idInt, v);
-                  } else if (v == 'del') {
-                    _confirmDelete(context, idInt);
-                  }
-                },
-                itemBuilder: (c) => [
-                  const PopupMenuItem(value: 'ativo', child: Text('Ativar')),
-                  const PopupMenuItem(
-                      value: 'ferias', child: Text('Colocar em férias')),
-                  const PopupMenuItem(value: 'afastado', child: Text('Afastar')),
-                  const PopupMenuItem(value: 'inativo', child: Text('Inativar')),
-                  const PopupMenuDivider(),
-                  PopupMenuItem(
-                    value: 'del',
-                    child: Text('Excluir',
-                        style:
-                            TextStyle(color: FlutterFlowTheme.of(context).error)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPagination(BuildContext context, int lastPage) {
-    return Material(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        child: Row(
-          children: [
-            DropdownButton<int>(
-              value: _perPage,
-              items: const [10, 25, 50]
-                  .map((e) => DropdownMenuItem(value: e, child: Text('$e / página')))
-                  .toList(),
-              onChanged: (v) {
-                if (v == null) return;
-                setState(() {
-                  _perPage = v;
-                  _page = 1;
-                });
-                _fetchProfissionais();
-              },
-            ),
-            const Spacer(),
-            IconButton(
-              onPressed: _page > 1
-                  ? () {
-                      setState(() => _page--);
-                      _fetchProfissionais();
-                    }
-                  : null,
-              icon: const Icon(Icons.chevron_left),
-            ),
-            Text('Página $_page / $lastPage'),
-            IconButton(
-              onPressed: _page < lastPage
-                  ? () {
-                      setState(() => _page++);
-                      _fetchProfissionais();
-                    }
-                  : null,
-              icon: const Icon(Icons.chevron_right),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showView(BuildContext context, Map<String, dynamic> m) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('${m['nome_completo']}'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _kv('CPF', '${m['cpf_formatado'] ?? '—'}'),
-              _kv('RG', '${m['rg'] ?? '—'}'),
-              _kv('Cargo', '${m['cargo_funcao'] ?? '—'}'),
-              _kv('Telefone', '${m['telefone_formatado'] ?? '—'}'),
-              _kv('E-mail', '${m['email'] ?? '—'}'),
-              _kv('Valor hora', '${m['valor_hora_formatado'] ?? '—'}'),
-              _kv('Valor diária', '${m['valor_diaria_formatado'] ?? '—'}'),
-              _kv('Admissão', '${m['data_admissao_formatada'] ?? '—'}'),
-              _kv('Situação', '${m['status_texto'] ?? m['situacao']}'),
-              _kv('Criado em', _formatDateTimeBrFromIso(m['created_at'])),
-              _kv('Atualizado em', _formatDateTimeBrFromIso(m['updated_at'])),
-              if ('${m['observacoes'] ?? ''}'.isNotEmpty)
-                _kv('Observações', '${m['observacoes']}'),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Fechar'),
-          ),
+        for (var i = 0; i < _items.length; i++) ...[
+          if (i > 0)
+            Divider(height: 1, thickness: 1, color: theme.alternate),
+          _buildItem(theme, _items[i], canEdit, canDelete),
         ],
+      ],
+    );
+  }
+
+  Widget _buildItem(
+    FlutterFlowTheme theme,
+    Map<String, dynamic> m,
+    bool canEdit,
+    bool canDelete,
+  ) {
+    final nome = valueOrDefault<String>(
+        m['nome_completo']?.toString(), 'Profissional sem nome');
+    final cargo = '${m['cargo_funcao'] ?? ''}'.trim();
+    final cpf = '${m['cpf_formatado'] ?? '—'}';
+    final tel = '${m['telefone_formatado'] ?? '—'}';
+    final situacao = '${m['situacao'] ?? ''}';
+    final statusLabel = '${m['status_texto'] ?? _statusMoLabel(situacao)}';
+    final statusColor = _situacaoMoColor(situacao);
+    final sid = _serverId(m);
+    final temAcoes = canEdit || canDelete;
+
+    final meta = [
+      if (cargo.isNotEmpty) cargo,
+      if (cpf != '—') cpf,
+      if (tel != '—') tel,
+    ].join(' · ');
+
+    return Material(
+      color: theme.secondaryBackground,
+      child: InkWell(
+        onTap: canEdit ? () => _openForm(m) : null,
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(width: 3, color: statusColor),
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(12, 10, temAcoes ? 4 : 12, 10),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: theme.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.person_rounded,
+                          size: 18,
+                          color: theme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    nome,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: theme.primaryText,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: statusColor.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    statusLabel,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: statusColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (meta.isNotEmpty) ...[
+                              const SizedBox(height: 3),
+                              Text(
+                                meta,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  color: theme.secondaryText,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (canEdit)
+                        IconButton(
+                          tooltip: 'Editar',
+                          onPressed: () => _openForm(m),
+                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints(
+                            minWidth: 36,
+                            minHeight: 36,
+                          ),
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            Icons.edit_outlined,
+                            size: 18,
+                            color: theme.secondaryText,
+                          ),
+                        ),
+                      if (canDelete)
+                        IconButton(
+                          tooltip: 'Excluir',
+                          onPressed: () => _confirmDelete(sid),
+                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints(
+                            minWidth: 36,
+                            minHeight: 36,
+                          ),
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            Icons.delete_outline_rounded,
+                            size: 18,
+                            color: theme.error,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _kv(String k, String v) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 110,
-              child: Text(k,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-            ),
-            Expanded(child: Text(v, style: const TextStyle(fontSize: 13))),
-          ],
-        ),
+  Future<void> _openForm(Map<String, dynamic>? existing) async {
+    if (existing == null) {
+      if (!MembershipAccess.canPermission('create_mao_obra')) {
+        MembershipAccess.showDenied(
+          context,
+          'Sem permissão para criar mão de obra.',
+        );
+        return;
+      }
+    } else if (!MembershipAccess.canPermission('edit_mao_obra')) {
+      MembershipAccess.showDenied(
+        context,
+        'Sem permissão para editar mão de obra.',
       );
+      return;
+    }
 
-  Future<void> _openForm(BuildContext context, Map<String, dynamic>? existing) async {
-    final result = await showDialog<Map<String, dynamic>>(
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _ProfissionalFormDialog(
-        existing: existing,
-        funcoes: _funcoesMaoObra,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(ctx).bottom,
+        ),
+        child: _ProfissionalFormSheet(
+          existing: existing,
+          funcoes: _funcoesMaoObra,
+        ),
       ),
     );
 
-    if (result == null || !mounted || !context.mounted) return;
+    if (result == null || !mounted) return;
 
     final nomeVal = (result['nome_completo'] as String?)?.trim() ?? '';
     final cpfVal = (result['cpf'] as String?)?.trim() ?? '';
@@ -1190,15 +1238,15 @@ class _MaoObraCadastrosWidgetState extends State<MaoObraCadastrosWidget> {
     if (token.isEmpty) return;
 
     if (existing == null) {
-      final r = await MaoObraProfissionalCreateCall.call(token: token, body: body);
+      final r =
+          await MaoObraProfissionalCreateCall.call(token: token, body: body);
       if (r.succeeded) {
         await _afterMutation('Profissional cadastrado.');
       } else {
         _showApiError(r);
       }
     } else {
-      final id = existing['id'];
-      final idInt = id is int ? id : int.tryParse('$id') ?? 0;
+      final idInt = _serverId(existing);
       if (idInt <= 0) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1238,7 +1286,14 @@ class _MaoObraCadastrosWidgetState extends State<MaoObraCadastrosWidget> {
     }
   }
 
-  Future<void> _patchSituacao(int id, String situacao) async {
+  Future<void> _confirmDelete(int id) async {
+    if (!MembershipAccess.canPermission('delete_mao_obra')) {
+      MembershipAccess.showDenied(
+        context,
+        'Sem permissão para excluir mão de obra.',
+      );
+      return;
+    }
     if (id <= 0) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1251,45 +1306,42 @@ class _MaoObraCadastrosWidgetState extends State<MaoObraCadastrosWidget> {
       }
       return;
     }
-    final token = FFAppState().UserToken.trim();
-    if (token.isEmpty) return;
-    final r = await MaoObraProfissionalPatchSituacaoCall.call(
-      token: token,
-      id: id,
-      situacao: situacao,
-    );
-    if (r.succeeded) {
-      await _afterMutation('Situação atualizada.');
-    } else {
-      _showApiError(r);
-    }
-  }
 
-  Future<void> _confirmDelete(BuildContext context, int id) async {
-    if (id <= 0) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Sincronize (ícone atualizar) para obter o ID do servidor neste aparelho.',
-            ),
-          ),
-        );
-      }
-      return;
-    }
+    final theme = FlutterFlowTheme.of(context);
     final go = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Excluir profissional?'),
-        content: const Text('Esta ação não pode ser desfeita.'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text(
+          'Excluir profissional?',
+          style: GoogleFonts.inter(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: theme.primaryText,
+          ),
+        ),
+        content: Text(
+          'Esta ação não pode ser desfeita.',
+          style: GoogleFonts.inter(fontSize: 13.5, color: theme.secondaryText),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
+            child: Text(
+              'Cancelar',
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w600,
+                color: theme.secondaryText,
+              ),
+            ),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.error,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Excluir'),
           ),
@@ -1307,17 +1359,17 @@ class _MaoObraCadastrosWidgetState extends State<MaoObraCadastrosWidget> {
   }
 }
 
-class _ProfissionalFormDialog extends StatefulWidget {
-  const _ProfissionalFormDialog({this.existing, required this.funcoes});
+class _ProfissionalFormSheet extends StatefulWidget {
+  const _ProfissionalFormSheet({this.existing, required this.funcoes});
 
   final Map<String, dynamic>? existing;
   final List<String> funcoes;
 
   @override
-  State<_ProfissionalFormDialog> createState() => _ProfissionalFormDialogState();
+  State<_ProfissionalFormSheet> createState() => _ProfissionalFormSheetState();
 }
 
-class _ProfissionalFormDialogState extends State<_ProfissionalFormDialog> {
+class _ProfissionalFormSheetState extends State<_ProfissionalFormSheet> {
   late final TextEditingController nomeCompleto;
   late final TextEditingController cpf;
   late final TextEditingController rg;
@@ -1370,7 +1422,8 @@ class _ProfissionalFormDialogState extends State<_ProfissionalFormDialog> {
     dataAdmissao = TextEditingController(
       text: _isoDateToBrField(e?['data_admissao']),
     );
-    observacoes = TextEditingController(text: e?['observacoes']?.toString() ?? '');
+    observacoes =
+        TextEditingController(text: e?['observacoes']?.toString() ?? '');
     situacao = '${e?['situacao'] ?? 'ativo'}';
 
     _valorHoraFocus = FocusNode();
@@ -1422,137 +1475,301 @@ class _ProfissionalFormDialogState extends State<_ProfissionalFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.existing == null
-          ? 'Novo profissional'
-          : 'Editar profissional'),
-      content: SizedBox(
-        width: 440,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nomeCompleto,
-                decoration: const InputDecoration(labelText: 'Nome completo *'),
-              ),
-              TextField(
-                controller: cpf,
-                decoration: const InputDecoration(labelText: 'CPF'),
-              ),
-              TextField(
-                controller: rg,
-                decoration: const InputDecoration(labelText: 'RG'),
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: widget.funcoes.contains(cargoFuncao.text.trim())
-                    ? cargoFuncao.text.trim()
-                    : null,
-                decoration: const InputDecoration(labelText: 'Função predefinida'),
-                items: [
-                  const DropdownMenuItem<String>(
-                    value: '',
-                    child: Text('Selecionar (opcional)'),
-                  ),
-                  ...widget.funcoes.map(
-                    (f) => DropdownMenuItem<String>(
-                      value: f,
-                      child: Text(f),
+    final theme = FlutterFlowTheme.of(context);
+    final cargoAtual = cargoFuncao.text.trim();
+    final funcaoSelecionada =
+        widget.funcoes.contains(cargoAtual) ? cargoAtual : '';
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.92,
+      ),
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      decoration: BoxDecoration(
+        color: theme.secondaryBackground,
+        borderRadius: BorderRadius.circular(kRdoRadius),
+        border: Border.all(color: theme.alternate),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 8, 0),
+            child: Row(
+              children: [
+                Icon(Icons.person_outline_rounded,
+                    size: 18, color: theme.secondaryText),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.existing == null
+                        ? 'Novo profissional'
+                        : 'Editar profissional',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: theme.primaryText,
                     ),
                   ),
-                ],
-                onChanged: (v) {
-                  if (v == null || v.isEmpty) return;
-                  _setMaskedValue(cargoFuncao, v);
-                },
-              ),
-              TextField(
-                controller: cargoFuncao,
-                decoration:
-                    const InputDecoration(labelText: 'Cargo / função *'),
-              ),
-              TextField(
-                controller: telefone,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Telefone'),
-              ),
-              TextField(
-                controller: email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'E-mail'),
-              ),
-              TextField(
-                controller: valorHora,
-                focusNode: _valorHoraFocus,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,R$\s]')),
-                ],
-                decoration: const InputDecoration(
-                  labelText: 'Valor hora',
-                  hintText: r'R$ 0,00',
                 ),
-              ),
-              TextField(
-                controller: valorDiaria,
-                focusNode: _valorDiariaFocus,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,R$\s]')),
-                ],
-                decoration: const InputDecoration(
-                  labelText: 'Valor diária',
-                  hintText: r'R$ 0,00',
+                IconButton(
+                  tooltip: 'Fechar',
+                  onPressed: () => Navigator.pop(context),
+                  icon: Icon(Icons.close_rounded,
+                      size: 20, color: theme.secondaryText),
                 ),
-              ),
-              TextField(
-                controller: dataAdmissao,
-                focusNode: _dataAdmissaoFocus,
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                ],
-                onChanged: (v) => _setMaskedValue(
-                  dataAdmissao,
-                  _formatDateBr(v),
-                ),
-                decoration: const InputDecoration(
-                  labelText: 'Data de admissão',
-                  hintText: 'dd/mm/aaaa',
-                ),
-              ),
-              TextField(
-                controller: observacoes,
-                decoration: const InputDecoration(labelText: 'Observações'),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                key: ValueKey(situacao),
-                initialValue: situacao,
-                decoration: const InputDecoration(labelText: 'Situação'),
-                items: const [
-                  DropdownMenuItem(value: 'ativo', child: Text('Ativo')),
-                  DropdownMenuItem(value: 'inativo', child: Text('Inativo')),
-                  DropdownMenuItem(value: 'ferias', child: Text('Férias')),
-                  DropdownMenuItem(value: 'afastado', child: Text('Afastado')),
-                ],
-                onChanged: (v) => setState(() => situacao = v ?? 'ativo'),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: nomeCompleto,
+                    style: rdoFormFieldTextStyle(context),
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Nome completo *',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: cpf,
+                          style: rdoFormFieldTextStyle(context),
+                          keyboardType: TextInputType.number,
+                          decoration: rdoFormFieldDecoration(
+                            context,
+                            label: 'CPF',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: rg,
+                          style: rdoFormFieldTextStyle(context),
+                          decoration: rdoFormFieldDecoration(
+                            context,
+                            label: 'RG',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (widget.funcoes.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      initialValue: funcaoSelecionada,
+                      isExpanded: true,
+                      style: rdoFormFieldTextStyle(context),
+                      decoration: rdoFormFieldDecoration(
+                        context,
+                        label: 'Função predefinida',
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: '',
+                          child: Text('Selecionar (opcional)'),
+                        ),
+                        ...widget.funcoes.map(
+                          (f) => DropdownMenuItem<String>(
+                            value: f,
+                            child: Text(f, overflow: TextOverflow.ellipsis),
+                          ),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v == null || v.isEmpty) return;
+                        setState(() => _setMaskedValue(cargoFuncao, v));
+                      },
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: cargoFuncao,
+                    style: rdoFormFieldTextStyle(context),
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Cargo / função *',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: telefone,
+                          style: rdoFormFieldTextStyle(context),
+                          keyboardType: TextInputType.phone,
+                          decoration: rdoFormFieldDecoration(
+                            context,
+                            label: 'Telefone',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: email,
+                          style: rdoFormFieldTextStyle(context),
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: rdoFormFieldDecoration(
+                            context,
+                            label: 'E-mail',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: valorHora,
+                          focusNode: _valorHoraFocus,
+                          style: rdoFormFieldTextStyle(context),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9.,R$\s]')),
+                          ],
+                          decoration: rdoFormFieldDecoration(
+                            context,
+                            label: 'Valor hora',
+                            hint: r'R$ 0,00',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: valorDiaria,
+                          focusNode: _valorDiariaFocus,
+                          style: rdoFormFieldTextStyle(context),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9.,R$\s]')),
+                          ],
+                          decoration: rdoFormFieldDecoration(
+                            context,
+                            label: 'Valor diária',
+                            hint: r'R$ 0,00',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: dataAdmissao,
+                    focusNode: _dataAdmissaoFocus,
+                    style: rdoFormFieldTextStyle(context),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
+                    onChanged: (v) => _setMaskedValue(
+                      dataAdmissao,
+                      _formatDateBr(v),
+                    ),
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Data de admissão',
+                      hint: 'dd/mm/aaaa',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: observacoes,
+                    style: rdoFormFieldTextStyle(context),
+                    maxLines: 2,
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Observações',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey(situacao),
+                    initialValue: situacao,
+                    style: rdoFormFieldTextStyle(context),
+                    decoration: rdoFormFieldDecoration(
+                      context,
+                      label: 'Situação',
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'ativo', child: Text('Ativo')),
+                      DropdownMenuItem(
+                          value: 'inativo', child: Text('Inativo')),
+                      DropdownMenuItem(value: 'ferias', child: Text('Férias')),
+                      DropdownMenuItem(
+                          value: 'afastado', child: Text('Afastado')),
+                    ],
+                    onChanged: (v) => setState(() => situacao = v ?? 'ativo'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: theme.secondaryText,
+                      side: BorderSide(color: theme.alternate),
+                      minimumSize: const Size(0, 42),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text(
+                      'Cancelar',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _salvar,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: theme.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(0, 42),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text(
+                      'Salvar',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: _salvar,
-          child: const Text('Salvar'),
-        ),
-      ],
     );
   }
 }

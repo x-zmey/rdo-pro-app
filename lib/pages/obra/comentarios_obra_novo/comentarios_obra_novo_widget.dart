@@ -1,10 +1,9 @@
 import '/auth/membership_access.dart';
 import '/backend/sqlite/sqlite_manager.dart';
 import '/componentes/navegacao/barra_navegacao_principal.dart';
-import '/flutter_flow/flutter_flow_icon_button.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import '/index.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -27,11 +26,6 @@ String _formatarDataHoraComentario(String? raw) {
   return DateFormat('dd/MM/yyyy HH:mm', 'pt_BR').format(dt.toLocal());
 }
 
-/// crie para mim uma página chamada comentários, nela vai ter todos os
-/// comentários de uma obra, eu quero que em cada item da listagem tenha, quem
-/// escreveu o comentário, a data dela oo numero do relatório de rdo que foi
-/// feito esse comentário, o texto dele e tbm precisa ter um botão de voltar a
-/// página anterior
 class ComentariosObraNovoWidget extends StatefulWidget {
   const ComentariosObraNovoWidget({
     super.key,
@@ -52,13 +46,17 @@ class ComentariosObraNovoWidget extends StatefulWidget {
 
 class _ComentariosObraNovoWidgetState extends State<ComentariosObraNovoWidget> {
   late ComentariosObraNovoModel _model;
-
   final scaffoldKey = GlobalKey<ScaffoldState>();
+
+  String _obraNome = '';
+  late Future<List<CarregaComentariosObraRow>> _comentariosFuture;
 
   @override
   void initState() {
     super.initState();
     _model = createModel(context, () => ComentariosObraNovoModel());
+    _comentariosFuture = _carregarComentarios();
+    _carregarNomeObra();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!MembershipAccess.canPermission('view_comentarios')) {
         MembershipAccess.showDenied(
@@ -75,118 +73,73 @@ class _ComentariosObraNovoWidgetState extends State<ComentariosObraNovoWidget> {
   @override
   void dispose() {
     _model.dispose();
-
     super.dispose();
   }
 
-  Widget _buildComentarioObraItem(
-    BuildContext context,
-    CarregaComentariosObraRow row,
-  ) {
-    final theme = FlutterFlowTheme.of(context);
-    final nomeAutor = valueOrDefault<String>(row.autorNome, 'Usuário');
-    final rdoNum = row.relatorioNumero;
-    final dataHora = _formatarDataHoraComentario(row.createdAt);
-    final texto = valueOrDefault<String>(row.texto, 'Sem texto');
-    final borderColor = theme.primaryText.withValues(alpha: 0.06);
+  Future<List<CarregaComentariosObraRow>> _carregarComentarios() {
+    final u = widget.obraUuid?.trim();
+    if (u == null || u.isEmpty) {
+      return Future.value(const []);
+    }
+    return SQLiteManager.instance.carregaComentariosObra(obraUuid: u);
+  }
 
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: theme.secondaryBackground,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(9, 6, 9, 6),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    'RDO #${rdoNum ?? '—'}',
-                    style: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: theme.primary,
-                      height: 1,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Icon(
-                  Icons.person_outline_rounded,
-                  size: 11,
-                  color: theme.secondaryText,
-                ),
-                const SizedBox(width: 3),
-                Flexible(
-                  child: Text(
-                    nomeAutor,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: theme.secondaryText,
-                      height: 1.1,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    dataHora,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.end,
-                    style: GoogleFonts.inter(
-                      fontSize: 9.5,
-                      color: theme.secondaryText,
-                      height: 1.1,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              texto,
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                height: 1.25,
-                color: theme.primaryText,
-              ),
-            ),
-          ],
+  Future<void> _carregarNomeObra() async {
+    final uuid = (widget.obraUuid ?? '').trim();
+    if (uuid.isEmpty) return;
+    try {
+      final rows = await SQLiteManager.instance.obraDetalhes(
+        uuid: uuid,
+        userId: FFAppState().creatorId,
+        accountOwnerUuid: FFAppState().creatorUuid,
+      );
+      final nome = rows.firstOrNull?.nome.trim() ?? '';
+      if (!mounted || nome.isEmpty) return;
+      setState(() => _obraNome = nome);
+    } catch (_) {}
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _comentariosFuture = _carregarComentarios();
+    });
+    await _comentariosFuture;
+  }
+
+  void _voltarParaDetalhes() {
+    context.pushNamed(
+      DetalhesObraWidget.routeName,
+      queryParameters: {
+        'obraId': serializeParam(widget.obraId, ParamType.int),
+        'obraUuid': serializeParam(widget.obraUuid, ParamType.String),
+      }.withoutNulls,
+      extra: <String, dynamic>{
+        '__transition_info__': const TransitionInfo(
+          hasTransition: true,
+          transitionType: PageTransitionType.rightToLeft,
         ),
-      ),
+      },
     );
+  }
+
+  String _iniciais(String nome) {
+    final partes = nome.trim().split(RegExp(r'\s+'));
+    if (partes.isEmpty || partes.first.isEmpty) return '?';
+    if (partes.length == 1) {
+      return partes.first.length >= 2
+          ? partes.first.substring(0, 2).toUpperCase()
+          : partes.first.toUpperCase();
+    }
+    final a = partes.first[0];
+    final b = partes.last[0];
+    return ('$a$b').toUpperCase();
   }
 
   @override
   Widget build(BuildContext context) {
+    context.watch<FFAppState>();
+    final theme = FlutterFlowTheme.of(context);
+
     return GestureDetector(
       onTap: () {
         FocusScope.of(context).unfocus();
@@ -194,127 +147,289 @@ class _ComentariosObraNovoWidgetState extends State<ComentariosObraNovoWidget> {
       },
       child: Scaffold(
         key: scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
+        backgroundColor: theme.primaryBackground,
         appBar: AppBar(
-          backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
-          automaticallyImplyLeading: false,
-          toolbarHeight: 52.0,
-          leading: FlutterFlowIconButton(
-            borderColor: Colors.transparent,
-            borderRadius: 16.0,
-            borderWidth: 1.0,
-            buttonSize: 36.0,
-            icon: Icon(
-              Icons.arrow_back_rounded,
-              color: FlutterFlowTheme.of(context).primaryText,
-              size: 20.0,
-            ),
-            onPressed: () async {
-              context.pushNamed(
-                DetalhesObraWidget.routeName,
-                queryParameters: {
-                  'obraId': serializeParam(
-                    widget!.obraId,
-                    ParamType.int,
-                  ),
-                  'obraUuid': serializeParam(
-                    widget!.obraUuid,
-                    ParamType.String,
-                  ),
-                }.withoutNulls,
-                extra: <String, dynamic>{
-                  '__transition_info__': TransitionInfo(
-                    hasTransition: true,
-                    transitionType: PageTransitionType.rightToLeft,
-                  ),
-                },
-              );
-            },
-          ),
-          title: Text(
-            'Comentários da Obra',
-            style: FlutterFlowTheme.of(context).headlineMedium.override(
-                  font: GoogleFonts.interTight(
-                    fontWeight: FontWeight.w600,
-                    fontStyle:
-                        FlutterFlowTheme.of(context).headlineMedium.fontStyle,
-                  ),
-                  fontSize: 18.0,
-                  letterSpacing: 0.0,
-                  fontWeight: FontWeight.w600,
-                  fontStyle:
-                      FlutterFlowTheme.of(context).headlineMedium.fontStyle,
-                ),
-          ),
-          actions: [],
+          backgroundColor: theme.primary,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
           centerTitle: false,
-          elevation: 1.0,
-        ),
-        body: SafeArea(
-          top: true,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                width: double.infinity,
-                height: 1.0,
-                decoration: BoxDecoration(
-                  color: FlutterFlowTheme.of(context).alternate,
-                ),
-              ),
-              Expanded(
-                child: FutureBuilder<List<CarregaComentariosObraRow>>(
-                  future: SQLiteManager.instance.carregaComentariosObra(
-                    obraUuid: widget!.obraUuid!,
+          titleSpacing: 0,
+          toolbarHeight: 58,
+          iconTheme: const IconThemeData(color: Colors.white),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: _voltarParaDetalhes,
+          ),
+          title: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Comentários',
+                  style: GoogleFonts.interTight(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
                   ),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
-                      return Center(
-                        child: LinearProgressIndicator(
-                          color: FlutterFlowTheme.of(context).primary,
-                        ),
-                      );
-                    }
-                    final listViewCarregaComentariosObraRowList =
-                        snapshot.data!;
-
-                    if (listViewCarregaComentariosObraRowList.isEmpty) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24.0),
-                          child: Text(
-                            'Nenhum comentário nesta obra.',
-                            textAlign: TextAlign.center,
-                            style: FlutterFlowTheme.of(context).bodyLarge,
-                          ),
-                        ),
-                      );
-                    }
-
-                    return ListView.separated(
-                      padding: const EdgeInsetsDirectional.fromSTEB(
-                        12.0,
-                        12.0,
-                        12.0,
-                        kBarraNavegacaoPrincipalReservaScroll,
-                      ),
-                      scrollDirection: Axis.vertical,
-                      itemCount: listViewCarregaComentariosObraRowList.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 5),
-                      itemBuilder: (context, listViewIndex) {
-                        return _buildComentarioObraItem(
-                          context,
-                          listViewCarregaComentariosObraRowList[listViewIndex],
-                        );
-                      },
-                    );
-                  },
                 ),
+                Text(
+                  _obraNome.isEmpty
+                      ? 'Registrados nos RDOs da obra'
+                      : _obraNome,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            IconButton(
+              tooltip: 'Atualizar',
+              icon: const Icon(Icons.refresh_rounded,
+                  color: Colors.white, size: 21),
+              onPressed: _refresh,
+            ),
+            const SizedBox(width: 4),
+          ],
+        ),
+        body: Column(
+          children: [
+            Expanded(child: _body(theme)),
+            const BarraNavegacaoPrincipal(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _body(FlutterFlowTheme theme) {
+    final u = widget.obraUuid?.trim();
+    if (u == null || u.isEmpty) {
+      return Center(
+        child: Text(
+          'Obra sem identificador.',
+          style: GoogleFonts.inter(fontSize: 13, color: theme.secondaryText),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      color: theme.primary,
+      onRefresh: _refresh,
+      child: FutureBuilder<List<CarregaComentariosObraRow>>(
+        future: _comentariosFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: const [
+                SizedBox(height: 120),
+                Center(
+                  child: SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                ),
+              ],
+            );
+          }
+
+          final list = snapshot.data ?? const <CarregaComentariosObraRow>[];
+
+          return ListView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            padding: const EdgeInsets.fromLTRB(
+              16,
+              10,
+              16,
+              kBarraNavegacaoPrincipalReservaScroll,
+            ),
+            children: [
+              RdoSectionCard(
+                title: 'Comentários da obra',
+                icon: Icons.chat_bubble_outline_rounded,
+                subtitle: list.isEmpty
+                    ? 'Nenhum registro encontrado'
+                    : 'Lançados nos relatórios diários',
+                margin: EdgeInsets.zero,
+                trailing:
+                    list.isEmpty ? null : RdoContadorChip('${list.length}'),
+                contentPadding: EdgeInsets.zero,
+                child: list.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 28, 16, 28),
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.chat_bubble_outline_rounded,
+                              size: 40,
+                              color:
+                                  theme.secondaryText.withValues(alpha: 0.4),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Nenhum comentário nesta obra',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: theme.primaryText,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Os comentários aparecem aqui após serem lançados nos RDOs.',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                color: theme.secondaryText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : Column(
+                        children: [
+                          for (var i = 0; i < list.length; i++) ...[
+                            if (i > 0)
+                              Divider(
+                                height: 1,
+                                thickness: 1,
+                                color: theme.alternate,
+                              ),
+                            _buildComentarioItem(theme, list[i]),
+                          ],
+                        ],
+                      ),
               ),
             ],
-          ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildComentarioItem(
+    FlutterFlowTheme theme,
+    CarregaComentariosObraRow row,
+  ) {
+    final nomeAutor = valueOrDefault<String>(row.autorNome, 'Usuário');
+    final rdoNum = row.relatorioNumero;
+    final dataHora = _formatarDataHoraComentario(row.createdAt);
+    final texto = valueOrDefault<String>(row.texto, 'Sem texto');
+
+    return Material(
+      color: theme.secondaryBackground,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(width: 3, color: theme.primary),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundColor:
+                              theme.primary.withValues(alpha: 0.12),
+                          child: Text(
+                            _iniciais(nomeAutor),
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: theme.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                nomeAutor,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: theme.primaryText,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                dataHora,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: theme.secondaryText,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.primary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            'RDO #${rdoNum ?? '—'}',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: theme.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(10, 9, 10, 9),
+                      decoration: BoxDecoration(
+                        color:
+                            theme.primaryBackground.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: theme.alternate),
+                      ),
+                      child: Text(
+                        texto,
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          height: 1.35,
+                          fontWeight: FontWeight.w500,
+                          color: theme.primaryText,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-        bottomNavigationBar: const BarraNavegacaoPrincipal(),
       ),
     );
   }

@@ -1,6 +1,6 @@
 import '/backend/sqlite/sqlite_manager.dart';
 import '/componentes/relatorios/relatorio_list_item_widget.dart';
-import '/flutter_flow/flutter_flow_icon_button.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
@@ -42,6 +42,7 @@ class _RelatoriosObraWidgetState extends State<RelatoriosObraWidget>
   bool _relatoriosObraInitialLoad = true;
   bool _relatoriosObraLoadMore = false;
   Object? _relatoriosObraError;
+  String _obraNome = '';
 
   @override
   void initState() {
@@ -51,12 +52,28 @@ class _RelatoriosObraWidgetState extends State<RelatoriosObraWidget>
       vsync: this,
       duration: const Duration(milliseconds: 1900),
     )..repeat();
+    _carregarNomeObra();
     _carregarRelatoriosInicial();
+  }
+
+  Future<void> _carregarNomeObra() async {
+    final uuid = (widget.obraUuid ?? '').trim();
+    if (uuid.isEmpty) return;
+    try {
+      final rows = await SQLiteManager.instance.obraDetalhes(
+        uuid: uuid,
+        userId: FFAppState().creatorId,
+        accountOwnerUuid: FFAppState().creatorUuid,
+      );
+      final nome = rows.firstOrNull?.nome.trim() ?? '';
+      if (!mounted || nome.isEmpty) return;
+      setState(() => _obraNome = nome);
+    } catch (_) {}
   }
 
   Future<List<RelatoriosObraRow>> _queryRelatoriosPage(int offset) {
     return SQLiteManager.instance.relatoriosObra(
-      obraUuid: widget!.obraUuid!,
+      obraUuid: widget.obraUuid!,
       accountOwnerUuid: FFAppState().creatorUuid,
       limit: _kRelatoriosPageSize + 1,
       offset: offset,
@@ -96,14 +113,8 @@ class _RelatoriosObraWidgetState extends State<RelatoriosObraWidget>
     await context.pushNamed(
       RelatorioDetalhesWidget.routeName,
       queryParameters: {
-        'id': serializeParam(
-          row.id,
-          ParamType.int,
-        ),
-        'uuid': serializeParam(
-          row.uuid,
-          ParamType.String,
-        ),
+        'id': serializeParam(row.id, ParamType.int),
+        'uuid': serializeParam(row.uuid, ParamType.String),
       }.withoutNulls,
     );
     if (!mounted) return;
@@ -114,17 +125,11 @@ class _RelatoriosObraWidgetState extends State<RelatoriosObraWidget>
     await context.pushNamed(
       ObraAddRelatorioWidget.routeName,
       queryParameters: {
-        'id': serializeParam(
-          row.id,
-          ParamType.int,
-        ),
-        'uuid': serializeParam(
-          row.uuid,
-          ParamType.String,
-        ),
+        'id': serializeParam(row.id, ParamType.int),
+        'uuid': serializeParam(row.uuid, ParamType.String),
       }.withoutNulls,
       extra: <String, dynamic>{
-        '__transition_info__': TransitionInfo(
+        '__transition_info__': const TransitionInfo(
           hasTransition: true,
           transitionType: PageTransitionType.rightToLeft,
         ),
@@ -135,20 +140,12 @@ class _RelatoriosObraWidgetState extends State<RelatoriosObraWidget>
   }
 
   Future<void> _carregarMaisRelatorios() async {
-    if (_relatoriosObraLoadMore || !_relatoriosObraHasMore) {
-      return;
-    }
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _relatoriosObraLoadMore = true;
-    });
+    if (_relatoriosObraLoadMore || !_relatoriosObraHasMore) return;
+    if (!mounted) return;
+    setState(() => _relatoriosObraLoadMore = true);
     try {
       final page = await _queryRelatoriosPage(_relatoriosObraOffset);
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       setState(() {
         _relatoriosObraHasMore = page.length > _kRelatoriosPageSize;
         final toAdd = _relatoriosObraHasMore
@@ -158,89 +155,73 @@ class _RelatoriosObraWidgetState extends State<RelatoriosObraWidget>
         _relatoriosObraOffset += toAdd.length;
         _relatoriosObraLoadMore = false;
       });
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _relatoriosObraLoadMore = false;
-      });
-      if (!context.mounted) {
-        return;
-      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _relatoriosObraLoadMore = false);
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             'Não foi possível carregar mais itens.',
-            style: TextStyle(
-              color: FlutterFlowTheme.of(context).info,
-            ),
+            style: TextStyle(color: FlutterFlowTheme.of(context).info),
           ),
         ),
       );
     }
   }
 
-  Widget _buildCarregarMaisButton(BuildContext context) {
-    final t = FlutterFlowTheme.of(context);
-    return Padding(
-      padding: const EdgeInsetsDirectional.fromSTEB(0, 14, 0, 10),
-      child: Align(
-        alignment: AlignmentDirectional.center,
-        child: _relatoriosObraLoadMore
-            ? Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: t.primary.withValues(alpha: 0.45),
-                  ),
-                ),
-              )
-            : TextButton(
-                onPressed: _carregarMaisRelatorios,
-                style: TextButton.styleFrom(
-                  foregroundColor: t.secondaryText.withValues(alpha: 0.75),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  minimumSize: const Size(0, 40),
-                  tapTargetSize: MaterialTapTargetSize.padded,
-                  visualDensity: VisualDensity.standard,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.expand_more,
-                      size: 18,
-                      color: t.secondaryText.withValues(alpha: 0.5),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Carregar mais',
-                      style: t.bodySmall.override(
-                        font: GoogleFonts.inter(
-                          fontWeight: FontWeight.w400,
-                        ),
-                        fontSize: 14,
-                        color: t.secondaryText.withValues(alpha: 0.8),
-                        letterSpacing: 0.1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+  Future<void> _apagarRelatorio(RelatoriosObraRow row) async {
+    final theme = FlutterFlowTheme.of(context);
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Apagar relatório'),
+        content: const Text(
+          'Deseja apagar este relatório? Esta ação será um soft delete.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Apagar'),
+          ),
+        ],
       ),
     );
+    if (confirmar != true) return;
+
+    await SQLiteManager.instance.softDeleteRelatorio(uuid: row.uuid);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Relatório apagado.',
+          style: TextStyle(color: theme.alternate),
+        ),
+        duration: const Duration(milliseconds: 3000),
+        backgroundColor: theme.secondary,
+      ),
+    );
+    await _carregarRelatoriosInicial();
   }
 
-  @override
-  void dispose() {
-    _shimmerController.dispose();
-    _model.dispose();
-
-    super.dispose();
+  void _voltarParaDetalhes() {
+    context.pushNamed(
+      DetalhesObraWidget.routeName,
+      queryParameters: {
+        'obraId': serializeParam(widget.obraId, ParamType.int),
+        'obraUuid': serializeParam(widget.obraUuid, ParamType.String),
+      }.withoutNulls,
+      extra: <String, dynamic>{
+        '__transition_info__': const TransitionInfo(
+          hasTransition: true,
+          transitionType: PageTransitionType.rightToLeft,
+        ),
+      },
+    );
   }
 
   Widget _shimmerBox(
@@ -273,8 +254,206 @@ class _RelatoriosObraWidgetState extends State<RelatoriosObraWidget>
     );
   }
 
+  Widget _buildShimmerLista(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    return Column(
+      children: List.generate(4, (index) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: index == 3 ? 0 : 6),
+          child: Container(
+            width: double.infinity,
+            decoration: rdoCardDecoration(context),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(width: 3.5, color: theme.alternate),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              _shimmerBox(context, width: 72, height: 14),
+                              const Spacer(),
+                              _shimmerBox(
+                                context,
+                                width: 64,
+                                height: 18,
+                                radius: 10,
+                              ),
+                              const SizedBox(width: 6),
+                              _shimmerBox(
+                                context,
+                                width: 28,
+                                height: 28,
+                                radius: 7,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          _shimmerBox(context, width: 160, height: 11),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildCarregarMaisButton(BuildContext context) {
+    final t = FlutterFlowTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 2),
+      child: Center(
+        child: _relatoriosObraLoadMore
+            ? SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: t.primary,
+                ),
+              )
+            : TextButton.icon(
+                onPressed: _carregarMaisRelatorios,
+                icon: Icon(
+                  Icons.expand_more_rounded,
+                  size: 18,
+                  color: t.secondaryText,
+                ),
+                label: Text(
+                  'Carregar mais',
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: t.secondaryText,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildLista(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+
+    if (_relatoriosObraInitialLoad) {
+      return _buildShimmerLista(context);
+    }
+
+    if (_relatoriosObraError != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 12),
+        child: Column(
+          children: [
+            Icon(Icons.error_outline_rounded, size: 40, color: theme.error),
+            const SizedBox(height: 10),
+            Text(
+              'Não foi possível carregar os relatórios.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: theme.error,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: _carregarRelatoriosInicial,
+              child: const Text('Tentar novamente'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_relatoriosObra.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+        child: Column(
+          children: [
+            Icon(
+              Icons.description_outlined,
+              size: 44,
+              color: theme.secondaryText.withValues(alpha: 0.45),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Nenhum relatório nesta obra ainda.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: theme.secondaryText,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < _relatoriosObra.length; i++)
+          RelatorioListItemWidget(
+            numero: _relatoriosObra[i].numero,
+            dataLabel: () {
+              final dataExec = formatDataResumoRelatorio(
+                _relatoriosObra[i].dataExecutado,
+              );
+              return dataExec.isNotEmpty
+                  ? dataExec
+                  : _relatoriosObra[i].dataExecutado;
+            }(),
+            statusId: _relatoriosObra[i].statusId,
+            statusLabel: labelRelatorioStatus(
+              statusId: _relatoriosObra[i].statusId,
+              statusNome: _relatoriosObra[i].statusNome,
+            ),
+            criador: nomeExibicaoCriadorRelatorio(
+              _relatoriosObra[i].criadorNome,
+              _relatoriosObra[i].criador,
+            ),
+            marginBottom: i == _relatoriosObra.length - 1 && !_relatoriosObraHasMore
+                ? 0
+                : 6,
+            onTap: () => _abrirRelatorioDetalhes(_relatoriosObra[i]),
+            onVisualizar: () => _abrirRelatorioDetalhes(_relatoriosObra[i]),
+            onEditar: () => _abrirEdicaoRelatorio(_relatoriosObra[i]),
+            onApagar: () => _apagarRelatorio(_relatoriosObra[i]),
+          ),
+        if (_relatoriosObraHasMore) _buildCarregarMaisButton(context),
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    _shimmerController.dispose();
+    _model.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    final contagem = _relatoriosObraInitialLoad
+        ? null
+        : (_relatoriosObraHasMore
+            ? '${_relatoriosObra.length}+'
+            : '${_relatoriosObra.length}');
+
     return GestureDetector(
       onTap: () {
         FocusScope.of(context).unfocus();
@@ -282,265 +461,73 @@ class _RelatoriosObraWidgetState extends State<RelatoriosObraWidget>
       },
       child: Scaffold(
         key: scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
+        backgroundColor: theme.primaryBackground,
         appBar: AppBar(
-          backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
-          automaticallyImplyLeading: false,
-          leading: FlutterFlowIconButton(
-            borderColor: Colors.transparent,
-            borderRadius: 20.0,
-            borderWidth: 1.0,
-            buttonSize: 40.0,
-            icon: Icon(
-              Icons.arrow_back_rounded,
-              color: FlutterFlowTheme.of(context).primaryText,
-              size: 24.0,
-            ),
-            onPressed: () async {
-              context.pushNamed(
-                DetalhesObraWidget.routeName,
-                queryParameters: {
-                  'obraId': serializeParam(
-                    widget!.obraId,
-                    ParamType.int,
-                  ),
-                  'obraUuid': serializeParam(
-                    widget!.obraUuid,
-                    ParamType.String,
-                  ),
-                }.withoutNulls,
-                extra: <String, dynamic>{
-                  '__transition_info__': TransitionInfo(
-                    hasTransition: true,
-                    transitionType: PageTransitionType.rightToLeft,
-                  ),
-                },
-              );
-            },
-          ),
-          title: Text(
-            'Relatórios da Obra',
-            style: FlutterFlowTheme.of(context).headlineMedium.override(
-                  font: GoogleFonts.interTight(
-                    fontWeight: FontWeight.w600,
-                    fontStyle:
-                        FlutterFlowTheme.of(context).headlineMedium.fontStyle,
-                  ),
-                  fontSize: 20.0,
-                  letterSpacing: 0.0,
-                  fontWeight: FontWeight.w600,
-                  fontStyle:
-                      FlutterFlowTheme.of(context).headlineMedium.fontStyle,
-                ),
-          ),
-          actions: [],
+          backgroundColor: theme.primary,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
           centerTitle: false,
-          elevation: 0.0,
+          titleSpacing: 0,
+          toolbarHeight: 58,
+          iconTheme: const IconThemeData(color: Colors.white),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: _voltarParaDetalhes,
+          ),
+          title: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Relatórios da Obra',
+                  style: GoogleFonts.interTight(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  _obraNome.isEmpty ? 'RDOs sincronizados desta obra' : _obraNome,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            IconButton(
+              tooltip: 'Atualizar',
+              icon: const Icon(Icons.refresh_rounded, color: Colors.white, size: 21),
+              onPressed:
+                  _relatoriosObraInitialLoad ? null : _carregarRelatoriosInicial,
+            ),
+            const SizedBox(width: 4),
+          ],
         ),
         body: SafeArea(
           top: true,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.max,
+          child: RefreshIndicator(
+            color: theme.primary,
+            onRefresh: _carregarRelatoriosInicial,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
               children: [
-                Padding(
-                  padding:
-                      const EdgeInsetsDirectional.fromSTEB(12.0, 16.0, 12.0, 0.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Builder(
-                        builder: (context) {
-                          if (_relatoriosObraInitialLoad) {
-                            final t = FlutterFlowTheme.of(context);
-                            return ListView.separated(
-                              padding: EdgeInsets.zero,
-                              primary: false,
-                              shrinkWrap: true,
-                              itemCount: 3,
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(height: 8.0),
-                              itemBuilder: (context, _) {
-                                return Container(
-                                  width: double.infinity,
-                                  decoration: BoxDecoration(
-                                    color: t.secondaryBackground,
-                                    borderRadius: BorderRadius.circular(14.0),
-                                    border: Border.all(
-                                      color: t.primaryText
-                                          .withValues(alpha: 0.06),
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.03),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                        12, 10, 12, 8),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            _shimmerBox(context,
-                                                width: 72, height: 12),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: _shimmerBox(context,
-                                                  height: 11),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            _shimmerBox(context,
-                                                width: 72, height: 18,
-                                                radius: 10),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Align(
-                                          alignment:
-                                              AlignmentDirectional.centerEnd,
-                                          child: _shimmerBox(
-                                            context,
-                                            width: 180,
-                                            height: 28,
-                                            radius: 10,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            );
-                          }
-                          if (_relatoriosObraError != null) {
-                            return Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'Não foi possível carregar os relatórios.',
-                                    textAlign: TextAlign.center,
-                                    style: FlutterFlowTheme.of(context)
-                                        .bodyMedium
-                                        .override(
-                                          color: FlutterFlowTheme.of(context)
-                                              .error,
-                                        ),
-                                  ),
-                                  TextButton(
-                                    onPressed: _carregarRelatoriosInicial,
-                                    child: const Text('Tentar novamente'),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }
-                          return Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              ListView.builder(
-                                padding: EdgeInsets.zero,
-                                primary: false,
-                                shrinkWrap: true,
-                                scrollDirection: Axis.vertical,
-                                itemCount: _relatoriosObra.length,
-                                itemBuilder: (context, listViewIndex) {
-                                  final row = _relatoriosObra[listViewIndex];
-                                  final theme = FlutterFlowTheme.of(context);
-                                  final dataExec = formatDataResumoRelatorio(
-                                    row.dataExecutado,
-                                  );
-                                  final dataLabel = dataExec.isNotEmpty
-                                      ? dataExec
-                                      : row.dataExecutado;
-                                  final criador =
-                                      (row.criadorNome ?? row.criador ?? '')
-                                          .trim();
-
-                                  return RelatorioListItemWidget(
-                                    numero: row.numero,
-                                    dataLabel: dataLabel,
-                                    statusId: row.statusId,
-                                    statusLabel: labelRelatorioStatus(
-                                      statusId: row.statusId,
-                                      statusNome: row.statusNome,
-                                    ),
-                                    criador:
-                                        criador.isNotEmpty ? criador : null,
-                                    marginBottom: 8,
-                                    onTap: () => _abrirRelatorioDetalhes(row),
-                                    onVisualizar: () =>
-                                        _abrirRelatorioDetalhes(row),
-                                    onEditar: () => _abrirEdicaoRelatorio(row),
-                                    onApagar: () async {
-                                      final confirmar = await showDialog<bool>(
-                                        context: context,
-                                        builder: (ctx) => AlertDialog(
-                                          title: const Text('Apagar relatório'),
-                                          content: const Text(
-                                            'Deseja apagar este relatório? Esta ação será um soft delete.',
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () =>
-                                                  Navigator.of(ctx).pop(false),
-                                              child: const Text('Cancelar'),
-                                            ),
-                                            TextButton(
-                                              onPressed: () =>
-                                                  Navigator.of(ctx).pop(true),
-                                              child: const Text('Apagar'),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-
-                                      if (confirmar != true) return;
-
-                                      await SQLiteManager.instance
-                                          .softDeleteRelatorio(
-                                        uuid: row.uuid,
-                                      );
-                                      if (!mounted || !context.mounted) {
-                                        return;
-                                      }
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            'Relatório apagado.',
-                                            style: TextStyle(
-                                              color: theme.alternate,
-                                            ),
-                                          ),
-                                          duration: const Duration(
-                                            milliseconds: 3000,
-                                          ),
-                                          backgroundColor: theme.secondary,
-                                        ),
-                                      );
-                                      await _carregarRelatoriosInicial();
-                                    },
-                                  );
-                                },
-                              ),
-                              if (_relatoriosObraHasMore)
-                                _buildCarregarMaisButton(context),
-                            ],
-                          );
-                        },
-                      ),
-                    ].divide(SizedBox(height: 16.0)),
-                  ),
+                RdoSectionCard(
+                  title: 'Relatórios',
+                  icon: Icons.description_outlined,
+                  margin: EdgeInsets.zero,
+                  trailing: contagem == null
+                      ? null
+                      : RdoContadorChip(contagem),
+                  contentPadding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                  child: _buildLista(context),
                 ),
               ],
             ),

@@ -1,11 +1,11 @@
 import '/auth/membership_access.dart';
 import '/backend/api_requests/api_calls.dart';
+import '/backend/sqlite/sqlite_manager.dart' show SQLiteManager;
 import '/componentes/dialogs/cadastrar_local/cadastrar_local_widget.dart';
 import '/componentes/navegacao/barra_navegacao_principal.dart';
-import '/flutter_flow/flutter_flow_icon_button.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import '/index.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -36,11 +36,13 @@ class _LocaisObraWidgetState extends State<LocaisObraWidget> {
   bool _isLoading = true;
   bool _isRefreshingSilently = false;
   List<Map<String, dynamic>> _locais = <Map<String, dynamic>>[];
+  String _obraNome = '';
 
   @override
   void initState() {
     super.initState();
     _model = createModel(context, () => LocaisObraModel());
+    _carregarNomeObra();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!MembershipAccess.canPermission('view_cadastros_gerais')) {
         MembershipAccess.showDenied(
@@ -62,6 +64,21 @@ class _LocaisObraWidgetState extends State<LocaisObraWidget> {
     super.dispose();
   }
 
+  Future<void> _carregarNomeObra() async {
+    final uuid = (widget.obraUuid ?? '').trim();
+    if (uuid.isEmpty) return;
+    try {
+      final rows = await SQLiteManager.instance.obraDetalhes(
+        uuid: uuid,
+        userId: FFAppState().creatorId,
+        accountOwnerUuid: FFAppState().creatorUuid,
+      );
+      final nome = rows.firstOrNull?.nome.trim() ?? '';
+      if (!mounted || nome.isEmpty) return;
+      setState(() => _obraNome = nome);
+    } catch (_) {}
+  }
+
   List<Map<String, dynamic>> _extractLocais(dynamic body) {
     if (body is List) {
       return body
@@ -80,7 +97,6 @@ class _LocaisObraWidgetState extends State<LocaisObraWidget> {
         }
       }
     }
-
     return <Map<String, dynamic>>[];
   }
 
@@ -134,30 +150,22 @@ class _LocaisObraWidgetState extends State<LocaisObraWidget> {
     final uuid = widget.obraUuid;
     if (uuid == null || uuid.isEmpty) return;
 
-    await showDialog<void>(
+    await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
       builder: (dialogContext) {
-        return Dialog(
-          elevation: 0,
-          insetPadding: EdgeInsets.zero,
-          backgroundColor: Colors.transparent,
-          alignment: AlignmentDirectional(0.0, 0.0)
-              .resolve(Directionality.of(context)),
-          child: GestureDetector(
-            onTap: () {
-              FocusScope.of(dialogContext).unfocus();
-              FocusManager.instance.primaryFocus?.unfocus();
-            },
-            child: CadastrarLocalWidget(
-              obraUuid: uuid,
-            ),
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(dialogContext).bottom,
           ),
+          child: CadastrarLocalWidget(obraUuid: uuid),
         );
       },
     );
 
     if (!mounted) return;
-    // Recarrega pela API para refletir o vínculo recém-criado.
     await _fetchLocais(silent: true);
   }
 
@@ -174,7 +182,7 @@ class _LocaisObraWidgetState extends State<LocaisObraWidget> {
         'obraUuid': serializeParam(uuid, ParamType.String),
       }.withoutNulls,
       extra: <String, dynamic>{
-        '__transition_info__': TransitionInfo(
+        '__transition_info__': const TransitionInfo(
           hasTransition: true,
           transitionType: PageTransitionType.rightToLeft,
         ),
@@ -185,6 +193,10 @@ class _LocaisObraWidgetState extends State<LocaisObraWidget> {
   @override
   Widget build(BuildContext context) {
     context.watch<FFAppState>();
+    final theme = FlutterFlowTheme.of(context);
+    final canCreate =
+        MembershipAccess.canPermission('create_cadastros_gerais');
+
     return GestureDetector(
       onTap: () {
         FocusScope.of(context).unfocus();
@@ -192,249 +204,264 @@ class _LocaisObraWidgetState extends State<LocaisObraWidget> {
       },
       child: Scaffold(
         key: scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
+        backgroundColor: theme.primaryBackground,
         appBar: AppBar(
-          backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
-          automaticallyImplyLeading: false,
-          toolbarHeight: 52.0,
-          leading: FlutterFlowIconButton(
-            borderColor: FlutterFlowTheme.of(context).alternate,
-            borderRadius: 10.0,
-            borderWidth: 1.0,
-            buttonSize: 36.0,
-            fillColor: FlutterFlowTheme.of(context).secondaryBackground,
-            icon: Icon(
-              Icons.arrow_back_ios,
-              color: FlutterFlowTheme.of(context).primaryText,
-              size: 16.0,
-            ),
+          backgroundColor: theme.primary,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          centerTitle: false,
+          titleSpacing: 0,
+          toolbarHeight: 58,
+          iconTheme: const IconThemeData(color: Colors.white),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
             onPressed: _voltar,
           ),
-          title: Text(
-            'Locais',
-            style: FlutterFlowTheme.of(context).headlineMedium.override(
-                  font: GoogleFonts.interTight(
-                    fontWeight: FontWeight.w600,
-                    fontStyle:
-                        FlutterFlowTheme.of(context).headlineMedium.fontStyle,
+          title: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Locais',
+                  style: GoogleFonts.interTight(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
                   ),
-                  color: FlutterFlowTheme.of(context).primaryText,
-                  fontSize: 18.0,
-                  letterSpacing: 0.0,
-                  fontWeight: FontWeight.w600,
-                  fontStyle:
-                      FlutterFlowTheme.of(context).headlineMedium.fontStyle,
                 ),
+                Text(
+                  _obraNome.isEmpty
+                      ? 'Locais vinculados à obra'
+                      : _obraNome,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
           ),
-          actions: [],
-          centerTitle: false,
-          elevation: 0.0,
+          actions: [
+            IconButton(
+              tooltip: 'Atualizar',
+              icon: _isRefreshingSilently
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.refresh_rounded,
+                      color: Colors.white, size: 21),
+              onPressed: (_isLoading || _isRefreshingSilently)
+                  ? null
+                  : () => _fetchLocais(silent: true),
+            ),
+            if (canCreate)
+              IconButton(
+                tooltip: 'Novo local',
+                icon: const Icon(Icons.add_rounded,
+                    color: Colors.white, size: 24),
+                onPressed: _abrirCadastroLocal,
+              ),
+            const SizedBox(width: 4),
+          ],
         ),
-        body: SafeArea(
-          top: true,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                child: Row(
+        body: Column(
+          children: [
+            Expanded(
+              child: RefreshIndicator(
+                color: theme.primary,
+                onRefresh: () => _fetchLocais(silent: true),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(
+                    16,
+                    10,
+                    16,
+                    kBarraNavegacaoPrincipalReservaScroll,
+                  ),
                   children: [
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${_locais.length} ${_locais.length == 1 ? 'local' : 'locais'}',
-                              style: FlutterFlowTheme.of(context).labelMedium,
+                    if (canCreate)
+                      RdoSectionCard(
+                        title: 'Incluir local',
+                        icon: Icons.add_location_alt_outlined,
+                        subtitle: 'Cadastrar e vincular à obra',
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: FilledButton.icon(
+                          onPressed: _abrirCadastroLocal,
+                          icon: const Icon(Icons.place_outlined, size: 18),
+                          label: Text(
+                            'Novo local',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                          if (_isRefreshingSilently)
-                            SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: FlutterFlowTheme.of(context).primary,
-                              ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: theme.primary,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(double.infinity, 42),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                        ],
-                      ),
-                    ),
-                    FlutterFlowIconButton(
-                      borderRadius: 20,
-                      buttonSize: 34,
-                      icon: Icon(
-                        Icons.refresh_rounded,
-                        color: FlutterFlowTheme.of(context).primary,
-                        size: 18,
-                      ),
-                      onPressed: (_isLoading || _isRefreshingSilently)
-                          ? null
-                          : () => _fetchLocais(silent: true),
-                    ),
-                    if (MembershipAccess.canPermission(
-                        'create_cadastros_gerais')) ...[
-                      const SizedBox(width: 6),
-                      FFButtonWidget(
-                        onPressed: _abrirCadastroLocal,
-                        text: 'Adicionar',
-                        icon: const Icon(Icons.add_location_alt_outlined,
-                            size: 16),
-                        options: FFButtonOptions(
-                          height: 34,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          color: FlutterFlowTheme.of(context).primary,
-                          textStyle: FlutterFlowTheme.of(context)
-                              .labelMedium
-                              .override(
-                                font: GoogleFonts.inter(
-                                  fontWeight: FontWeight.w600,
-                                  fontStyle: FlutterFlowTheme.of(context)
-                                      .labelMedium
-                                      .fontStyle,
-                                ),
-                                color: FlutterFlowTheme.of(context).info,
-                              ),
-                          borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
                       ),
-                    ],
+                    RdoSectionCard(
+                      title: 'Lista da obra',
+                      icon: Icons.place_outlined,
+                      margin: EdgeInsets.zero,
+                      trailing: _locais.isEmpty
+                          ? null
+                          : RdoContadorChip('${_locais.length}'),
+                      contentPadding: EdgeInsets.zero,
+                      child: _isLoading
+                          ? const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 36),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 32,
+                                  height: 32,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2.5),
+                                ),
+                              ),
+                            )
+                          : _locais.isEmpty
+                              ? Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                      16, 28, 16, 28),
+                                  child: Column(
+                                    children: [
+                                      Icon(
+                                        Icons.place_outlined,
+                                        size: 40,
+                                        color: theme.secondaryText
+                                            .withValues(alpha: 0.4),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'Nenhum local nesta obra',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: theme.primaryText,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        canCreate
+                                            ? 'Cadastre um local para vincular a esta obra.'
+                                            : 'Nenhum local vinculado a esta obra.',
+                                        textAlign: TextAlign.center,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12.5,
+                                          color: theme.secondaryText,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : Column(
+                                  children: [
+                                    for (var i = 0; i < _locais.length; i++) ...[
+                                      if (i > 0)
+                                        Divider(
+                                          height: 1,
+                                          thickness: 1,
+                                          color: theme.alternate,
+                                        ),
+                                      _buildLocalItem(theme, _locais[i], i),
+                                    ],
+                                  ],
+                                ),
+                    ),
                   ],
                 ),
               ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsetsDirectional.fromSTEB(
-                      12.0, 10.0, 12.0, 12.0),
-                  child: _isLoading
-                      ? Center(
-                          child: LinearProgressIndicator(
-                            color: FlutterFlowTheme.of(context).primary,
-                          ),
-                        )
-                      : _locais.isEmpty
-                          ? Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: FlutterFlowTheme.of(context)
-                                    .secondaryBackground,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: FlutterFlowTheme.of(context).alternate,
-                                ),
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.place_outlined,
-                                    size: 32,
-                                    color: FlutterFlowTheme.of(context)
-                                        .secondaryText,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Nenhum local nesta obra',
-                                    style: FlutterFlowTheme.of(context)
-                                        .titleMedium,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    MembershipAccess.canPermission(
-                                            'create_cadastros_gerais')
-                                        ? 'Use Adicionar para cadastrar e vincular um local.'
-                                        : 'Nenhum local vinculado a esta obra.',
-                                    style:
-                                        FlutterFlowTheme.of(context).bodySmall,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
-                            )
-                          : ListView.builder(
-                              padding: const EdgeInsets.only(
-                                bottom: kBarraNavegacaoPrincipalReservaScroll,
-                              ),
-                              itemCount: _locais.length,
-                              itemBuilder: (context, index) {
-                                final row = _locais[index];
-                                final nome = valueOrDefault<String>(
-                                  row['nome']?.toString(),
-                                  'Sem nome',
-                                );
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    elevation: 0,
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: Container(
-                                      width: double.infinity,
-                                      decoration: BoxDecoration(
-                                        color: FlutterFlowTheme.of(context)
-                                            .secondaryBackground,
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color: FlutterFlowTheme.of(context)
-                                              .alternate,
-                                        ),
-                                      ),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 10,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Container(
-                                              padding: const EdgeInsets.all(8),
-                                              decoration: BoxDecoration(
-                                                color:
-                                                    FlutterFlowTheme.of(context)
-                                                        .primary
-                                                        .withValues(alpha: 0.1),
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                              ),
-                                              child: Icon(
-                                                Icons.place_rounded,
-                                                color:
-                                                    FlutterFlowTheme.of(context)
-                                                        .primary,
-                                                size: 18,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: Text(
-                                                nome,
-                                                style:
-                                                    FlutterFlowTheme.of(context)
-                                                        .titleMedium
-                                                        .override(
-                                                          font: GoogleFonts
-                                                              .interTight(
-                                                            fontWeight:
-                                                                FontWeight.w600,
-                                                          ),
-                                                          fontSize: 14,
-                                                        ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
+            ),
+            const BarraNavegacaoPrincipal(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLocalItem(
+    FlutterFlowTheme theme,
+    Map<String, dynamic> row,
+    int index,
+  ) {
+    final nome = valueOrDefault<String>(row['nome']?.toString(), 'Sem nome');
+
+    return Material(
+      color: theme.secondaryBackground,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(width: 3, color: theme.primary),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: theme.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.place_rounded,
+                        size: 18,
+                        color: theme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            nome,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              color: theme.primaryText,
                             ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Local ${index + 1}',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: theme.secondaryText,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-        bottomNavigationBar: const BarraNavegacaoPrincipal(),
       ),
     );
   }

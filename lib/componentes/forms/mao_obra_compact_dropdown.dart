@@ -2,7 +2,12 @@ import '/flutter_flow/flutter_flow_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Altura alinhada aos campos HH:mm da [MaoObraHorariosFormWidget].
+/// Seletor de motivo em uma única linha de 34px, na altura dos campos HH:mm da
+/// [MaoObraHorariosFormWidget].
+///
+/// Usa [PopupMenuButton] em vez de [DropdownButton] porque este último força
+/// `kMinInteractiveDimension` (48px) na área do botão, o que somado ao rótulo
+/// flutuante do [InputDecorator] passava de 70px por motivo.
 Widget buildMaoObraCompactMotivoDropdown({
   required BuildContext context,
   required String label,
@@ -10,6 +15,7 @@ Widget buildMaoObraCompactMotivoDropdown({
   required List<String> items,
   required String? value,
   required ValueChanged<String?> onChanged,
+  IconData icone = Icons.notes_rounded,
 }) {
   final theme = FlutterFlowTheme.of(context);
   final merged = List<String>.from(items);
@@ -19,81 +25,57 @@ Widget buildMaoObraCompactMotivoDropdown({
   }
   final valid = v != null && v.isNotEmpty && merged.contains(v) ? v : null;
 
-  return InputDecorator(
-    decoration: InputDecoration(
-      isDense: true,
-      labelText: label,
-      labelStyle: theme.bodySmall.override(
-        font: GoogleFonts.inter(
-          fontWeight: theme.bodySmall.fontWeight,
-          fontStyle: theme.bodySmall.fontStyle,
-        ),
-        fontSize: 14.0,
-        letterSpacing: 0.0,
-      ),
-      hintText: hint,
-      hintStyle: theme.labelMedium,
-      enabledBorder: OutlineInputBorder(
-        borderSide: BorderSide(
-          color: theme.alternate,
-          width: 1.0,
-        ),
-        borderRadius: BorderRadius.circular(6.0),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderSide: const BorderSide(
-          color: Color(0x00000000),
-          width: 1.0,
-        ),
-        borderRadius: BorderRadius.circular(6.0),
-      ),
-      filled: true,
-      fillColor: theme.secondaryBackground,
-      contentPadding: const EdgeInsetsDirectional.fromSTEB(10, 8, 10, 8),
-    ),
-    child: DropdownButtonHideUnderline(
-      child: DropdownButton<String>(
-        isExpanded: true,
-        // itemHeight omitido: valores < kMinInteractiveDimension (48) disparam assert em dropdown.dart.
-        value: valid,
-        hint: Text(
-          hint,
-          style: theme.bodySmall.override(
-            font: GoogleFonts.inter(
-              fontWeight: theme.bodySmall.fontWeight,
-              fontStyle: theme.bodySmall.fontStyle,
+  return PopupMenuButton<String>(
+    tooltip: hint,
+    initialValue: valid,
+    position: PopupMenuPosition.under,
+    constraints: const BoxConstraints(minWidth: 240),
+    onSelected: onChanged,
+    itemBuilder: (context) => [
+      for (final item in merged)
+        PopupMenuItem<String>(
+          value: item,
+          height: 40,
+          child: Text(
+            item,
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: item == valid ? FontWeight.w600 : FontWeight.w400,
+              color: item == valid ? theme.primary : theme.primaryText,
             ),
-            fontSize: 14.0,
           ),
-          overflow: TextOverflow.ellipsis,
         ),
-        style: theme.bodySmall.override(
-          font: GoogleFonts.inter(
-            fontWeight: theme.bodySmall.fontWeight,
-            fontStyle: theme.bodySmall.fontStyle,
-          ),
-          fontSize: 14.0,
-          letterSpacing: 0.0,
-        ),
-        items: merged
-            .map(
-              (s) => DropdownMenuItem<String>(
-                value: s,
-                child: Text(
-                  s,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.bodySmall.override(
-                    font: GoogleFonts.inter(
-                      fontWeight: theme.bodySmall.fontWeight,
-                      fontStyle: theme.bodySmall.fontStyle,
-                    ),
-                    fontSize: 14.0,
-                  ),
-                ),
+    ],
+    child: Container(
+      height: 34,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: theme.secondaryBackground,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.alternate),
+      ),
+      child: Row(
+        children: [
+          Icon(icone, size: 14, color: theme.secondaryText),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              valid ?? label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                fontWeight: valid == null ? FontWeight.w400 : FontWeight.w600,
+                color: valid == null ? theme.secondaryText : theme.primaryText,
               ),
-            )
-            .toList(),
-        onChanged: onChanged,
+            ),
+          ),
+          Icon(
+            Icons.keyboard_arrow_down_rounded,
+            size: 17,
+            color: theme.secondaryText,
+          ),
+        ],
       ),
     ),
   );

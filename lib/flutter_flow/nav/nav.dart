@@ -207,6 +207,10 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
               'obraUuid',
               ParamType.String,
             ),
+            novaAtividade: params.getParam(
+              'novaAtividade',
+              ParamType.bool,
+            ),
           ),
         ),
         FFRoute(

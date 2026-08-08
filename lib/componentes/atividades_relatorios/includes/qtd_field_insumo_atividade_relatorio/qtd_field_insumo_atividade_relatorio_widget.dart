@@ -1,9 +1,12 @@
 import '/backend/sqlite/sqlite_manager.dart';
+import '/flutter_flow/custom_functions.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
 import 'package:easy_debounce/easy_debounce.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'qtd_field_insumo_atividade_relatorio_model.dart';
@@ -17,7 +20,7 @@ class QtdFieldInsumoAtividadeRelatorioWidget extends StatefulWidget {
   });
 
   final String? uuid;
-  final int? valor;
+  final num? valor;
 
   @override
   State<QtdFieldInsumoAtividadeRelatorioWidget> createState() =>
@@ -27,6 +30,10 @@ class QtdFieldInsumoAtividadeRelatorioWidget extends StatefulWidget {
 class _QtdFieldInsumoAtividadeRelatorioWidgetState
     extends State<QtdFieldInsumoAtividadeRelatorioWidget> {
   late QtdFieldInsumoAtividadeRelatorioModel _model;
+
+  static final List<TextInputFormatter> _formatters = [
+    FilteringTextInputFormatter.allow(RegExp(r'^\d*[.,]?\d{0,2}')),
+  ];
 
   @override
   void setState(VoidCallback callback) {
@@ -41,10 +48,8 @@ class _QtdFieldInsumoAtividadeRelatorioWidgetState
         createModel(context, () => QtdFieldInsumoAtividadeRelatorioModel());
 
     _model.textController ??= TextEditingController(
-        text: valueOrDefault<String>(
-      widget!.valor?.toString(),
-      '0',
-    ));
+      text: formatQuantidadeRelatorio(widget.valor ?? 0),
+    );
     _model.textFieldFocusNode ??= FocusNode();
   }
 
@@ -64,16 +69,19 @@ class _QtdFieldInsumoAtividadeRelatorioWidgetState
         '_model.textController',
         Duration(milliseconds: 2000),
         () async {
+          final qtd = tryParseQuantidadeRelatorio(_model.textController.text);
+          if (qtd == null || qtd < 0) return;
+
           _model.detalhesItem =
               await SQLiteManager.instance.getDetalhesItemAtividade(
             uuid: widget!.uuid!,
           );
-          _model.newValor = int.tryParse(_model.textController.text);
+          _model.newValor = qtd;
           safeSetState(() {});
           await SQLiteManager.instance.updateItemAtividade(
             qtdRealizada: _model.detalhesItem?.firstOrNull?.qtdRealizada,
             uuid: widget!.uuid!,
-            qtdUtilizada: int.tryParse(_model.textController.text),
+            qtdUtilizada: qtd,
           );
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -94,62 +102,15 @@ class _QtdFieldInsumoAtividadeRelatorioWidgetState
       autofocus: false,
       textInputAction: TextInputAction.done,
       obscureText: false,
-      decoration: InputDecoration(
-        isDense: true,
-        hintText: '0',
-        hintStyle: FlutterFlowTheme.of(context).bodyLarge.override(
-              font: GoogleFonts.inter(
-                fontWeight: FlutterFlowTheme.of(context).bodyLarge.fontWeight,
-                fontStyle: FlutterFlowTheme.of(context).bodyLarge.fontStyle,
-              ),
-              letterSpacing: 0.0,
-              fontWeight: FlutterFlowTheme.of(context).bodyLarge.fontWeight,
-              fontStyle: FlutterFlowTheme.of(context).bodyLarge.fontStyle,
-              lineHeight: 0.7,
-            ),
-        enabledBorder: OutlineInputBorder(
-          borderSide: BorderSide(
-            color: FlutterFlowTheme.of(context).alternate,
-            width: 1.0,
-          ),
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderSide: BorderSide(
-            color: Color(0x00000000),
-            width: 1.0,
-          ),
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderSide: BorderSide(
-            color: Color(0x00000000),
-            width: 1.0,
-          ),
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderSide: BorderSide(
-            color: Color(0x00000000),
-            width: 1.0,
-          ),
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        filled: true,
+      decoration: rdoCompactFieldDecoration(
+        context,
+        hint: '0',
         fillColor: FlutterFlowTheme.of(context).primaryBackground,
       ),
-      style: FlutterFlowTheme.of(context).bodyMedium.override(
-            font: GoogleFonts.inter(
-              fontWeight: FlutterFlowTheme.of(context).bodyMedium.fontWeight,
-              fontStyle: FlutterFlowTheme.of(context).bodyMedium.fontStyle,
-            ),
-            fontSize: 16.0,
-            letterSpacing: 0.0,
-            fontWeight: FlutterFlowTheme.of(context).bodyMedium.fontWeight,
-            fontStyle: FlutterFlowTheme.of(context).bodyMedium.fontStyle,
-          ),
+      style: rdoCompactFieldTextStyle(context),
       textAlign: TextAlign.center,
-      keyboardType: TextInputType.number,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: _formatters,
       validator: _model.textControllerValidator.asValidator(context),
     );
   }

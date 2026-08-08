@@ -1,13 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '/auth/membership_access.dart';
 import '/backend/api_requests/api_calls.dart';
-import '/backend/sqlite/situacao_soft_delete.dart';
 import '/backend/sqlite/sqlite_manager.dart';
+import '/componentes/navegacao/barra_navegacao_principal.dart';
+import '/componentes/ui/rdo_estilo.dart';
 import '/custom_code/actions/index.dart' as custom_actions;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import 'package:easy_debounce/easy_debounce.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -27,7 +28,7 @@ bool _grupoAtivo(Map<String, dynamic> m) {
   return t != kSituacaoExcluidoLogico;
 }
 
-/// Grupos de obras: CRUD na API (`nome`), depois `syncGruposObras()`; listagem no SQLite (como o list Vue).
+/// Grupos de obras: CRUD na API (`nome`), depois `syncGruposObras()`; listagem no SQLite.
 class GruposObrasWidget extends StatefulWidget {
   const GruposObrasWidget({super.key});
 
@@ -48,9 +49,8 @@ class _GruposObrasWidgetState extends State<GruposObrasWidget> {
   List<Map<String, dynamic>> _items = [];
   List<Map<String, dynamic>> _filteredAll = [];
   int _total = 0;
-  int _page = 1;
-  int _perPage = 10;
   String _sortOrder = 'asc';
+  String _busca = '';
 
   static const _debounceTag = 'grupos-obras-search';
 
@@ -58,7 +58,19 @@ class _GruposObrasWidgetState extends State<GruposObrasWidget> {
   void initState() {
     super.initState();
     _model = createModel(context, () => GruposObrasModel());
-    _bootstrap();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!MembershipAccess.canPermission('view_cadastros_gerais')) {
+        MembershipAccess.showDenied(
+          context,
+          'Sem permissão para visualizar cadastros gerais.',
+        );
+        if (context.mounted && context.canPop()) {
+          context.pop();
+        }
+        return;
+      }
+      _bootstrap();
+    });
   }
 
   Future<void> _bootstrap() async {
@@ -129,7 +141,8 @@ class _GruposObrasWidgetState extends State<GruposObrasWidget> {
 
   void _sortFiltered(List<Map<String, dynamic>> list) {
     final asc = _sortOrder == 'asc' ? 1 : -1;
-    list.sort((a, b) => asc *
+    list.sort((a, b) =>
+        asc *
         '${a['nome'] ?? ''}'.toLowerCase().compareTo(
               '${b['nome'] ?? ''}'.toLowerCase(),
             ));
@@ -199,16 +212,12 @@ class _GruposObrasWidgetState extends State<GruposObrasWidget> {
       final filtered = mapped.where(_rowMatchesSearch).toList();
       _sortFiltered(filtered);
 
-      final total = filtered.length;
-      final start = ((_page - 1) * _perPage).clamp(0, 1 << 30);
-      final pageItems = filtered.skip(start).take(_perPage).toList();
-
       if (!mounted) return;
       setState(() {
         _loading = false;
         _filteredAll = filtered;
-        _items = pageItems;
-        _total = total;
+        _items = filtered;
+        _total = filtered.length;
       });
     } catch (e) {
       if (!mounted) return;
@@ -279,12 +288,12 @@ class _GruposObrasWidgetState extends State<GruposObrasWidget> {
     );
   }
 
-  void _onSearchChanged(String _) {
+  void _onSearchChanged(String value) {
+    setState(() => _busca = value);
     EasyDebounce.debounce(
       _debounceTag,
       const Duration(milliseconds: 450),
       () {
-        _page = 1;
         _fetchGrupos();
       },
     );
@@ -298,9 +307,21 @@ class _GruposObrasWidgetState extends State<GruposObrasWidget> {
     super.dispose();
   }
 
+  int _serverId(Map<String, dynamic> m) {
+    final id = m['id'];
+    if (id is int) return id;
+    return int.tryParse('$id') ?? 0;
+  }
+
   @override
   Widget build(BuildContext context) {
     context.watch<FFAppState>();
+    final theme = FlutterFlowTheme.of(context);
+    final canCreate =
+        MembershipAccess.canPermission('create_cadastros_gerais');
+    final canEdit = MembershipAccess.canPermission('edit_cadastros_gerais');
+    final canDelete =
+        MembershipAccess.canPermission('delete_cadastros_gerais');
 
     return GestureDetector(
       onTap: () {
@@ -309,395 +330,436 @@ class _GruposObrasWidgetState extends State<GruposObrasWidget> {
       },
       child: Scaffold(
         key: scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
+        backgroundColor: theme.primaryBackground,
         appBar: AppBar(
-          backgroundColor: FlutterFlowTheme.of(context).primary,
-          automaticallyImplyLeading: true,
-          title: Text(
-            'Grupos de obras',
-            style: FlutterFlowTheme.of(context).titleLarge.override(
-                  font: GoogleFonts.interTight(fontWeight: FontWeight.w600),
-                  color: Colors.white,
-                  fontSize: 20,
+          backgroundColor: theme.primary,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          centerTitle: false,
+          titleSpacing: 0,
+          toolbarHeight: 58,
+          iconTheme: const IconThemeData(color: Colors.white),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: () => context.safePop(),
+          ),
+          title: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Grupos de obras',
+                  style: GoogleFonts.interTight(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
                 ),
+                Text(
+                  'Cadastro geral do sistema',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
           ),
           actions: [
             IconButton(
               tooltip: 'Sincronizar e atualizar',
               onPressed: _loading ? null : _syncAndReloadList,
               icon: _loading
-                  ? SizedBox(
-                      width: 22,
-                      height: 22,
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: FlutterFlowTheme.of(context).info,
+                        color: Colors.white,
                       ),
                     )
-                  : Icon(Icons.refresh, color: FlutterFlowTheme.of(context).info),
+                  : const Icon(Icons.refresh_rounded,
+                      color: Colors.white, size: 21),
             ),
             PopupMenuButton<String>(
-              tooltip: 'Exportar',
-              icon: Icon(Icons.ios_share, color: FlutterFlowTheme.of(context).info),
+              tooltip: 'Mais opções',
+              icon: const Icon(Icons.more_vert_rounded,
+                  color: Colors.white, size: 22),
               onSelected: (v) {
                 if (v == 'csv') _exportLocalCsv();
+                if (v == 'sort') {
+                  setState(() {
+                    _sortOrder = _sortOrder == 'asc' ? 'desc' : 'asc';
+                  });
+                  _fetchGrupos();
+                }
               },
               itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'sort',
+                  child: Text(
+                    _sortOrder == 'asc' ? 'Ordenar Z–A' : 'Ordenar A–Z',
+                  ),
+                ),
                 const PopupMenuItem(
                   value: 'csv',
-                  child: Text('CSV (SQLite / filtros)'),
+                  child: Text('Exportar CSV'),
                 ),
               ],
             ),
+            if (canCreate)
+              IconButton(
+                tooltip: 'Novo grupo',
+                icon: const Icon(Icons.add_rounded,
+                    color: Colors.white, size: 24),
+                onPressed: () => _openForm(null),
+              ),
+            const SizedBox(width: 4),
           ],
-          elevation: 0,
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _openForm(context, null),
-          backgroundColor: FlutterFlowTheme.of(context).primary,
-          icon: Icon(Icons.add, color: FlutterFlowTheme.of(context).info),
-          label: Text(
-            'Novo grupo',
-            style: TextStyle(color: FlutterFlowTheme.of(context).info),
-          ),
-        ),
-        body: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildHeader(context),
-              _buildFilters(context),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    _error!,
-                    style: TextStyle(color: FlutterFlowTheme.of(context).error),
-                  ),
-                ),
-              Expanded(child: _buildBody(context)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: FlutterFlowTheme.of(context).primary.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(Icons.folder_special_outlined,
-                color: FlutterFlowTheme.of(context).primary, size: 26),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Grupos de obras',
-                  style: FlutterFlowTheme.of(context).headlineSmall.override(
-                        font: GoogleFonts.interTight(fontWeight: FontWeight.bold),
-                        color: FlutterFlowTheme.of(context).primary,
-                      ),
-                ),
-                Text(
-                  'Cadastro (nome). Lista após sincronizar com o servidor.',
-                  style: FlutterFlowTheme.of(context).bodySmall.override(
-                        color: FlutterFlowTheme.of(context).secondaryText,
-                      ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilters(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: FlutterFlowTheme.of(context).alternate),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
+        body: Column(
           children: [
-            TextField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: 'Buscar por nome...',
-                prefixIcon: Icon(Icons.search,
-                    color: FlutterFlowTheme.of(context).secondaryText),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            Expanded(
+              child: RefreshIndicator(
+                color: theme.primary,
+                onRefresh: _syncAndReloadList,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(
+                    16,
+                    10,
+                    16,
+                    kBarraNavegacaoPrincipalReservaScroll,
+                  ),
+                  children: [
+                    if (canCreate)
+                      RdoSectionCard(
+                        title: 'Incluir grupo',
+                        icon: Icons.create_new_folder_outlined,
+                        subtitle: 'Cadastrar novo grupo de obras',
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: FilledButton.icon(
+                          onPressed: () => _openForm(null),
+                          icon: const Icon(Icons.add_rounded, size: 18),
+                          label: Text(
+                            'Novo grupo',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: theme.primary,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(double.infinity, 42),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    RdoSectionCard(
+                      title: 'Buscar',
+                      icon: Icons.search_rounded,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: TextField(
+                        controller: _searchController,
+                        onChanged: _onSearchChanged,
+                        style: rdoFormFieldTextStyle(context),
+                        decoration: rdoFormFieldDecoration(
+                          context,
+                          label: 'Nome do grupo',
+                          hint: 'Digite para filtrar',
+                          suffixIcon: _busca.isEmpty
+                              ? null
+                              : IconButton(
+                                  tooltip: 'Limpar',
+                                  icon: Icon(
+                                    Icons.close_rounded,
+                                    size: 18,
+                                    color: theme.secondaryText,
+                                  ),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() => _busca = '');
+                                    _fetchGrupos();
+                                  },
+                                ),
+                        ),
+                      ),
+                    ),
+                    RdoSectionCard(
+                      title: 'Lista de grupos',
+                      icon: Icons.folder_special_outlined,
+                      subtitle: _loading
+                          ? 'Carregando…'
+                          : _error != null
+                              ? 'Falha ao carregar'
+                              : _items.isEmpty
+                                  ? 'Nenhum grupo encontrado'
+                                  : _busca.trim().isEmpty
+                                      ? 'Grupos cadastrados'
+                                      : '$_total resultado${_total == 1 ? '' : 's'}',
+                      margin: EdgeInsets.zero,
+                      trailing: _items.isEmpty
+                          ? null
+                          : RdoContadorChip('$_total'),
+                      contentPadding: EdgeInsets.zero,
+                      child: _buildLista(theme, canCreate, canEdit, canDelete),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                const Spacer(),
-                IconButton(
-                  tooltip: _sortOrder == 'asc' ? 'Nome A–Z' : 'Nome Z–A',
-                  onPressed: () {
-                    setState(() {
-                      _sortOrder = _sortOrder == 'asc' ? 'desc' : 'asc';
-                      _page = 1;
-                    });
-                    _fetchGrupos();
-                  },
-                  icon: Icon(
-                    _sortOrder == 'asc'
-                        ? Icons.arrow_downward
-                        : Icons.arrow_upward,
-                    color: FlutterFlowTheme.of(context).primary,
-                  ),
-                ),
-                Chip(
-                  label: Text(
-                    '$_total ${_total == 1 ? 'grupo' : 'grupos'}',
-                  ),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
-            ),
+            const BarraNavegacaoPrincipal(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBody(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_total == 0 && _error == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.folder_off_outlined,
-                  size: 56, color: Colors.grey.shade400),
-              const SizedBox(height: 12),
-              Text(
-                'Nenhum grupo encontrado',
-                style: FlutterFlowTheme.of(context).titleMedium,
-              ),
-              const SizedBox(height: 8),
-              FFButtonWidget(
-                onPressed: () => _openForm(context, null),
-                text: 'Novo grupo',
-                options: FFButtonOptions(
-                  color: FlutterFlowTheme.of(context).primary,
-                  textStyle: FlutterFlowTheme.of(context).titleSmall.override(
-                        color: FlutterFlowTheme.of(context).info,
-                      ),
-                ),
-              ),
-            ],
+  Widget _buildLista(
+    FlutterFlowTheme theme,
+    bool canCreate,
+    bool canEdit,
+    bool canDelete,
+  ) {
+    if (_loading && _items.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 36),
+        child: Center(
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
           ),
         ),
       );
     }
 
-    final lastPage = (_total / _perPage).ceil().clamp(1, 99999);
-
-    return Column(
-      children: [
-        Expanded(
-          child: Scrollbar(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SingleChildScrollView(
-                child: DataTable(
-                  headingRowColor: WidgetStateProperty.all(
-                    FlutterFlowTheme.of(context).primary.withValues(alpha: 0.06),
-                  ),
-                  columns: [
-                    DataColumn(label: Text('ID', style: _th(context))),
-                    DataColumn(label: Text('Grupo de obra', style: _th(context))),
-                    DataColumn(label: Text('Ações', style: _th(context))),
-                  ],
-                  rows: _items.map((m) => _buildRow(context, m)).toList(),
+    if (_error != null && _items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 28),
+        child: Column(
+          children: [
+            Icon(Icons.error_outline_rounded, size: 40, color: theme.error),
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(fontSize: 13, color: theme.error),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: _syncAndReloadList,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: Text(
+                'Tentar novamente',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: theme.primary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(160, 40),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
             ),
-          ),
+          ],
         ),
-        _buildPagination(context, lastPage),
+      );
+    }
+
+    if (_items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 28, 16, 28),
+        child: Column(
+          children: [
+            Icon(
+              Icons.folder_off_outlined,
+              size: 40,
+              color: theme.secondaryText.withValues(alpha: 0.4),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _busca.trim().isEmpty
+                  ? 'Nenhum grupo cadastrado'
+                  : 'Nenhum resultado na busca',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: theme.primaryText,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _busca.trim().isEmpty
+                  ? (canCreate
+                      ? 'Cadastre o primeiro grupo para organizar as obras.'
+                      : 'Não há grupos disponíveis.')
+                  : 'Tente outro termo de busca.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                color: theme.secondaryText,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        for (var i = 0; i < _items.length; i++) ...[
+          if (i > 0)
+            Divider(height: 1, thickness: 1, color: theme.alternate),
+          _buildGrupoItem(theme, _items[i], canEdit, canDelete),
+        ],
       ],
     );
   }
 
-  TextStyle _th(BuildContext context) => FlutterFlowTheme.of(context).labelLarge
-      .override(fontWeight: FontWeight.w700, fontSize: 11);
+  Widget _buildGrupoItem(
+    FlutterFlowTheme theme,
+    Map<String, dynamic> grupo,
+    bool canEdit,
+    bool canDelete,
+  ) {
+    final nome =
+        valueOrDefault<String>(grupo['nome']?.toString(), 'Grupo sem nome');
+    final sid = _serverId(grupo);
+    final temAcoes = canEdit || canDelete;
 
-  DataRow _buildRow(BuildContext context, Map<String, dynamic> m) {
-    final id = m['id'];
-    final idInt = id is int ? id : int.tryParse('$id') ?? 0;
-
-    return DataRow(
-      cells: [
-        DataCell(
-          Text(
-            idInt > 0 ? '$idInt' : '—',
-            style: TextStyle(
-              color: FlutterFlowTheme.of(context).secondaryText,
-              fontSize: 13,
-            ),
-          ),
-        ),
-        DataCell(
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 280),
-            child: Text(
-              '${m['nome'] ?? ''}',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: FlutterFlowTheme.of(context).primary,
-              ),
-            ),
-          ),
-        ),
-        DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
+    return Material(
+      color: theme.secondaryBackground,
+      child: InkWell(
+        onTap: canEdit ? () => _openForm(grupo) : null,
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              IconButton(
-                tooltip: 'Ver',
-                icon: Icon(Icons.visibility_outlined,
-                    color: FlutterFlowTheme.of(context).primary, size: 20),
-                onPressed: () => _showView(context, m),
-              ),
-              IconButton(
-                tooltip: 'Editar',
-                icon: Icon(Icons.edit_outlined,
-                    color: Colors.orange.shade700, size: 20),
-                onPressed: () => _openForm(context, m),
-              ),
-              IconButton(
-                tooltip: 'Excluir',
-                icon: Icon(Icons.delete_outline,
-                    color: FlutterFlowTheme.of(context).error, size: 20),
-                onPressed: () => _confirmDelete(context, idInt),
+              Container(width: 3, color: theme.primary),
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(12, 12, temAcoes ? 4 : 12, 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: theme.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.folder_rounded,
+                          size: 18,
+                          color: theme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          nome,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: theme.primaryText,
+                          ),
+                        ),
+                      ),
+                      if (canEdit)
+                        IconButton(
+                          tooltip: 'Editar',
+                          onPressed: () => _openForm(grupo),
+                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints(
+                            minWidth: 36,
+                            minHeight: 36,
+                          ),
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            Icons.edit_outlined,
+                            size: 18,
+                            color: theme.secondaryText,
+                          ),
+                        ),
+                      if (canDelete)
+                        IconButton(
+                          tooltip: 'Excluir',
+                          onPressed: () => _confirmDelete(sid),
+                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints(
+                            minWidth: 36,
+                            minHeight: 36,
+                          ),
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            Icons.delete_outline_rounded,
+                            size: 18,
+                            color: theme.error,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildPagination(BuildContext context, int lastPage) {
-    return Material(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        child: Row(
-          children: [
-            DropdownButton<int>(
-              value: _perPage,
-              items: const [10, 25, 50]
-                  .map((e) => DropdownMenuItem(value: e, child: Text('$e / página')))
-                  .toList(),
-              onChanged: (v) {
-                if (v == null) return;
-                setState(() {
-                  _perPage = v;
-                  _page = 1;
-                });
-                _fetchGrupos();
-              },
-            ),
-            const Spacer(),
-            IconButton(
-              onPressed: _page > 1
-                  ? () {
-                      setState(() => _page--);
-                      _fetchGrupos();
-                    }
-                  : null,
-              icon: const Icon(Icons.chevron_left),
-            ),
-            Text('Página $_page / $lastPage'),
-            IconButton(
-              onPressed: _page < lastPage
-                  ? () {
-                      setState(() => _page++);
-                      _fetchGrupos();
-                    }
-                  : null,
-              icon: const Icon(Icons.chevron_right),
-            ),
-          ],
+  Future<void> _openForm(Map<String, dynamic>? existing) async {
+    if (existing == null) {
+      if (!MembershipAccess.canPermission('create_cadastros_gerais')) {
+        MembershipAccess.showDenied(
+          context,
+          'Sem permissão para criar cadastros gerais.',
+        );
+        return;
+      }
+    } else if (!MembershipAccess.canPermission('edit_cadastros_gerais')) {
+      MembershipAccess.showDenied(
+        context,
+        'Sem permissão para editar cadastros gerais.',
+      );
+      return;
+    }
+
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(ctx).bottom,
+        ),
+        child: _GrupoNomeSheet(
+          titulo: existing == null ? 'Novo grupo de obra' : 'Editar grupo de obra',
+          nomeInicial: existing?['nome']?.toString() ?? '',
         ),
       ),
     );
-  }
 
-  void _showView(BuildContext context, Map<String, dynamic> m) {
-    final sid = m['id'];
-    final sidInt = sid is int ? sid : int.tryParse('$sid') ?? 0;
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('${m['nome'] ?? 'Grupo'}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (sidInt > 0) Text('ID: $sidInt'),
-            if ('${m['uuid'] ?? ''}'.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'UUID: ${m['uuid']}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-              ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Fechar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _openForm(BuildContext context, Map<String, dynamic>? existing) async {
-    final result = await showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _GrupoNomeDialog(
-        titulo: existing == null ? 'Novo grupo de obra' : 'Editar grupo de obra',
-        nomeInicial: existing?['nome']?.toString() ?? '',
-      ),
-    );
-
-    if (result == null || !mounted || !context.mounted) return;
+    if (result == null || !mounted) return;
     final nomeVal = result.trim();
     if (nomeVal.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -718,8 +780,7 @@ class _GruposObrasWidgetState extends State<GruposObrasWidget> {
         _showApiError(r);
       }
     } else {
-      final id = existing['id'];
-      final idInt = id is int ? id : int.tryParse('$id') ?? 0;
+      final idInt = _serverId(existing);
       if (idInt <= 0) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -732,7 +793,8 @@ class _GruposObrasWidgetState extends State<GruposObrasWidget> {
         }
         return;
       }
-      final r = await GrupoObrasUpdateCall.call(token: token, id: idInt, body: body);
+      final r =
+          await GrupoObrasUpdateCall.call(token: token, id: idInt, body: body);
       if (r.succeeded) {
         await _afterMutation('Grupo atualizado.');
       } else {
@@ -755,7 +817,14 @@ class _GruposObrasWidgetState extends State<GruposObrasWidget> {
     }
   }
 
-  Future<void> _confirmDelete(BuildContext context, int id) async {
+  Future<void> _confirmDelete(int id) async {
+    if (!MembershipAccess.canPermission('delete_cadastros_gerais')) {
+      MembershipAccess.showDenied(
+        context,
+        'Sem permissão para excluir cadastros gerais.',
+      );
+      return;
+    }
     if (id <= 0) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -768,18 +837,42 @@ class _GruposObrasWidgetState extends State<GruposObrasWidget> {
       }
       return;
     }
+
+    final theme = FlutterFlowTheme.of(context);
     final go = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Excluir grupo?'),
-        content: const Text('Esta ação não pode ser desfeita.'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text(
+          'Excluir grupo?',
+          style: GoogleFonts.inter(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: theme.primaryText,
+          ),
+        ),
+        content: Text(
+          'Esta ação não pode ser desfeita.',
+          style: GoogleFonts.inter(fontSize: 13.5, color: theme.secondaryText),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
+            child: Text(
+              'Cancelar',
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w600,
+                color: theme.secondaryText,
+              ),
+            ),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.error,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Excluir'),
           ),
@@ -797,8 +890,8 @@ class _GruposObrasWidgetState extends State<GruposObrasWidget> {
   }
 }
 
-class _GrupoNomeDialog extends StatefulWidget {
-  const _GrupoNomeDialog({
+class _GrupoNomeSheet extends StatefulWidget {
+  const _GrupoNomeSheet({
     required this.titulo,
     required this.nomeInicial,
   });
@@ -807,10 +900,10 @@ class _GrupoNomeDialog extends StatefulWidget {
   final String nomeInicial;
 
   @override
-  State<_GrupoNomeDialog> createState() => _GrupoNomeDialogState();
+  State<_GrupoNomeSheet> createState() => _GrupoNomeSheetState();
 }
 
-class _GrupoNomeDialogState extends State<_GrupoNomeDialog> {
+class _GrupoNomeSheetState extends State<_GrupoNomeSheet> {
   late final TextEditingController _nome;
 
   @override
@@ -825,35 +918,112 @@ class _GrupoNomeDialogState extends State<_GrupoNomeDialog> {
     super.dispose();
   }
 
+  void _salvar() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    Navigator.of(context).pop(_nome.text.trim());
+  }
+
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.titulo),
-      content: TextField(
-        controller: _nome,
-        autofocus: true,
-        decoration: const InputDecoration(
-          labelText: 'Nome do grupo *',
-          border: OutlineInputBorder(),
-        ),
-        onSubmitted: (_) {
-          FocusManager.instance.primaryFocus?.unfocus();
-          Navigator.of(context).pop(_nome.text.trim());
-        },
+    final theme = FlutterFlowTheme.of(context);
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      decoration: BoxDecoration(
+        color: theme.secondaryBackground,
+        borderRadius: BorderRadius.circular(kRdoRadius),
+        border: Border.all(color: theme.alternate),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.folder_special_outlined,
+                    size: 18, color: theme.secondaryText),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.titulo,
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: theme.primaryText,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Fechar',
+                  onPressed: () => Navigator.pop(context),
+                  icon: Icon(Icons.close_rounded,
+                      size: 20, color: theme.secondaryText),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _nome,
+              autofocus: true,
+              style: rdoFormFieldTextStyle(context),
+              decoration: rdoFormFieldDecoration(
+                context,
+                label: 'Nome do grupo *',
+                hint: 'Digite o nome',
+              ),
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _salvar(),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: theme.secondaryText,
+                      side: BorderSide(color: theme.alternate),
+                      minimumSize: const Size(0, 42),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text(
+                      'Cancelar',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _salvar,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: theme.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(0, 42),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text(
+                      'Salvar',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-        FilledButton(
-          onPressed: () {
-            FocusManager.instance.primaryFocus?.unfocus();
-            Navigator.of(context).pop(_nome.text.trim());
-          },
-          child: const Text('Salvar'),
-        ),
-      ],
+      ),
     );
   }
 }

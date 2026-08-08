@@ -1,5 +1,6 @@
 import '/backend/sqlite/sqlite_manager.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
+import '/flutter_flow/custom_functions.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
@@ -161,6 +162,7 @@ class _ShowAtividadesRelatorioWidgetState
                           return ListView.builder(
                             padding: EdgeInsets.zero,
                             shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
                             scrollDirection: Axis.vertical,
                             itemCount:
                                 listViewGetAtividadesRelatorioRowList.length,
@@ -334,12 +336,7 @@ class _ShowAtividadesRelatorioWidgetState
                                               MainAxisAlignment.spaceBetween,
                                           children: [
                                             Text(
-                                              'Quantidade Realizada: ${valueOrDefault<String>(
-                                                listViewGetAtividadesRelatorioRow
-                                                    .qtdRealizada
-                                                    ?.toString(),
-                                                '0',
-                                              )}${listViewGetAtividadesRelatorioRow.unidade}',
+                                              'Quantidade Realizada: ${formatQuantidadeRelatorio(listViewGetAtividadesRelatorioRow.qtdRealizada)}${listViewGetAtividadesRelatorioRow.unidade}',
                                               style:
                                                   FlutterFlowTheme.of(context)
                                                       .bodyMedium
