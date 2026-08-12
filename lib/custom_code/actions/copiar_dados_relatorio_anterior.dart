@@ -168,7 +168,7 @@ INSERT INTO relatorio_atividades_itens (
   uuid, relatorio_atividade_id, relatorio_atividade_uuid, tipo,
   obra_item_id, obra_item_uuid, qtd_utilizada, qtd_realizada, qtd_produzida,
   situacao, created_by, updated_at, synced
-) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 0)
+) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, 0)
 ''', [
         novoItemUuid,
         novaAtivId,
@@ -176,8 +176,6 @@ INSERT INTO relatorio_atividades_itens (
         item['tipo']?.toString() ?? '',
         item['obra_item_id'],
         item['obra_item_uuid']?.toString() ?? '',
-        item['qtd_utilizada'] ?? 0,
-        item['qtd_produzida'] ?? 0,
         kSituacaoAtivo,
         createdBy,
         agora,
@@ -244,14 +242,13 @@ WHERE relatorio_uuid = ?
 INSERT INTO relatorio_equipamento_recebido (
   uuid, relatorio_id, relatorio_uuid, equipamento_id, equipamento_uuid,
   quantidade, created_by, situacao, updated_at, synced
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, 0)
 ''', [
       uuid,
       novoId,
       novoUuid,
       m['equipamento_id'],
       m['equipamento_uuid']?.toString() ?? '',
-      m['quantidade'] ?? 0,
       createdBy,
       kSituacaoAtivo,
       agora,

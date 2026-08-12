@@ -108,13 +108,28 @@ class _MaoObraPresencaControlsWidgetState
     final d = det.firstOrNull;
     if (d == null) return;
 
+    /// Ausente/licença/etc. → 0h. Presente/atrasado com 0 após ausência →
+    /// vazio para o sync recalcular a partir dos horários.
+    String _horasParaPersistir(String statusPresenca, String? horasAtuais) {
+      final statusNorm = statusPresenca.trim().toLowerCase();
+      if (statusNorm != 'presente' && statusNorm != 'atrasado') {
+        return '0';
+      }
+      final h = (horasAtuais ?? '').trim().replaceAll(',', '.');
+      if (h.isEmpty || h == '0' || h == '0.0' || h == '0.00') {
+        return '';
+      }
+      return _escapeSql(horasAtuais);
+    }
+
     await SQLiteManager.instance.updateMaoObraRelatorio(
       status: status,
       horaEntrada: _escapeSql(d.horaEntrada),
       horaSaida: _escapeSql(d.horaSaida),
       intervaloInicio: _escapeSql(d.intervaloInicio),
       intervaloFim: _escapeSql(d.intervaloFim),
-      horasTrabalhadas: _escapeSql(d.horasTrabalhadas),
+      // Ausente (e demais status sem ponto) não computam carga horária.
+      horasTrabalhadas: _horasParaPersistir(status, d.horasTrabalhadas),
       motivoAusencia: status == 'presente' ? '' : _escapeSql(motivo),
       motivoSaidaCedo: _escapeSql(d.motivoSaidaCedo),
       motivoAtraso: _escapeSql(d.motivoAtraso),

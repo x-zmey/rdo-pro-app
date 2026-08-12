@@ -375,12 +375,15 @@ Future<List<RelatoriosObraRow>> performRelatoriosObra(
 SELECT
   r.*,
   sr.nome AS status_nome,
+  mr.nome AS modelo_nome,
   $_sqlExprCriadorNomeRelatorio
 FROM relatorios AS r
 INNER JOIN obras AS ob ON ob.uuid = r.obra_uuid AND ob.user_uuid = '${esc(owner)}'
   AND (ob.situacao IS NULL OR CAST(ob.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
 LEFT JOIN status_relatorios AS sr
   ON sr.id = r.status_id
+LEFT JOIN modelo_relatorios AS mr
+  ON mr.uuid = r.modelo_uuid
 $_sqlJoinsCriadorRelatorio
 WHERE r.obra_uuid = '${esc(obraUuid)}'
   AND (r.situacao IS NULL OR CAST(r.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
@@ -399,6 +402,8 @@ class RelatoriosObraRow extends SqliteRow {
   int? get numero => data['numero'] as int?;
   String get uuid => data['uuid'] as String;
   String get obraUuid => data['obra_uuid'] as String;
+  String? get modeloUuid => data['modelo_uuid'] as String?;
+  String? get modeloNome => data['modelo_nome'] as String?;
   int? get statusId => data['status_id'] as int?;
   String? get statusNome => data['status_nome'] as String?;
   String? get criador => data['criador'] as String?;

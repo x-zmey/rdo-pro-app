@@ -16,7 +16,7 @@ import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'cadastrar_relatorio_geral_model.dart';
 export 'cadastrar_relatorio_geral_model.dart';
 
-/// Cadastro de RDO: obra, modelo, data (única ou período) e cópia do anterior.
+/// Cadastro de RDO: obra, modelo, data (única ou período) e cópia de outro RDO.
 class CadastrarRelatorioGeralWidget extends StatefulWidget {
   const CadastrarRelatorioGeralWidget({super.key});
 
@@ -36,13 +36,17 @@ class _CadastrarRelatorioGeralWidgetState
 
   List<CarregaObrasRow> _obras = [];
   List<ModelosRelatoriosRow> _modelos = [];
+  List<RelatoriosObraRow> _relatoriosCopia = [];
   bool _obrasLoading = true;
   bool _modelosLoading = false;
+  bool _opcoesCopiaLoading = false;
 
   String? _obraUuid;
   String? _modeloUuid;
+  String? _relatorioOrigemUuid;
   FormFieldController<String>? _obraController;
   FormFieldController<String>? _modeloController;
+  FormFieldController<String>? _relatorioOrigemController;
 
   late final TextEditingController _dataController;
   late final TextEditingController _dataInicioController;
@@ -63,6 +67,7 @@ class _CadastrarRelatorioGeralWidgetState
     (label: 'Mão de obra', value: 'mao_obra'),
   ];
   final Set<String> _copiarSelecionados = {};
+  bool _copiarDadosAtivo = false;
 
   bool _salvando = false;
 
@@ -78,6 +83,29 @@ class _CadastrarRelatorioGeralWidgetState
   }
 
   bool get _isPeriodo => _modeloSelecionado?.isPeriodo ?? false;
+
+  bool get _temRelatoriosParaCopiar => _relatoriosCopia.isNotEmpty;
+
+  String _formatarDataCopia(String? raw) {
+    if (raw == null) return '—';
+    final s = raw.trim();
+    if (s.isEmpty) return '—';
+    if (RegExp(r'^\d{4}-\d{2}-\d{2}').hasMatch(s)) {
+      final p = s.substring(0, 10).split('-');
+      if (p.length == 3) return '${p[2]}/${p[1]}/${p[0]}';
+    }
+    if (s.contains('/')) return s.split(' ').first;
+    return s;
+  }
+
+  String _labelRelatorioCopia(RelatoriosObraRow r) {
+    final numero = r.numero?.toString() ?? '—';
+    final data = _formatarDataCopia(r.dataExecutado);
+    final modelo = (r.modeloNome ?? '').trim().isEmpty
+        ? 'Sem modelo'
+        : r.modeloNome!.trim();
+    return 'Nº $numero — $data — $modelo';
+  }
 
   @override
   void initState() {
@@ -159,6 +187,52 @@ class _CadastrarRelatorioGeralWidgetState
     }
   }
 
+  Future<void> _carregarOpcoesCopia(String obraUuid) async {
+    setState(() {
+      _opcoesCopiaLoading = true;
+      _relatoriosCopia = [];
+      _relatorioOrigemUuid = null;
+      _relatorioOrigemController = FormFieldController<String>(null);
+      _copiarSelecionados.clear();
+    });
+    try {
+      final list = await SQLiteManager.instance.relatoriosObra(
+        obraUuid: obraUuid,
+        accountOwnerUuid: FFAppState().creatorUuid,
+        limit: 200,
+      );
+      if (!mounted) return;
+      // Preferir número mais alto (como na web).
+      final ordenados = [...list]
+        ..sort((a, b) {
+          final byNumero = (b.numero ?? 0).compareTo(a.numero ?? 0);
+          if (byNumero != 0) return byNumero;
+          return b.id.compareTo(a.id);
+        });
+      setState(() {
+        _relatoriosCopia = ordenados;
+        // Origem só é pré-selecionada ao ativar a cópia
+        if (_copiarDadosAtivo && ordenados.isNotEmpty) {
+          _relatorioOrigemUuid = ordenados.first.uuid;
+          _relatorioOrigemController =
+              FormFieldController<String>(ordenados.first.uuid);
+        } else {
+          _relatorioOrigemUuid = null;
+          _relatorioOrigemController = FormFieldController<String>(null);
+        }
+        _opcoesCopiaLoading = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _relatoriosCopia = [];
+          _relatorioOrigemUuid = null;
+          _opcoesCopiaLoading = false;
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
     _dataController.dispose();
@@ -179,10 +253,31 @@ class _CadastrarRelatorioGeralWidgetState
       _modeloController = FormFieldController<String>(null);
       _modelos = [];
       _copiarSelecionados.clear();
+      _copiarDadosAtivo = false;
+      _relatoriosCopia = [];
+      _relatorioOrigemUuid = null;
+      _relatorioOrigemController = FormFieldController<String>(null);
     });
     if (uuid != null) {
       _carregarModelos(uuid);
+      _carregarOpcoesCopia(uuid);
     }
+  }
+
+  void _ativarCopiaDados(bool ativar) {
+    setState(() {
+      _copiarDadosAtivo = ativar;
+      if (!ativar) {
+        _copiarSelecionados.clear();
+        return;
+      }
+      if ((_relatorioOrigemUuid == null || _relatorioOrigemUuid!.isEmpty) &&
+          _relatoriosCopia.isNotEmpty) {
+        _relatorioOrigemUuid = _relatoriosCopia.first.uuid;
+        _relatorioOrigemController =
+            FormFieldController<String>(_relatorioOrigemUuid);
+      }
+    });
   }
 
   void _onModeloChanged(String? m) {
@@ -296,12 +391,21 @@ class _CadastrarRelatorioGeralWidgetState
     final router = GoRouter.of(context);
     setState(() => _salvando = true);
     try {
-      // Resolver relatório anterior ANTES de criar o novo (para cópia).
-      final anteriorObra = await SQLiteManager.instance.carregaUltimoRelatorio(
-        accountOwnerUuid: FFAppState().creatorUuid,
-        obraUuid: obra.uuid,
-      );
-      final anteriorUuid = anteriorObra.firstOrNull?.uuid;
+      final origemUuid = _relatorioOrigemUuid?.trim();
+      if (_copiarDadosAtivo) {
+        if (origemUuid == null || origemUuid.isEmpty) {
+          _snack('Selecione o relatório de origem para copiar os dados.',
+              erro: true);
+          setState(() => _salvando = false);
+          return;
+        }
+        if (_copiarSelecionados.isEmpty) {
+          _snack('Selecione ao menos um tipo de dado para copiar.',
+              erro: true);
+          setState(() => _salvando = false);
+          return;
+        }
+      }
 
       final ultimoGlobal = await SQLiteManager.instance.carregaUltimoRelatorio(
         accountOwnerUuid: FFAppState().creatorUuid,
@@ -335,13 +439,14 @@ class _CadastrarRelatorioGeralWidgetState
         throw Exception('Relatório criado sem id local.');
       }
 
-      if (_copiarSelecionados.isNotEmpty &&
-          anteriorUuid != null &&
-          anteriorUuid.isNotEmpty) {
+      if (_copiarDadosAtivo &&
+          _copiarSelecionados.isNotEmpty &&
+          origemUuid != null &&
+          origemUuid.isNotEmpty) {
         await actions.copiarDadosRelatorioAnterior(
           novoRelatorioId: novoId,
           novoRelatorioUuid: newUuid,
-          anteriorRelatorioUuid: anteriorUuid,
+          anteriorRelatorioUuid: origemUuid,
           dataReferencia: dataTxt,
           tiposParaCopiar: _copiarSelecionados.toList(),
           companyId: FFAppState().creatorId,
@@ -644,48 +749,133 @@ class _CadastrarRelatorioGeralWidgetState
   }
 
   Widget _secaoCopiar(FlutterFlowTheme theme) {
+    if (_obraUuid == null || _obraUuid!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    if (_opcoesCopiaLoading) {
+      return RdoSectionCard(
+        title: 'Copiar dados de outro relatório',
+        icon: Icons.content_copy_outlined,
+        subtitle: 'Carregando relatórios da obra…',
+        margin: EdgeInsets.zero,
+        child: _loadingCampo(),
+      );
+    }
+    if (!_temRelatoriosParaCopiar) {
+      return const SizedBox.shrink();
+    }
+
     return RdoSectionCard(
-      title: 'Copiar dados do relatório anterior',
+      title: 'Copiar dados de outro relatório',
       icon: Icons.content_copy_outlined,
-      subtitle: 'Selecione quais dados deseja copiar do último relatório desta obra',
+      subtitle:
+          'Opcional — ative apenas se quiser reaproveitar dados de um RDO',
       margin: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final op in _opcoesCopiar)
-            CheckboxListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.leading,
-              value: _copiarSelecionados.contains(op.value),
+          RadioListTile<bool>(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            value: false,
+            groupValue: _copiarDadosAtivo,
+            onChanged: (v) => _ativarCopiaDados(v ?? false),
+            title: Text(
+              'Não copiar',
+              style: GoogleFonts.inter(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w500,
+                color: theme.primaryText,
+              ),
+            ),
+            activeColor: theme.primary,
+          ),
+          RadioListTile<bool>(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            value: true,
+            groupValue: _copiarDadosAtivo,
+            onChanged: (v) => _ativarCopiaDados(v ?? false),
+            title: Text(
+              'Copiar de outro relatório',
+              style: GoogleFonts.inter(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w500,
+                color: theme.primaryText,
+              ),
+            ),
+            activeColor: theme.primary,
+          ),
+          if (_copiarDadosAtivo) ...[
+            const SizedBox(height: 8),
+            _rotuloCampo('Relatório de origem'),
+            FlutterFlowDropDown<String>(
+              key: ValueKey<String?>('copia_$_obraUuid'),
+              controller: _relatorioOrigemController ??=
+                  FormFieldController<String>(_relatorioOrigemUuid),
+              options: _relatoriosCopia.map((e) => e.uuid).toList(),
+              optionLabels:
+                  _relatoriosCopia.map(_labelRelatorioCopia).toList(),
               onChanged: (v) {
                 setState(() {
-                  if (v == true) {
-                    _copiarSelecionados.add(op.value);
-                  } else {
-                    _copiarSelecionados.remove(op.value);
-                  }
+                  _relatorioOrigemUuid =
+                      (v == null || v.isEmpty) ? null : v;
                 });
               },
-              title: Text(
-                op.label,
+              width: double.infinity,
+              height: 38,
+              textStyle: rdoCompactFieldTextStyle(context),
+              hintText: 'Nº, data e modelo',
+              icon: _dropDownIcon(theme),
+              fillColor: theme.secondaryBackground,
+              elevation: 0,
+              borderColor: theme.alternate,
+              borderWidth: 1,
+              borderRadius: 8,
+              margin: const EdgeInsetsDirectional.fromSTEB(10, 0, 6, 0),
+              hidesUnderline: true,
+              isSearchable: true,
+              searchHintText: 'Buscar relatório...',
+              searchHintTextStyle: rdoCompactFieldTextStyle(context),
+              searchTextStyle: rdoCompactFieldTextStyle(context),
+              isMultiSelect: false,
+            ),
+            const SizedBox(height: 8),
+            for (final op in _opcoesCopiar)
+              CheckboxListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _copiarSelecionados.contains(op.value),
+                onChanged: (v) {
+                  setState(() {
+                    if (v == true) {
+                      _copiarSelecionados.add(op.value);
+                    } else {
+                      _copiarSelecionados.remove(op.value);
+                    }
+                  });
+                },
+                title: Text(
+                  op.label,
+                  style: GoogleFonts.inter(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w500,
+                    color: theme.primaryText,
+                  ),
+                ),
+                activeColor: theme.primary,
+              ),
+            if (_copiarSelecionados.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Fotos das atividades não serão copiadas.',
                 style: GoogleFonts.inter(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w500,
-                  color: theme.primaryText,
+                  fontSize: 11.5,
+                  color: theme.secondaryText,
                 ),
               ),
-              activeColor: theme.primary,
-            ),
-          if (_copiarSelecionados.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              'Fotos das atividades não serão copiadas.',
-              style: GoogleFonts.inter(
-                fontSize: 11.5,
-                color: theme.secondaryText,
-              ),
-            ),
+            ],
           ],
         ],
       ),
