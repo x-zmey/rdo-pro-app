@@ -511,13 +511,22 @@ Future syncRelatorios() async {
               'synced': 1,
               'sync_try_count': 0,
             };
+            final numSrv = relatorio['numero'];
+            if (numSrv != null) {
+              final n = numSrv is int
+                  ? numSrv
+                  : int.tryParse(numSrv.toString().trim());
+              if (n != null && n > 0) {
+                patch['numero'] = n;
+              }
+            }
             // Só preenche last_sync se ainda estiver vazio (não sobrescreve cursor de download).
             if (lastSyncUpload != null) {
               final existing = await db.query(
                 'relatorios',
                 columns: ['last_sync_date'],
-                where: 'uuid = ?',
-                whereArgs: [u],
+                where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
+                whereArgs: [normalizeSyncUuid(u) ?? u],
                 limit: 1,
               );
               final cur = existing.isEmpty
@@ -530,8 +539,8 @@ Future syncRelatorios() async {
             await db.update(
               'relatorios',
               patch,
-              where: 'uuid = ?',
-              whereArgs: [u],
+              where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
+              whereArgs: [normalizeSyncUuid(u) ?? u],
             );
             uploadedCount++;
           }

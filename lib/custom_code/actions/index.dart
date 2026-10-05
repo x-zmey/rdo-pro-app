@@ -71,6 +71,7 @@ export 'sync_user_obras.dart' show syncUserObras;
 export 'sync_empresa_user_permissions.dart' show syncEmpresaUserPermissions;
 export 'sync_relatorio_ocorrencias.dart' show syncRelatorioOcorrencias;
 export 'sync_tipo_ocorrencias.dart' show syncTipoOcorrencias;
-export 'incrise_relatorio_numero.dart' show incriseRelatorioNumero;
+export 'incrise_relatorio_numero.dart'
+    show incriseRelatorioNumero, nextRelatorioNumeroForObra;
 export 'copiar_dados_relatorio_anterior.dart' show copiarDadosRelatorioAnterior;
 export 'sync_obra_locais.dart' show syncObraLocais;

@@ -442,14 +442,11 @@ class _AddRelatorioWidgetState extends State<AddRelatorioWidget>
                                         ? modelosList.first.uuid
                                         : '';
 
-                                    _model.ultimoDetalhes =
-                                        await SQLiteManager.instance
-                                            .carregaUltimoRelatorio(
-                                      accountOwnerUuid: FFAppState().creatorUuid,
-                                    );
                                     _model.novoNumero =
-                                        await actions.incriseRelatorioNumero(
-                                      _model.ultimoDetalhes?.firstOrNull?.numero,
+                                        await actions.nextRelatorioNumeroForObra(
+                                      accountOwnerUuid:
+                                          FFAppState().creatorUuid,
+                                      obraUuid: obra.uuid,
                                     );
                                     _model.uuid = await actions.generateUuid();
 
@@ -470,6 +467,7 @@ class _AddRelatorioWidgetState extends State<AddRelatorioWidget>
                                     _model.id = await SQLiteManager.instance
                                         .carregaUltimoRelatorio(
                                       accountOwnerUuid: FFAppState().creatorUuid,
+                                      obraUuid: obra.uuid,
                                     );
                                     if (!context.mounted) {
                                       return;

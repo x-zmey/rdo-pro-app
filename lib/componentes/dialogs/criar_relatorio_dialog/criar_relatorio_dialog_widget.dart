@@ -394,11 +394,10 @@ class _CriarRelatorioDialogWidgetState
                     ),
                     FFButtonWidget(
                       onPressed: () async {
-                        _model.ultimoDetalhes = await SQLiteManager.instance
-                            .carregaUltimoRelatorio();
                         _model.novoNumero =
-                            await actions.incriseRelatorioNumero(
-                          _model.ultimoDetalhes?.firstOrNull?.numero,
+                            await actions.nextRelatorioNumeroForObra(
+                          accountOwnerUuid: FFAppState().creatorUuid,
+                          obraUuid: widget!.obraUuid ?? '',
                         );
                         _model.uuid = await actions.generateUuid();
                         await SQLiteManager.instance.cadastrarRelatorio(
@@ -417,6 +416,7 @@ class _CriarRelatorioDialogWidgetState
                         _model.relatorioDetalhes = await SQLiteManager.instance
                             .carregaUltimoRelatorio(
                           accountOwnerUuid: FFAppState().creatorUuid,
+                          obraUuid: widget!.obraUuid,
                         );
 
                         context.pushNamed(

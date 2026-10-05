@@ -407,11 +407,9 @@ class _CadastrarRelatorioGeralWidgetState
         }
       }
 
-      final ultimoGlobal = await SQLiteManager.instance.carregaUltimoRelatorio(
+      final numero = await actions.nextRelatorioNumeroForObra(
         accountOwnerUuid: FFAppState().creatorUuid,
-      );
-      final numero = await actions.incriseRelatorioNumero(
-        ultimoGlobal.firstOrNull?.numero,
+        obraUuid: obra.uuid,
       );
       final newUuid = await actions.generateUuid();
       await SQLiteManager.instance.cadastrarRelatorio(
@@ -422,7 +420,7 @@ class _CadastrarRelatorioGeralWidgetState
         dataInicio: periodo ? dataInicio : null,
         dataFinal: periodo ? dataFinal : null,
         criador: FFAppState().UserUuid,
-        numero: numero!,
+        numero: numero,
         uuid: newUuid,
         creatorUuid: FFAppState().creatorUuid,
         userUuid: FFAppState().creatorUuid,
