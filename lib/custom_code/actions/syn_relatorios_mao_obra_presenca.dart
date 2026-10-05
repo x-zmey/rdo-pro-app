@@ -24,6 +24,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'sync_relatorio_download_merge_guard.dart';
+import 'sync_uuid_upsert.dart';
 import '/backend/sqlite/situacao_soft_delete.dart';
 
 const String _kUrlUploadMaoObraPresenca =
@@ -364,7 +365,7 @@ Future synRelatoriosMaoObraPresenca() async {
               'relatorio_mao_obra_presenca',
               {
                 'synced': 1,
-                'last_sync_date': DateTime.now().toIso8601String(),
+                'last_sync_date': stUpload,
                 'sync_try_count': 0,
               },
               where: 'uuid = ?',
@@ -481,7 +482,11 @@ Future<void> _processarOrdemTarefa(
   final intervaloFim = _normalizeTimeHm(s['intervalo_fim']);
   final horasTrabalhadas = _normalizeHorasTrabalhadas(s['horas_trabalhadas']);
 
-  String uuid = relatorioMaoObraPresencaServer['uuid'] ?? _generateUuid();
+  final uuid = normalizeSyncUuid(relatorioMaoObraPresencaServer['uuid']);
+  if (uuid == null) {
+    print('⚠️ download skip: uuid ausente');
+    return;
+  }
 
   // SALVAR MAPEAMENTO (ID servidor → UUID)
   if (relatorioMaoObraPresencaServer['id'] != null) {
@@ -492,7 +497,7 @@ Future<void> _processarOrdemTarefa(
   // VERIFICAR SE EXISTE
   final existe = await db.query(
     'relatorio_mao_obra_presenca',
-    where: 'uuid = ?',
+    where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
     whereArgs: [uuid],
   );
 
@@ -540,7 +545,7 @@ Future<void> _processarOrdemTarefa(
         'created_at': relatorioMaoObraPresencaServer['created_at'],
         'updated_at': relatorioMaoObraPresencaServer['updated_at']
       },
-      where: 'uuid = ?',
+      where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
       whereArgs: [uuid],
     );
   } else {

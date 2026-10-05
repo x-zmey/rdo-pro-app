@@ -28,6 +28,7 @@ import '/backend/sqlite/situacao_soft_delete.dart';
 
 import 'sync_relatorio_download_merge_guard.dart';
 import 'sync_relatorios_atividades.dart' show syncRelatoriosAtividades;
+import 'sync_uuid_upsert.dart';
 
 /// Trim evita newline final na URL (405 MethodNotAllowed com `%0A`).
 const String _kUrlUploadRelatorioAtividadeFotos =
@@ -47,14 +48,12 @@ Future<void> _salvarMapeamento(
     String tabela, int idServidor, String uuid) async {
   final db = await SQLiteManager.instance.database;
   try {
-    await db.insert('sync_id_mapping', {
-      'tabela': tabela,
-      'id_servidor': idServidor,
-      'uuid': uuid,
-      'created_at': DateTime.now().toIso8601String(),
-    });
-
-    print('mapeamento salvo');
+    await upsertSyncIdMapping(
+      db,
+      tabela: tabela,
+      idServidor: idServidor,
+      uuid: uuid,
+    );
   } catch (e) {
     if (!e.toString().contains('UNIQUE constraint')) {
       print('❌ Erro ao salvar mapeamento: $e');
@@ -151,21 +150,27 @@ Future<void> _marcarFotoSincronizada(
   Database db,
   String uuid, {
   String? novoArquivoHttp,
+  String? serverTime,
 }) async {
+  final canon = normalizeSyncUuid(uuid) ?? uuid.trim();
   final rows = await db.query(
     'relatorio_atividade_fotos',
-    where: 'uuid = ?',
-    whereArgs: [uuid],
+    where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
+    whereArgs: [canon],
     limit: 1,
   );
   if (rows.isEmpty) return;
+
+  final syncAt = (serverTime != null && serverTime.trim().isNotEmpty)
+      ? serverTime.trim()
+      : DateTime.now().toUtc().toIso8601String();
 
   final u = novoArquivoHttp?.toString().trim();
   if (u != null && u.isNotEmpty && _isHttpUrl(u)) {
     final cur = rows.first['arquivo']?.toString().trim() ?? '';
     final patch = <String, dynamic>{
       'synced': 1,
-      'last_sync_date': DateTime.now().toIso8601String(),
+      'last_sync_date': syncAt,
       'sync_try_count': 0,
       'arquivo_servidor': u,
     };
@@ -176,8 +181,8 @@ Future<void> _marcarFotoSincronizada(
           await db.update(
             'relatorio_atividade_fotos',
             patch,
-            where: 'uuid = ?',
-            whereArgs: [uuid],
+            where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
+            whereArgs: [canon],
           );
           return;
         }
@@ -187,8 +192,8 @@ Future<void> _marcarFotoSincronizada(
     await db.update(
       'relatorio_atividade_fotos',
       patch,
-      where: 'uuid = ?',
-      whereArgs: [uuid],
+      where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
+      whereArgs: [canon],
     );
     return;
   }
@@ -197,11 +202,11 @@ Future<void> _marcarFotoSincronizada(
     'relatorio_atividade_fotos',
     {
       'synced': 1,
-      'last_sync_date': DateTime.now().toIso8601String(),
+      'last_sync_date': syncAt,
       'sync_try_count': 0,
     },
-    where: 'uuid = ?',
-    whereArgs: [uuid],
+    where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
+    whereArgs: [canon],
   );
 }
 
@@ -705,36 +710,46 @@ Future<void> _processarOrdemTarefa(
     {bool prioridadeServidor = false}) async {
   final db = await SQLiteManager.instance.database;
 
-  String uuid = relatorioAtividadeFotoServer['uuid'] ?? _generateUuid();
-
-  // SALVAR MAPEAMENTO (ID servidor → UUID)
-  if (relatorioAtividadeFotoServer['id'] != null) {
-    await _salvarMapeamento('relatorio_atividade_fotos',
-        relatorioAtividadeFotoServer['id'] as int, uuid);
+  final uuid = normalizeSyncUuid(relatorioAtividadeFotoServer['uuid']);
+  if (uuid == null) {
+    print('⚠️ relatorio_atividade_fotos download: uuid ausente — skip');
+    return;
   }
 
-  // VERIFICAR SE EXISTE
-  final existe = await db.query(
-    'relatorio_atividade_fotos',
-    where: 'uuid = ?',
-    whereArgs: [uuid],
+  final serverId = syncServerId(relatorioAtividadeFotoServer['id']);
+  if (serverId != null) {
+    await _salvarMapeamento('relatorio_atividade_fotos', serverId, uuid);
+  }
+
+  final existente = await resolveLocalRowForSyncDownload(
+    db,
+    tabela: 'relatorio_atividade_fotos',
+    uuid: uuid,
+    serverId: serverId,
   );
 
-  if (existe.isNotEmpty) {
+  if (existente != null) {
     if (mantemVersaoLocalNaSyncDownloadRelatorioFilha(
-          localRow: Map<String, dynamic>.from(existe.first),
+          localRow: existente,
           serverRow: relatorioAtividadeFotoServer,
           tabela: 'relatorio_atividade_fotos',
           prioridadeServidor: prioridadeServidor,
         )) {
       return;
     }
-    // UPDATE
+    final localId = existente['id'] as int;
+    await alignLocalUuidIfNeeded(
+      db,
+      tabela: 'relatorio_atividade_fotos',
+      localId: localId,
+      canonicalUuid: uuid,
+      localRow: existente,
+    );
     final merged = await _mergeArquivoFotoCampos(
-      existingRow: Map<String, dynamic>.from(existe.first),
+      existingRow: existente,
       serverArquivoRaw: relatorioAtividadeFotoServer['arquivo'],
     );
-    final existingFk = _asInt(existe.first['relatorio_atividade_id']);
+    final existingFk = _asInt(existente['relatorio_atividade_id']);
     final resolvedRaId = await _localRelatorioAtividadeIdParaFoto(
       db,
       relatorioAtividadeFotoServer,
@@ -742,6 +757,7 @@ Future<void> _processarOrdemTarefa(
     );
     final raIdSqlite = resolvedRaId ?? existingFk;
     final upd = {
+      'uuid': uuid,
       if (raIdSqlite != null) 'relatorio_atividade_id': raIdSqlite,
       'relatorio_atividade_uuid': _nonEmptyStr(
           relatorioAtividadeFotoServer['relatorio_atividade_uuid']),
@@ -761,11 +777,10 @@ Future<void> _processarOrdemTarefa(
     await db.update(
       'relatorio_atividade_fotos',
       upd,
-      where: 'uuid = ?',
-      whereArgs: [uuid],
+      where: 'id = ?',
+      whereArgs: [localId],
     );
   } else {
-    // INSERT
     final mergedIns = await _mergeArquivoFotoCampos(
       existingRow: null,
       serverArquivoRaw: relatorioAtividadeFotoServer['arquivo'],
@@ -794,10 +809,19 @@ Future<void> _processarOrdemTarefa(
       'longitude': _nonEmptyStr(relatorioAtividadeFotoServer['longitude']),
     };
     ins.removeWhere((k, v) => v == null);
-    await db.insert(
+    final inserted = await db.insert(
       'relatorio_atividade_fotos',
       ins,
+      conflictAlgorithm: ConflictAlgorithm.ignore,
     );
+    if (inserted == 0) {
+      await db.update(
+        'relatorio_atividade_fotos',
+        ins,
+        where: 'LOWER(TRIM(COALESCE(uuid, \'\'))) = ?',
+        whereArgs: [uuid],
+      );
+    }
   }
 }
 

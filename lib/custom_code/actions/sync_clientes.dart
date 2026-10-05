@@ -20,6 +20,7 @@ import 'index.dart'; // Imports other custom actions
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math';
+import 'sync_uuid_upsert.dart';
 
 // ===== FUNÇÕES UTILITÁRIAS =====
 
@@ -163,7 +164,11 @@ Future<void> _processarCliente(
     Map<String, dynamic> clienteServer, String serverTime) async {
   final db = await SQLiteManager.instance.database;
 
-  String uuid = clienteServer['uuid'] ?? _generateUuid();
+  final uuid = normalizeSyncUuid(clienteServer['uuid']);
+  if (uuid == null) {
+    print('⚠️ download skip: uuid ausente');
+    return;
+  }
 
   // SALVAR MAPEAMENTO (ID servidor → UUID)
   if (clienteServer['id'] != null) {
@@ -178,7 +183,7 @@ Future<void> _processarCliente(
   // VERIFICAR SE EXISTE
   final existe = await db.query(
     'clientes',
-    where: 'uuid = ?',
+    where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
     whereArgs: [uuid],
   );
 
@@ -209,7 +214,7 @@ Future<void> _processarCliente(
         'created_at': clienteServer['created_at'],
         'updated_at': clienteServer['updated_at'],
       },
-      where: 'uuid = ?',
+      where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
       whereArgs: [uuid],
     );
     print('🔄 Cliente atualizado: ${clienteServer['nome']}');

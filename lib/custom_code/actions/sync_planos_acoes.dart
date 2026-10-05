@@ -19,6 +19,7 @@ import '/backend/api_requests/api_config.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math';
+import 'sync_uuid_upsert.dart';
 
 // ===== FUNÇÕES UTILITÁRIAS =====
 
@@ -370,7 +371,11 @@ Future<void> _processarPlanoAcao(
     Map<String, dynamic> planoServer, String serverTime) async {
   final db = await SQLiteManager.instance.database;
 
-  String uuid = planoServer['uuid'] ?? _generateUuid();
+  final uuid = normalizeSyncUuid(planoServer['uuid']);
+  if (uuid == null) {
+    print('⚠️ download skip: uuid ausente');
+    return;
+  }
 
   // SALVAR MAPEAMENTO (ID servidor → UUID)
   if (planoServer['id'] != null) {
@@ -380,7 +385,7 @@ Future<void> _processarPlanoAcao(
   // VERIFICAR SE EXISTE
   final existe = await db.query(
     'planos_acoes',
-    where: 'uuid = ?',
+    where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
     whereArgs: [uuid],
   );
 
@@ -450,7 +455,7 @@ Future<void> _processarPlanoAcao(
     await db.update(
       'planos_acoes',
       payload,
-      where: 'uuid = ?',
+      where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
       whereArgs: [uuid],
     );
     print('🔄 Plano ação atualizado: ${planoServer['descricao']}');

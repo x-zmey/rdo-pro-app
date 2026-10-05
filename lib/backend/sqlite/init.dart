@@ -53,7 +53,130 @@ Future<Database> initializeDatabaseFromDbFile(
   await _ensureRelatorioCustosQtdManualColumn(database);
   await _ensureFuncoesMaoObraTable(database);
   await ensureEmpresaMultiTenantTables(database);
+  await ensureSyncUuidUniqueIndexes(database);
   return database;
+}
+
+/// Remove duplicatas por UUID (case-insensitive) e cria índice UNIQUE nas tabelas de sync.
+///
+/// Evita que o download reinsira o mesmo registro quando o match por `uuid` falha
+/// por casing/espaços ou quando não havia constraint no SQLite.
+Future<void> ensureSyncUuidUniqueIndexes(Database database) async {
+  const tables = <String>[
+    'relatorios',
+    'relatorio_atividades',
+    'relatorio_atividades_itens',
+    'relatorio_atividade_fotos',
+    'relatorio_custos',
+    'relatorio_ordem_servico',
+    'relatorio_mao_obra_presenca',
+    'relatorio_comentarios',
+    'relatorio_anexos',
+    'relatorio_equipamento_recebido',
+    'relatorio_ocorrencias',
+    'obras',
+    'clientes',
+    'ordens_servico',
+    'checklists_preenchidos',
+    'planos_acoes',
+  ];
+
+  for (final table in tables) {
+    try {
+      final info = await database.rawQuery('PRAGMA table_info($table)');
+      if (info.isEmpty) continue;
+      final hasUuid = info.any((r) => r['name'] == 'uuid');
+      if (!hasUuid) continue;
+
+      // Normaliza casing/espaços antes do índice.
+      await database.execute('''
+UPDATE $table
+SET uuid = LOWER(TRIM(uuid))
+WHERE uuid IS NOT NULL
+  AND TRIM(uuid) != ''
+  AND LOWER(TRIM(uuid)) != 'null'
+  AND uuid != LOWER(TRIM(uuid))
+''');
+
+      await _dedupeSyncTableByUuid(database, table);
+
+      final indexName = 'idx_${table}_uuid_unique';
+      await database.execute('''
+CREATE UNIQUE INDEX IF NOT EXISTS $indexName
+ON $table (LOWER(TRIM(uuid)))
+WHERE uuid IS NOT NULL
+  AND TRIM(uuid) != ''
+  AND LOWER(TRIM(uuid)) != 'null'
+''');
+    } catch (e) {
+      // ignore: avoid_print
+      print('⚠️ ensureSyncUuidUniqueIndexes($table): $e');
+    }
+  }
+}
+
+Future<void> _dedupeSyncTableByUuid(Database database, String table) async {
+  final groups = await database.rawQuery('''
+SELECT LOWER(TRIM(uuid)) AS u, COUNT(*) AS c
+FROM $table
+WHERE uuid IS NOT NULL
+  AND TRIM(uuid) != ''
+  AND LOWER(TRIM(uuid)) != 'null'
+GROUP BY LOWER(TRIM(uuid))
+HAVING c > 1
+''');
+  if (groups.isEmpty) return;
+
+  final hasSynced = (await database.rawQuery('PRAGMA table_info($table)'))
+      .any((r) => r['name'] == 'synced');
+
+  for (final g in groups) {
+    final u = g['u']?.toString();
+    if (u == null || u.isEmpty) continue;
+
+    final rows = await database.rawQuery(
+      '''
+SELECT id${hasSynced ? ', synced' : ''}
+FROM $table
+WHERE LOWER(TRIM(COALESCE(uuid, ''))) = ?
+ORDER BY ${hasSynced ? 'CASE WHEN synced = 1 THEN 0 ELSE 1 END, ' : ''}id DESC
+''',
+      [u],
+    );
+    if (rows.length < 2) continue;
+
+    final keepId = rows.first['id'];
+    if (keepId == null) continue;
+
+    for (var i = 1; i < rows.length; i++) {
+      final dropId = rows[i]['id'];
+      if (dropId == null) continue;
+
+      // Remapeia FKs de filhas quando a tabela for atividades.
+      if (table == 'relatorio_atividades') {
+        try {
+          await database.rawUpdate(
+            '''
+UPDATE relatorio_atividades_itens
+SET relatorio_atividade_id = ?
+WHERE relatorio_atividade_id = ?
+''',
+            [keepId, dropId],
+          );
+          await database.rawUpdate(
+            '''
+UPDATE relatorio_atividade_fotos
+SET relatorio_atividade_id = ?
+WHERE relatorio_atividade_id = ?
+''',
+            [keepId, dropId],
+          );
+        } catch (_) {}
+      }
+
+      await database.delete(table, where: 'id = ?', whereArgs: [dropId]);
+    }
+  }
 }
 
 /// Override manual do realizado na OS (igual ao MySQL `relatorio_custos.qtd_manual`).

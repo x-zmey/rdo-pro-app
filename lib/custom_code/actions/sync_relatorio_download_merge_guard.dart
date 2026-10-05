@@ -16,6 +16,9 @@ import 'package:intl/intl.dart';
 //   2) Caso contrário, compara `updated_at` local vs servidor (UTC); se o servidor **não** é
 //      estritamente mais novo, mantém o local (LWW com empate preservando cliente).
 //
+// Identidade no pull: usar [normalizeSyncUuid] / [resolveLocalRowForSyncDownload]
+// (`sync_uuid_upsert.dart`). **Nunca** inventar UUID no download — uuid ausente = skip.
+//
 // UP (API): [servidorRejeitarUploadStaleVersusCliente] rejeita gravação se o servidor tem
 // `updated_at` mais recente que o `updated_at` enviado pelo app (entrada em `servidor_venceu_lww`).
 //

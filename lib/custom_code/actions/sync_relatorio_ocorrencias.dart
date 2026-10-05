@@ -26,6 +26,7 @@ import 'dart:math';
 import '/backend/sqlite/situacao_soft_delete.dart';
 
 import 'sync_relatorio_download_merge_guard.dart';
+import 'sync_uuid_upsert.dart';
 
 const String _kUrlUploadRelatorioOcorrencias =
     '$kApiBaseUrl/api/v1/sync/relatorios/ocorrencias/upload';
@@ -209,7 +210,7 @@ Future syncRelatorioOcorrencias() async {
               'relatorio_ocorrencias',
               {
                 'synced': 1,
-                'last_sync_date': DateTime.now().toIso8601String(),
+                'last_sync_date': stUpload,
                 'sync_try_count': 0,
               },
               where: 'uuid = ?',
@@ -309,7 +310,11 @@ Future<void> _processarOcorrencia(
     {bool prioridadeServidor = false}) async {
   final db = await SQLiteManager.instance.database;
 
-  final uuid = _nonEmptyStr(ocorrenciaServer['uuid']) ?? _generateUuid();
+  final uuid = normalizeSyncUuid(ocorrenciaServer['uuid']);
+  if (uuid == null) {
+    print('⚠️ download skip: uuid ausente');
+    return;
+  }
   final serverId = _asInt(ocorrenciaServer['id']);
   if (serverId != null) {
     await _salvarMapeamento('relatorio_ocorrencias', serverId, uuid);
@@ -317,7 +322,7 @@ Future<void> _processarOcorrencia(
 
   final existe = await db.query(
     'relatorio_ocorrencias',
-    where: 'uuid = ?',
+    where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
     whereArgs: [uuid],
     limit: 1,
   );
@@ -376,7 +381,7 @@ Future<void> _processarOcorrencia(
     await db.update(
       'relatorio_ocorrencias',
       row,
-      where: 'uuid = ?',
+      where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
       whereArgs: [uuid],
     );
   } else {

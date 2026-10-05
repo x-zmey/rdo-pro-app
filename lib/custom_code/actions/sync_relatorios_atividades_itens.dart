@@ -20,8 +20,11 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:sqflite/sqflite.dart';
+
 import 'sync_relatorio_download_merge_guard.dart';
 import 'sync_relatorios_atividades.dart' show syncRelatoriosAtividades;
+import 'sync_uuid_upsert.dart';
 
 /// Trim evita newline final na URL (405 MethodNotAllowed com `%0A`).
 const String _kUrlUploadRelatorioAtividadesItens =
@@ -41,14 +44,12 @@ Future<void> _salvarMapeamento(
     String tabela, int idServidor, String uuid) async {
   final db = await SQLiteManager.instance.database;
   try {
-    await db.insert('sync_id_mapping', {
-      'tabela': tabela,
-      'id_servidor': idServidor,
-      'uuid': uuid,
-      'created_at': DateTime.now().toIso8601String(),
-    });
-
-    print('mapeamento salvo');
+    await upsertSyncIdMapping(
+      db,
+      tabela: tabela,
+      idServidor: idServidor,
+      uuid: uuid,
+    );
   } catch (e) {
     if (!e.toString().contains('UNIQUE constraint')) {
       print('❌ Erro ao salvar mapeamento: $e');
@@ -242,7 +243,7 @@ Future syncRelatoriosAtividadesItens() async {
               'relatorio_atividades_itens',
               {
                 'synced': 1,
-                'last_sync_date': DateTime.now().toIso8601String(),
+                'last_sync_date': stUpload,
                 'sync_try_count': 0,
               },
               where: 'uuid = ?',
@@ -369,78 +370,83 @@ Future<void> _processarOrdemTarefa(
     {bool prioridadeServidor = false}) async {
   final db = await SQLiteManager.instance.database;
 
-  String uuid = relatorioAtividadeItemServer['uuid'] ?? _generateUuid();
-
-  // SALVAR MAPEAMENTO (ID servidor → UUID)
-  if (relatorioAtividadeItemServer['id'] != null) {
-    await _salvarMapeamento('relatorio_atividades_itens',
-        relatorioAtividadeItemServer['id'] as int, uuid);
+  final uuid = normalizeSyncUuid(relatorioAtividadeItemServer['uuid']);
+  if (uuid == null) {
+    print(
+      '⚠️ relatorio_atividades_itens download: uuid ausente — skip',
+    );
+    return;
   }
 
-  // VERIFICAR SE EXISTE
-  final existe = await db.query(
-    'relatorio_atividades_itens',
-    where: 'uuid = ?',
-    whereArgs: [uuid],
+  final serverId = syncServerId(relatorioAtividadeItemServer['id']);
+  if (serverId != null) {
+    await _salvarMapeamento('relatorio_atividades_itens', serverId, uuid);
+  }
+
+  final existente = await resolveLocalRowForSyncDownload(
+    db,
+    tabela: 'relatorio_atividades_itens',
+    uuid: uuid,
+    serverId: serverId,
   );
 
-  if (existe.isNotEmpty) {
+  final rowData = <String, dynamic>{
+    'uuid': uuid,
+    'relatorio_atividade_id':
+        relatorioAtividadeItemServer['relatorio_atividade_id'],
+    'relatorio_atividade_uuid': _nonEmptyStr(
+        relatorioAtividadeItemServer['relatorio_atividade_uuid']),
+    'tipo': relatorioAtividadeItemServer['tipo'],
+    'obra_item_id': relatorioAtividadeItemServer['obra_item_id'],
+    'obra_item_uuid':
+        _nonEmptyStr(relatorioAtividadeItemServer['obra_item_uuid']),
+    'qtd_utilizada': relatorioAtividadeItemServer['qtd_utilizada'],
+    'qtd_realizada': relatorioAtividadeItemServer['qtd_realizada'],
+    'qtd_produzida': relatorioAtividadeItemServer['qtd_produzida'] ?? 0,
+    'situacao': relatorioAtividadeItemServer['situacao'],
+    'created_by': FFAppState().creatorUuid.trim(),
+    'synced': 1,
+    'last_sync_date': serverTime,
+    'updated_at': relatorioAtividadeItemServer['updated_at'],
+  };
+
+  if (existente != null) {
     if (mantemVersaoLocalNaSyncDownloadRelatorioFilha(
-          localRow: Map<String, dynamic>.from(existe.first),
+          localRow: existente,
           serverRow: relatorioAtividadeItemServer,
           tabela: 'relatorio_atividades_itens',
           prioridadeServidor: prioridadeServidor,
         )) {
       return;
     }
-    // UPDATE
+    final localId = existente['id'] as int;
+    await alignLocalUuidIfNeeded(
+      db,
+      tabela: 'relatorio_atividades_itens',
+      localId: localId,
+      canonicalUuid: uuid,
+      localRow: existente,
+    );
     await db.update(
       'relatorio_atividades_itens',
-      {
-        'relatorio_atividade_id':
-            relatorioAtividadeItemServer['relatorio_atividade_id'],
-        'relatorio_atividade_uuid': _nonEmptyStr(
-            relatorioAtividadeItemServer['relatorio_atividade_uuid']),
-        'tipo': relatorioAtividadeItemServer['tipo'],
-        'obra_item_id': relatorioAtividadeItemServer['obra_item_id'],
-        'obra_item_uuid':
-            _nonEmptyStr(relatorioAtividadeItemServer['obra_item_uuid']),
-        'qtd_utilizada': relatorioAtividadeItemServer['qtd_utilizada'],
-        'qtd_realizada': relatorioAtividadeItemServer['qtd_realizada'],
-        'qtd_produzida': relatorioAtividadeItemServer['qtd_produzida'] ?? 0,
-        'situacao': relatorioAtividadeItemServer['situacao'],
-        'created_by': FFAppState().creatorUuid.trim(),
-        'synced': 1,
-        'last_sync_date': serverTime,
-        'updated_at': relatorioAtividadeItemServer['updated_at']
-      },
-      where: 'uuid = ?',
-      whereArgs: [uuid],
+      rowData,
+      where: 'id = ?',
+      whereArgs: [localId],
     );
   } else {
-    // INSERT
-    await db.insert(
+    final inserted = await db.insert(
       'relatorio_atividades_itens',
-      {
-        'uuid': uuid,
-        'relatorio_atividade_id':
-            relatorioAtividadeItemServer['relatorio_atividade_id'],
-        'relatorio_atividade_uuid': _nonEmptyStr(
-            relatorioAtividadeItemServer['relatorio_atividade_uuid']),
-        'tipo': relatorioAtividadeItemServer['tipo'],
-        'obra_item_id': relatorioAtividadeItemServer['obra_item_id'],
-        'obra_item_uuid':
-            _nonEmptyStr(relatorioAtividadeItemServer['obra_item_uuid']),
-        'qtd_utilizada': relatorioAtividadeItemServer['qtd_utilizada'],
-        'qtd_realizada': relatorioAtividadeItemServer['qtd_realizada'],
-        'qtd_produzida': relatorioAtividadeItemServer['qtd_produzida'] ?? 0,
-        'situacao': relatorioAtividadeItemServer['situacao'],
-        'created_by': FFAppState().creatorUuid.trim(),
-        'synced': 1,
-        'last_sync_date': serverTime,
-        'updated_at': relatorioAtividadeItemServer['updated_at']
-      },
+      rowData,
+      conflictAlgorithm: ConflictAlgorithm.ignore,
     );
+    if (inserted == 0) {
+      await db.update(
+        'relatorio_atividades_itens',
+        rowData,
+        where: 'LOWER(TRIM(COALESCE(uuid, \'\'))) = ?',
+        whereArgs: [uuid],
+      );
+    }
   }
 }
 

@@ -18,6 +18,7 @@ import 'package:http/http.dart' as http;
 import 'package:sqflite/sqflite.dart';
 import 'dart:convert';
 import 'dart:math';
+import 'sync_uuid_upsert.dart';
 
 // ===== FUNÇÕES UTILITÁRIAS (já existentes - copie da action anterior) =====
 
@@ -391,9 +392,10 @@ Future<void> _processarOrdem(
 }) async {
   final db = await SQLiteManager.instance.database;
 
-  String uuid = ordemServer['uuid']?.toString() ?? _generateUuid();
-  if (uuid.trim().isEmpty || uuid.toLowerCase() == 'null') {
-    uuid = _generateUuid();
+  final uuid = normalizeSyncUuid(ordemServer['uuid']);
+  if (uuid == null) {
+    print('⚠️ ordens_servico download: uuid ausente — skip');
+    return;
   }
 
   // SALVAR MAPEAMENTO (ID servidor → UUID)
@@ -408,7 +410,7 @@ Future<void> _processarOrdem(
   // VERIFICAR SE EXISTE
   final existe = await db.query(
     'ordens_servico',
-    where: 'uuid = ?',
+    where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
     whereArgs: [uuid],
   );
 
@@ -446,7 +448,7 @@ Future<void> _processarOrdem(
     await db.update(
       'ordens_servico',
       rowComum,
-      where: 'uuid = ?',
+      where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
       whereArgs: [uuid],
     );
   } else {

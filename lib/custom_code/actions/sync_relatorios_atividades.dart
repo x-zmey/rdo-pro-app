@@ -23,6 +23,7 @@ import 'dart:math';
 
 import 'sync_relatorio_download_merge_guard.dart';
 import 'sync_relatorios.dart' show syncRelatorios;
+import 'sync_uuid_upsert.dart';
 
 /// Trim evita newline final na URL (405 MethodNotAllowed com `%0A`).
 const String _kUrlUploadRelatorioAtividades =
@@ -75,20 +76,12 @@ WHERE relatorio_atividade_id = ?
 Future<void> _salvarMapeamento(
     String tabela, int idServidor, String uuid) async {
   final db = await SQLiteManager.instance.database;
-  try {
-    await db.insert('sync_id_mapping', {
-      'tabela': tabela,
-      'id_servidor': idServidor,
-      'uuid': uuid,
-      'created_at': DateTime.now().toIso8601String(),
-    });
-
-    print('mapeamento salvo');
-  } catch (e) {
-    if (!e.toString().contains('UNIQUE constraint')) {
-      print('❌ Erro ao salvar mapeamento: $e');
-    }
-  }
+  await upsertSyncIdMapping(
+    db,
+    tabela: tabela,
+    idServidor: idServidor,
+    uuid: uuid,
+  );
 }
 
 Future<int?> _getIdLocalPorIdServidor(String tabela, int idServidor) async {
@@ -372,11 +365,12 @@ Future syncRelatoriosAtividades() async {
               'relatorio_atividades',
               {
                 'synced': 1,
-                'last_sync_date': DateTime.now().toIso8601String(),
+                // Não usar relógio do aparelho: vira cursor de download e esconde updates.
+                'last_sync_date': stUpload,
                 'sync_try_count': 0,
               },
-              where: 'uuid = ?',
-              whereArgs: [u],
+              where: 'LOWER(TRIM(COALESCE(uuid, \'\'))) = ?',
+              whereArgs: [normalizeSyncUuid(u) ?? u],
             );
             uploadedCount++;
           }
@@ -494,96 +488,105 @@ Future<void> _processarOrdemTarefa(
     {bool prioridadeServidor = false}) async {
   final db = await SQLiteManager.instance.database;
 
-  String uuid = relatorioAtividadeServer['uuid'] ?? _generateUuid();
-
-  // SALVAR MAPEAMENTO (ID servidor → UUID)
-  if (relatorioAtividadeServer['id'] != null) {
-    await _salvarMapeamento(
-        'relatorio_atividades', relatorioAtividadeServer['id'] as int, uuid);
+  final uuid = normalizeSyncUuid(relatorioAtividadeServer['uuid']);
+  if (uuid == null) {
+    print(
+      '⚠️ relatorio_atividades download: uuid ausente — skip (não gera UUID no pull)',
+    );
+    return;
   }
 
-  // VERIFICAR SE EXISTE
-  final existe = await db.query(
-    'relatorio_atividades',
-    where: 'uuid = ?',
-    whereArgs: [uuid],
+  final serverId = syncServerId(relatorioAtividadeServer['id']);
+  if (serverId != null) {
+    await _salvarMapeamento('relatorio_atividades', serverId, uuid);
+  }
+
+  final existente = await resolveLocalRowForSyncDownload(
+    db,
+    tabela: 'relatorio_atividades',
+    uuid: uuid,
+    serverId: serverId,
   );
 
-  if (existe.isNotEmpty) {
+  final rowData = <String, dynamic>{
+    'uuid': uuid,
+    'user_id': relatorioAtividadeServer['user_id'],
+    'user_uuid': _nonEmptyStr(relatorioAtividadeServer['user_uuid']),
+    'relatorio_id': relatorioAtividadeServer['relatorio_id'],
+    'relatorio_uuid': _nonEmptyStr(relatorioAtividadeServer['relatorio_uuid']),
+    'ordem_id': relatorioAtividadeServer['ordem_id'],
+    'ordem_uuid': _nonEmptyStr(relatorioAtividadeServer['ordem_uuid']),
+    'tarefa_id': relatorioAtividadeServer['tarefa_id'],
+    'tarefa_uuid': _nonEmptyStr(relatorioAtividadeServer['tarefa_uuid']),
+    'item': relatorioAtividadeServer['item'],
+    'local': relatorioAtividadeServer['local'],
+    'descricao': relatorioAtividadeServer['descricao'],
+    'quantidade': relatorioAtividadeServer['quantidade'],
+    'unidade': relatorioAtividadeServer['unidade'],
+    'qtd_realizada': relatorioAtividadeServer['qtd_realizada'],
+    'created_by': _createdByLocal(relatorioAtividadeServer),
+    'situacao': relatorioAtividadeServer['situacao'],
+    'synced': 1,
+    'last_sync_date': serverTime,
+    'created_at': relatorioAtividadeServer['created_at'],
+    'updated_at': relatorioAtividadeServer['updated_at'],
+  };
+
+  if (existente != null) {
     if (mantemVersaoLocalNaSyncDownloadRelatorioFilha(
-          localRow: Map<String, dynamic>.from(existe.first),
+          localRow: existente,
           serverRow: relatorioAtividadeServer,
           tabela: 'relatorio_atividades',
           prioridadeServidor: prioridadeServidor,
         )) {
       return;
     }
-    // UPDATE
-    final localId = existe.first['id'] as int;
+    final localId = existente['id'] as int;
+    await alignLocalUuidIfNeeded(
+      db,
+      tabela: 'relatorio_atividades',
+      localId: localId,
+      canonicalUuid: uuid,
+      localRow: existente,
+    );
     await db.update(
       'relatorio_atividades',
-      {
-        'user_id': relatorioAtividadeServer['user_id'],
-        'user_uuid': _nonEmptyStr(relatorioAtividadeServer['user_uuid']),
-        'relatorio_id': relatorioAtividadeServer['relatorio_id'],
-        'relatorio_uuid':
-            _nonEmptyStr(relatorioAtividadeServer['relatorio_uuid']),
-        'ordem_id': relatorioAtividadeServer['ordem_id'],
-        'ordem_uuid': _nonEmptyStr(relatorioAtividadeServer['ordem_uuid']),
-        'tarefa_id': relatorioAtividadeServer['tarefa_id'],
-        'tarefa_uuid': _nonEmptyStr(relatorioAtividadeServer['tarefa_uuid']),
-        'item': relatorioAtividadeServer['item'],
-        'local': relatorioAtividadeServer['local'],
-        'descricao': relatorioAtividadeServer['descricao'],
-        'quantidade': relatorioAtividadeServer['quantidade'],
-        'unidade': relatorioAtividadeServer['unidade'],
-        'qtd_realizada': relatorioAtividadeServer['qtd_realizada'],
-        'created_by': _createdByLocal(relatorioAtividadeServer),
-        'situacao': relatorioAtividadeServer['situacao'],
-        'synced': 1,
-        'last_sync_date': serverTime,
-        'created_at': relatorioAtividadeServer['created_at'],
-        'updated_at': relatorioAtividadeServer['updated_at']
-      },
-      where: 'uuid = ?',
-      whereArgs: [uuid],
+      rowData,
+      where: 'id = ?',
+      whereArgs: [localId],
     );
     if (_situacaoIntFromServer(relatorioAtividadeServer['situacao']) ==
         kSituacaoExcluidoLogico) {
       await _cascadeSoftDeleteFilhosAtividadeNoSqlite(db, localId, serverTime);
     }
   } else {
-    // INSERT
     final localId = await db.insert(
       'relatorio_atividades',
-      {
-        'uuid': uuid,
-        'user_id': relatorioAtividadeServer['user_id'],
-        'user_uuid': _nonEmptyStr(relatorioAtividadeServer['user_uuid']),
-        'relatorio_id': relatorioAtividadeServer['relatorio_id'],
-        'relatorio_uuid':
-            _nonEmptyStr(relatorioAtividadeServer['relatorio_uuid']),
-        'ordem_id': relatorioAtividadeServer['ordem_id'],
-        'ordem_uuid': _nonEmptyStr(relatorioAtividadeServer['ordem_uuid']),
-        'tarefa_id': relatorioAtividadeServer['tarefa_id'],
-        'tarefa_uuid': _nonEmptyStr(relatorioAtividadeServer['tarefa_uuid']),
-        'item': relatorioAtividadeServer['item'],
-        'local': relatorioAtividadeServer['local'],
-        'descricao': relatorioAtividadeServer['descricao'],
-        'quantidade': relatorioAtividadeServer['quantidade'],
-        'unidade': relatorioAtividadeServer['unidade'],
-        'qtd_realizada': relatorioAtividadeServer['qtd_realizada'],
-        'created_by': _createdByLocal(relatorioAtividadeServer),
-        'situacao': relatorioAtividadeServer['situacao'],
-        'synced': 1,
-        'last_sync_date': serverTime,
-        'created_at': relatorioAtividadeServer['created_at'],
-        'updated_at': relatorioAtividadeServer['updated_at']
-      },
+      rowData,
+      conflictAlgorithm: ConflictAlgorithm.ignore,
     );
-    if (_situacaoIntFromServer(relatorioAtividadeServer['situacao']) ==
-        kSituacaoExcluidoLogico) {
-      await _cascadeSoftDeleteFilhosAtividadeNoSqlite(db, localId, serverTime);
+    // ignore = já existia (race/unique); tenta update pelo uuid.
+    if (localId == 0) {
+      await db.update(
+        'relatorio_atividades',
+        rowData,
+        where: 'LOWER(TRIM(COALESCE(uuid, \'\'))) = ?',
+        whereArgs: [uuid],
+      );
+    }
+    final idForCascade = localId > 0
+        ? localId
+        : (await resolveLocalRowForSyncDownload(
+              db,
+              tabela: 'relatorio_atividades',
+              uuid: uuid,
+              serverId: serverId,
+            ))?['id'] as int?;
+    if (idForCascade != null &&
+        _situacaoIntFromServer(relatorioAtividadeServer['situacao']) ==
+            kSituacaoExcluidoLogico) {
+      await _cascadeSoftDeleteFilhosAtividadeNoSqlite(
+          db, idForCascade, serverTime);
     }
   }
 }

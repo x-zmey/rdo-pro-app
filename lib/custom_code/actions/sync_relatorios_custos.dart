@@ -20,6 +20,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'sync_relatorio_download_merge_guard.dart';
+import 'sync_uuid_upsert.dart';
 
 const String _kUrlUploadRelatorioCustos =
     '$kApiBaseUrl/api/v1/sync/relatorios/ordens-custos/upload';
@@ -217,7 +218,7 @@ Future syncRelatoriosCustos() async {
               'relatorio_custos',
               {
                 'synced': 1,
-                'last_sync_date': DateTime.now().toIso8601String(),
+                'last_sync_date': stUpload,
                 'sync_try_count': 0,
               },
               where: 'uuid = ?',
@@ -317,7 +318,11 @@ Future<void> _processarOrdemTarefa(
     {bool prioridadeServidor = false}) async {
   final db = await SQLiteManager.instance.database;
 
-  String uuid = relatorioCustoServer['uuid'] ?? _generateUuid();
+  final uuid = normalizeSyncUuid(relatorioCustoServer['uuid']);
+  if (uuid == null) {
+    print('⚠️ download skip: uuid ausente');
+    return;
+  }
 
   // SALVAR MAPEAMENTO (ID servidor → UUID)
   if (relatorioCustoServer['id'] != null) {
@@ -328,7 +333,7 @@ Future<void> _processarOrdemTarefa(
   // VERIFICAR SE EXISTE
   final existe = await db.query(
     'relatorio_custos',
-    where: 'uuid = ?',
+    where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
     whereArgs: [uuid],
   );
 
@@ -370,7 +375,7 @@ Future<void> _processarOrdemTarefa(
         'created_at': relatorioCustoServer['created_at'],
         'updated_at': relatorioCustoServer['updated_at']
       },
-      where: 'uuid = ?',
+      where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
       whereArgs: [uuid],
     );
   } else {

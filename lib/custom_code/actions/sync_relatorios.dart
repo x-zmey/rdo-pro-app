@@ -8,6 +8,7 @@ import '/flutter_flow/custom_functions.dart'; // Imports custom functions
 import 'package:flutter/material.dart';
 import 'sync_last_sync_for_creator.dart';
 import 'sync_relatorio_download_merge_guard.dart';
+import 'sync_uuid_upsert.dart';
 
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
@@ -19,6 +20,7 @@ import 'index.dart'; // Imports other custom actions
 import 'index.dart'; // Imports other custom actions
 
 import 'package:http/http.dart' as http;
+import 'package:sqflite/sqflite.dart';
 import 'dart:convert';
 import 'dart:math';
 
@@ -27,20 +29,12 @@ import 'dart:math';
 Future<void> _salvarMapeamento(
     String tabela, int idServidor, String uuid) async {
   final db = await SQLiteManager.instance.database;
-  try {
-    await db.insert('sync_id_mapping', {
-      'tabela': tabela,
-      'id_servidor': idServidor,
-      'uuid': uuid,
-      'created_at': DateTime.now().toIso8601String(),
-    });
-
-    print('mapeamento salvo');
-  } catch (e) {
-    if (!e.toString().contains('UNIQUE constraint')) {
-      print('❌ Erro ao salvar mapeamento: $e');
-    }
-  }
+  await upsertSyncIdMapping(
+    db,
+    tabela: tabela,
+    idServidor: idServidor,
+    uuid: uuid,
+  );
 }
 
 Future<int?> _getIdLocalPorIdServidor(String tabela, int idServidor) async {
@@ -645,21 +639,23 @@ Future<bool> _processarOrdem(
 }) async {
   final db = await SQLiteManager.instance.database;
 
-  String uuid = relatorioServer['uuid'] ?? _generateUuid();
-
-  // SALVAR MAPEAMENTO (ID servidor → UUID)
-  if (relatorioServer['id'] != null) {
-    await _salvarMapeamento('relatorios', relatorioServer['id'] as int, uuid);
+  final uuid = normalizeSyncUuid(relatorioServer['uuid']);
+  if (uuid == null) {
+    print('⚠️ relatorios download: uuid ausente — skip (não gera UUID no pull)');
+    return false;
   }
 
-  // VERIFICAR SE EXISTE
-  final existe = await db.query(
-    'relatorios',
-    where: 'uuid = ?',
-    whereArgs: [uuid],
+  final serverId = syncServerId(relatorioServer['id']);
+  if (serverId != null) {
+    await _salvarMapeamento('relatorios', serverId, uuid);
+  }
+
+  final Map<String, dynamic>? existente = await resolveLocalRowForSyncDownload(
+    db,
+    tabela: 'relatorios',
+    uuid: uuid,
+    serverId: serverId,
   );
-  final Map<String, dynamic>? existente =
-      existe.isNotEmpty ? Map<String, dynamic>.from(existe.first) : null;
 
   // --- Resolver FKs / campos NOT NULL (payload pode vir sem user_id / data_executado) ---
   int? userId =
@@ -823,20 +819,35 @@ Future<bool> _processarOrdem(
     'last_sync_date': serverTime,
   };
 
-  if (existe.isNotEmpty) {
-    // UPDATE
+  if (existente != null) {
+    final localId = existente['id'] as int;
+    await alignLocalUuidIfNeeded(
+      db,
+      tabela: 'relatorios',
+      localId: localId,
+      canonicalUuid: uuid,
+      localRow: existente,
+    );
     await db.update(
       'relatorios',
       rowCommon,
-      where: 'uuid = ?',
-      whereArgs: [uuid],
+      where: 'id = ?',
+      whereArgs: [localId],
     );
   } else {
-    // INSERT
-    await db.insert(
+    final inserted = await db.insert(
       'relatorios',
       {'uuid': uuid, ...rowCommon},
+      conflictAlgorithm: ConflictAlgorithm.ignore,
     );
+    if (inserted == 0) {
+      await db.update(
+        'relatorios',
+        rowCommon,
+        where: 'LOWER(TRIM(COALESCE(uuid, \'\'))) = ?',
+        whereArgs: [uuid],
+      );
+    }
   }
   return true;
 }

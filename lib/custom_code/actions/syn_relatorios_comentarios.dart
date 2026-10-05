@@ -20,6 +20,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'sync_relatorio_download_merge_guard.dart';
+import 'sync_uuid_upsert.dart';
 
 const String _kUrlUploadRelatorioComentarios =
     '$kApiBaseUrl/api/v1/sync/relatorios/comentarios/upload';
@@ -198,7 +199,7 @@ Future synRelatoriosComentarios() async {
               'relatorio_comentarios',
               {
                 'synced': 1,
-                'last_sync_date': DateTime.now().toIso8601String(),
+                'last_sync_date': stUpload,
                 'sync_try_count': 0,
               },
               where: 'uuid = ?',
@@ -299,7 +300,11 @@ Future<void> _processarOrdemTarefa(
     {bool prioridadeServidor = false}) async {
   final db = await SQLiteManager.instance.database;
 
-  String uuid = relatorioComentarioServer['uuid'] ?? _generateUuid();
+  final uuid = normalizeSyncUuid(relatorioComentarioServer['uuid']);
+  if (uuid == null) {
+    print('⚠️ download skip: uuid ausente');
+    return;
+  }
 
   // SALVAR MAPEAMENTO (ID servidor → UUID)
   if (relatorioComentarioServer['id'] != null) {
@@ -310,7 +315,7 @@ Future<void> _processarOrdemTarefa(
   // VERIFICAR SE EXISTE
   final existe = await db.query(
     'relatorio_comentarios',
-    where: 'uuid = ?',
+    where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
     whereArgs: [uuid],
   );
 
@@ -338,7 +343,7 @@ Future<void> _processarOrdemTarefa(
         'created_at': relatorioComentarioServer['created_at'],
         'updated_at': relatorioComentarioServer['updated_at']
       },
-      where: 'uuid = ?',
+      where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
       whereArgs: [uuid],
     );
   } else {

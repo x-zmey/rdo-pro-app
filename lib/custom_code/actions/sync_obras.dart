@@ -22,6 +22,7 @@ import 'dart:math';
 import '/backend/sqlite/situacao_soft_delete.dart';
 import '/auth/membership_access.dart';
 import 'download_obra_foto_local.dart';
+import 'sync_uuid_upsert.dart';
 
 /// Preferência legada (one-shot). Recovery contínuo = full resync diário.
 const String _kObrasFullResyncV2 = 'obras_full_resync_v2';
@@ -358,7 +359,11 @@ Future<void> _processarObra(
     Map<String, dynamic> obraServer, String serverTime) async {
   final db = await SQLiteManager.instance.database;
 
-  String uuid = obraServer['uuid'] ?? _generateUuid();
+  final uuid = normalizeSyncUuid(obraServer['uuid']);
+  if (uuid == null) {
+    print('⚠️ download skip: uuid ausente');
+    return;
+  }
 
   final sid = _serverId(obraServer);
   if (sid != null) {
@@ -372,7 +377,7 @@ Future<void> _processarObra(
   // VERIFICAR SE EXISTE
   final existe = await db.query(
     'obras',
-    where: 'uuid = ?',
+    where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
     whereArgs: [uuid],
   );
 
@@ -414,17 +419,27 @@ Future<void> _processarObra(
     await db.update(
       'obras',
       rowComum,
-      where: 'uuid = ?',
+      where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
       whereArgs: [uuid],
     );
   } else {
-    await db.insert(
-      'obras',
-      {
-        'uuid': uuid,
-        ...rowComum,
-      },
-    );
+    try {
+      await db.insert(
+        'obras',
+        {
+          'uuid': uuid,
+          ...rowComum,
+        },
+      );
+    } catch (_) {
+      // UNIQUE uuid: outra linha já existe (race) — atualiza.
+      await db.update(
+        'obras',
+        rowComum,
+        where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
+        whereArgs: [uuid],
+      );
+    }
   }
 
   // Baixa o arquivo da foto para uso offline (foto_local).

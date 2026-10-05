@@ -16,6 +16,7 @@ import '/backend/api_requests/api_config.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math';
+import 'sync_uuid_upsert.dart';
 
 // ===== FUNÇÕES UTILITÁRIAS =====
 
@@ -384,7 +385,11 @@ Future<void> _processarChecklistPreenchido(
     Map<String, dynamic> checklistServer, String serverTime) async {
   final db = await SQLiteManager.instance.database;
 
-  String uuid = checklistServer['uuid'] ?? _generateUuid();
+  final uuid = normalizeSyncUuid(checklistServer['uuid']);
+  if (uuid == null) {
+    print('⚠️ download skip: uuid ausente');
+    return;
+  }
 
   // SALVAR MAPEAMENTO (ID servidor → UUID)
   if (checklistServer['id'] != null) {
@@ -395,7 +400,7 @@ Future<void> _processarChecklistPreenchido(
   // VERIFICAR SE EXISTE
   final existe = await db.query(
     'checklists_preenchidos',
-    where: 'uuid = ?',
+    where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
     whereArgs: [uuid],
   );
 
@@ -470,7 +475,7 @@ Future<void> _processarChecklistPreenchido(
     await db.update(
       'checklists_preenchidos',
       payload,
-      where: 'uuid = ?',
+      where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
       whereArgs: [uuid],
     );
     print('🔄 Checklist atualizado: $uuid');
