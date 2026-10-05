@@ -24,8 +24,8 @@ import '/auth/membership_access.dart';
 import 'download_obra_foto_local.dart';
 import 'sync_uuid_upsert.dart';
 
-/// Preferência legada (one-shot). Recovery contínuo = full resync diário.
-const String _kObrasFullResyncV2 = 'obras_full_resync_v2';
+/// Preferência one-shot. v3: corrige cursor UTC que escondia updates do web (nome etc.).
+const String _kObrasFullResyncV3 = 'obras_full_resync_v3';
 const String _kDailyScope = 'obras';
 
 // ===== FUNÇÕES UTILITÁRIAS (já existentes - copie da action anterior) =====
@@ -76,6 +76,38 @@ Future<int?> _getIdLocalPorUuid(String tabela, String uuid) async {
 
 Future<String> _getUltimaSync(String tabela) async {
   return lastSyncDateForCurrentCreator(tabela);
+}
+
+/// ISO do Dart (`DateTime.now().toIso8601String`) — não é `server_time` da API.
+bool _looksLikeDeviceClockWatermark(String raw) {
+  final s = raw.trim();
+  if (!s.contains('T')) return false;
+  return RegExp(r'T\d{2}:\d{2}:\d{2}\.\d{4,}').hasMatch(s);
+}
+
+/// Se o cursor de download veio do relógio do aparelho, limpa e força full pull.
+Future<String> _watermarkDownloadObras(dynamic db, String raw) async {
+  final rawTrim = raw.trim();
+  if (rawTrim.isEmpty) return kSyncEpoch;
+  if (!_looksLikeDeviceClockWatermark(rawTrim)) return rawTrim;
+
+  print(
+    '⚠️ Obras: watermark de relógio do aparelho ($rawTrim) — download completo',
+  );
+  try {
+    await db.rawUpdate(
+      '''
+UPDATE obras
+SET last_sync_date = NULL
+WHERE last_sync_date IS NOT NULL
+  AND INSTR(last_sync_date, 'T') > 0
+  AND INSTR(last_sync_date, '.') > 0
+''',
+    );
+  } catch (e) {
+    print('⚠️ limpeza watermark obras: $e');
+  }
+  return kSyncEpoch;
 }
 
 String _generateUuid() {
@@ -210,18 +242,38 @@ Future syncObras() async {
 
         if (uploadResponse.statusCode == 200) {
           final uploadResult = json.decode(uploadResponse.body);
+          // Não avançar last_sync com relógio do aparelho — isso esconde updates do web.
+          final stUpload = (uploadResult['server_time']?.toString() ?? '').trim();
 
           // MARCAR OBRAS COMO SINCRONIZADAS
           for (var obra in uploadResult['sincronizados']) {
+            final u = obra['uuid']?.toString();
+            if (u == null || u.isEmpty) continue;
+            final patch = <String, dynamic>{
+              'synced': 1,
+              'sync_try_count': 0,
+            };
+            if (stUpload.isNotEmpty) {
+              final existing = await db.query(
+                'obras',
+                columns: ['last_sync_date'],
+                where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
+                whereArgs: [normalizeSyncUuid(u) ?? u],
+                limit: 1,
+              );
+              final cur = existing.isEmpty
+                  ? ''
+                  : (existing.first['last_sync_date']?.toString() ?? '').trim();
+              // Só preenche se vazio ou se ainda é watermark de aparelho.
+              if (cur.isEmpty || _looksLikeDeviceClockWatermark(cur)) {
+                patch['last_sync_date'] = stUpload;
+              }
+            }
             await db.update(
               'obras',
-              {
-                'synced': 1,
-                'last_sync_date': DateTime.now().toIso8601String(),
-                'sync_try_count': 0,
-              },
-              where: 'uuid = ?',
-              whereArgs: [obra['uuid']],
+              patch,
+              where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
+              whereArgs: [normalizeSyncUuid(u) ?? u],
             );
             uploadedCount++;
           }
@@ -252,9 +304,9 @@ Future syncObras() async {
 
     // ===== 2. DOWNLOAD - Buscar atualizações =====
     try {
-      // Full sync: uma vez (watermark antigo) OU se obra_travada e faltam obras.
+      // Full sync: v3 (cursor UTC no backend) OU diário OU obra_travada incompleta.
       final prefs = await SharedPreferences.getInstance();
-      final alreadyRepaired = prefs.getBool(_kObrasFullResyncV2) ?? false;
+      final alreadyRepaired = prefs.getBool(_kObrasFullResyncV3) ?? false;
       final needsDaily = await shouldForceDailyFullResync(_kDailyScope);
       var forceFull = !alreadyRepaired || needsDaily;
       if (MembershipAccess.obraTravada) {
@@ -291,9 +343,13 @@ Future syncObras() async {
           }
         }
       }
-      final lastSync = forceFull
+      var lastSync = forceFull
           ? kSyncEpoch
           : await _getUltimaSync('obras');
+      if (!forceFull) {
+        lastSync = await _watermarkDownloadObras(db, lastSync);
+        if (lastSync == kSyncEpoch) forceFull = true;
+      }
       print(
           '📥 Buscando obras desde: $lastSync${forceFull ? ' (resync completo)' : ''}');
 
@@ -324,7 +380,7 @@ Future syncObras() async {
           );
         }
         if (forceFull) {
-          await prefs.setBool(_kObrasFullResyncV2, true);
+          await prefs.setBool(_kObrasFullResyncV3, true);
           await markDailyFullResyncDone(_kDailyScope);
         }
         print('✅ Download concluído: $downloadedCount obras');
@@ -416,12 +472,18 @@ Future<void> _processarObra(
   };
 
   if (existe.isNotEmpty) {
+    final localId = existe.first['id'] as int;
+    final nomeAntes = existe.first['nome']?.toString() ?? '';
+    final nomeNovo = obraServer['nome']?.toString() ?? '';
     await db.update(
       'obras',
       rowComum,
-      where: "LOWER(TRIM(COALESCE(uuid, ''))) = ?",
-      whereArgs: [uuid],
+      where: 'id = ?',
+      whereArgs: [localId],
     );
+    if (nomeAntes != nomeNovo) {
+      print('✅ Obra nome atualizado uuid=$uuid: "$nomeAntes" → "$nomeNovo"');
+    }
   } else {
     try {
       await db.insert(

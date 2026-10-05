@@ -967,6 +967,7 @@ const List<String> kDailyFullResyncScopes = [
 const List<String> _kLegacyOneShotFullResyncPrefs = [
   'obra_itens_full_resync_v2',
   'obras_full_resync_v2',
+  'obras_full_resync_v3',
   'obra_etapas_full_resync_v2',
   'obra_etapa_tarefas_full_resync_v2',
 ];
