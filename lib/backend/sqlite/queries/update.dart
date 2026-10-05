@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import '/backend/sqlite/situacao_soft_delete.dart';
+import '/backend/sqlite/sincronizar_custos_os_uso.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 
 /// Atualiza `updated_at` e `synced = 0` no relatório pai (edição local / LWW).
@@ -544,6 +545,14 @@ INSERT INTO relatorio_atividades_itens (uuid, relatorio_atividade_id,  relatorio
     );
     final rid = rows.isEmpty ? null : rows.first['relatorio_id'] as int?;
     await _touchRelatorioModificadoLocal(database, rid);
+    await performLiberarManualCustoOsDoItemAtividade(
+      database,
+      itemUuid: uuid,
+    );
+    await performSincronizarCustosOsComUsoAtividades(
+      database,
+      relatorioId: rid,
+    );
   }
 }
 
@@ -588,6 +597,11 @@ WHERE uuid = ?
     [util, real, prod, ts, uuid],
   );
 
+  await performLiberarManualCustoOsDoItemAtividade(
+    database,
+    itemUuid: uuid,
+  );
+
   final rows = await database.rawQuery(
     '''SELECT ra.relatorio_id FROM relatorio_atividades_itens rai
        INNER JOIN relatorio_atividades ra ON ra.id = rai.relatorio_atividade_id
@@ -596,6 +610,10 @@ WHERE uuid = ?
   );
   final rid = rows.isEmpty ? null : rows.first['relatorio_id'] as int?;
   await _touchRelatorioModificadoLocal(database, rid);
+  await performSincronizarCustosOsComUsoAtividades(
+    database,
+    relatorioId: rid,
+  );
 }
 
 int? _asIntQtdItem(dynamic v) {
@@ -618,13 +636,22 @@ Future performDeleteItemAtividade(
   Database database, {
   int? id,
 }) async {
-  final rows = await database.rawQuery(
-    '''SELECT ra.relatorio_id FROM relatorio_atividades_itens rai
+  final meta = await database.rawQuery(
+    '''SELECT rai.uuid AS item_uuid, ra.relatorio_id AS relatorio_id
+       FROM relatorio_atividades_itens rai
        INNER JOIN relatorio_atividades ra ON ra.id = rai.relatorio_atividade_id
        WHERE rai.id = ? LIMIT 1''',
     [id],
   );
-  final rid = rows.isEmpty ? null : rows.first['relatorio_id'] as int?;
+  final rid = meta.isEmpty ? null : meta.first['relatorio_id'] as int?;
+  final itemUuid =
+      meta.isEmpty ? null : (meta.first['item_uuid'] as String? ?? '').trim();
+  if (itemUuid != null && itemUuid.isNotEmpty) {
+    await performLiberarManualCustoOsDoItemAtividade(
+      database,
+      itemUuid: itemUuid,
+    );
+  }
   final ts = _sqlNowUtcEscaped();
   final query = '''
 UPDATE relatorio_atividades_itens
@@ -634,6 +661,10 @@ WHERE id = ${id};
 ''';
   await database.rawQuery(query);
   await _touchRelatorioModificadoLocal(database, rid);
+  await performSincronizarCustosOsComUsoAtividades(
+    database,
+    relatorioId: rid,
+  );
 }
 
 /// END DELETEITEMATIVIDADE
@@ -992,16 +1023,40 @@ Future<void> performUpdateRelatorioCustoQtdRealizada(
   if (uuid == null || uuid.isEmpty) return;
   final q = qtdRealizada ?? 0.0;
   final ts = DateTime.now().toUtc().toIso8601String();
+
+  // Itens vinculados (insumo / mão de obra / equipamento): marca override manual.
+  final origemRows = await database.rawQuery(
+    '''
+SELECT LOWER(TRIM(COALESCE(cos.origem, 'avulso'))) AS origem
+FROM relatorio_custos AS rc
+LEFT JOIN ordem_servico_custos AS cos
+  ON cos.uuid = rc.ordem_servico_custo_uuid
+  OR (rc.ordem_servico_custo_id IS NOT NULL AND cos.id = rc.ordem_servico_custo_id)
+WHERE rc.uuid = ?
+LIMIT 1
+''',
+    [uuid],
+  );
+  final origem = origemRows.isEmpty
+      ? 'avulso'
+      : ((origemRows.first['origem'] as String? ?? 'avulso').trim().isEmpty
+          ? 'avulso'
+          : (origemRows.first['origem'] as String).trim());
+  final vinculado = origem == 'insumo' ||
+      origem == 'mao_obra' ||
+      origem == 'equipamento';
+
   await database.rawUpdate(
     '''
 UPDATE relatorio_custos SET
   qtd_realizada = ?,
   valor_total_real = ? * COALESCE(valor_unitario_real, 0),
+  qtd_manual = CASE WHEN ? = 1 THEN 1 ELSE COALESCE(qtd_manual, 0) END,
   updated_at = ?,
   synced = 0
 WHERE uuid = ?
 ''',
-    [q, q, ts, uuid],
+    [q, q, vinculado ? 1 : 0, ts, uuid],
   );
   final rows = await database.rawQuery(
     'SELECT relatorio_id FROM relatorio_custos WHERE uuid = ? LIMIT 1',
@@ -1166,6 +1221,10 @@ WHERE id = ${id};
 ''';
   await database.rawQuery(query);
   await _touchRelatorioModificadoLocal(database, rid);
+  await performSincronizarCustosOsComUsoAtividades(
+    database,
+    relatorioId: rid,
+  );
 }
 
 /// END DELETEATIVIDADERELATORIO

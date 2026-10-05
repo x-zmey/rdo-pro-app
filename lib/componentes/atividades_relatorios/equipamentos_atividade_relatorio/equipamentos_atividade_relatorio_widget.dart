@@ -271,10 +271,7 @@ class _EquipamentosAtividadeRelatorioWidgetState
                                               QtdFieldEquipamentoRealizadoAtividadeRelatorioWidget(
                                             key: Key('Keylib_${row.id}'),
                                             uuid: row.uuid!,
-                                            valor: valueOrDefault<int>(
-                                              row.qtdRealizada?.round(),
-                                              0,
-                                            ),
+                                            valor: row.qtdRealizada ?? 0,
                                           ),
                                         ),
                                       ],

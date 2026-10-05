@@ -11,6 +11,8 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'index.dart'; // Imports other custom actions
 
 import 'package:http/http.dart' as http;
@@ -120,7 +122,7 @@ Future syncTipoOcorrencias() async {
         print('📤 Enviando ${payload.length} tipos de ocorrencia...');
         final uploadResponse = await http.post(
           Uri.parse(
-              'https://api.rdopro.com.br/api/v1/sync/tipo-ocorrencias/upload'),
+              '$kApiBaseUrl/api/v1/sync/tipo-ocorrencias/upload'),
           headers: headers,
           body: json.encode({'dados': payload}),
         );
@@ -172,7 +174,7 @@ Future syncTipoOcorrencias() async {
 
       final downloadResponse = await http.post(
         Uri.parse(
-            'https://api.rdopro.com.br/api/v1/sync/tipo-ocorrencias/download'),
+            '$kApiBaseUrl/api/v1/sync/tipo-ocorrencias/download'),
         headers: headers,
         body: json.encode({'ultima_sync': lastSync}),
       );

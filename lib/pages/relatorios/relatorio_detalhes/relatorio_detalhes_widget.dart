@@ -1,4 +1,5 @@
 import '/backend/api_requests/api_calls.dart';
+import '/componentes/relatorios/relatorio_list_item_widget.dart';
 import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/custom_functions.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
@@ -841,8 +842,15 @@ class _RelatorioDetalhesWidgetState extends State<RelatorioDetalhesWidget>
     final obra = _map(data['obra']);
     final status = _map(data['status']);
     final obraNome = _str(obra?['nome']).isEmpty ? 'N/A' : _str(obra?['nome']);
-    final statusNome =
-        _str(status?['nome']).isEmpty ? 'N/A' : _str(status?['nome']);
+    final statusId = int.tryParse('${data['status_id'] ?? ''}') ??
+        int.tryParse('${status?['id'] ?? ''}');
+    final statusNomeApi =
+        _str(status?['nome']).isEmpty ? null : _str(status?['nome']);
+    final statusNome = labelRelatorioStatus(
+      statusId: statusId,
+      statusNome: statusNomeApi,
+    );
+    final statusCor = corStatusRelatorioChip(context, statusId);
     final podePdf = _camuflado != null && _camuflado!.trim().isNotEmpty;
 
     final inicio = _dataBr(data['data_inicio']);
@@ -900,15 +908,16 @@ class _RelatorioDetalhesWidgetState extends State<RelatorioDetalhesWidget>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 9, vertical: 4),
                       decoration: BoxDecoration(
-                        color: theme.primary.withValues(alpha: 0.12),
+                        color: statusCor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: statusCor.withValues(alpha: 0.28)),
                       ),
                       child: Text(
                         statusNome,
                         style: GoogleFonts.inter(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w700,
-                          color: theme.primary,
+                          color: statusCor,
                         ),
                       ),
                     ),

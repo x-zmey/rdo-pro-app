@@ -1,12 +1,11 @@
 import '/backend/sqlite/sqlite_manager.dart';
 import '/componentes/ui/rdo_estilo.dart';
+import '/flutter_flow/custom_functions.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import 'package:easy_debounce/easy_debounce.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
 import 'qtd_field_mao_obra_realizado_atividade_relatorio_model.dart';
 export 'qtd_field_mao_obra_realizado_atividade_relatorio_model.dart';
 
@@ -18,7 +17,7 @@ class QtdFieldMaoObraRealizadoAtividadeRelatorioWidget extends StatefulWidget {
   });
 
   final String? uuid;
-  final int? valor;
+  final num? valor;
 
   @override
   State<QtdFieldMaoObraRealizadoAtividadeRelatorioWidget> createState() =>
@@ -28,6 +27,10 @@ class QtdFieldMaoObraRealizadoAtividadeRelatorioWidget extends StatefulWidget {
 class _QtdFieldMaoObraRealizadoAtividadeRelatorioWidgetState
     extends State<QtdFieldMaoObraRealizadoAtividadeRelatorioWidget> {
   late QtdFieldMaoObraRealizadoAtividadeRelatorioModel _model;
+
+  static final List<TextInputFormatter> _formatters = [
+    FilteringTextInputFormatter.allow(RegExp(r'^\d*[.,]?\d{0,2}')),
+  ];
 
   @override
   void setState(VoidCallback callback) {
@@ -42,10 +45,8 @@ class _QtdFieldMaoObraRealizadoAtividadeRelatorioWidgetState
         context, () => QtdFieldMaoObraRealizadoAtividadeRelatorioModel());
 
     _model.textController ??= TextEditingController(
-        text: valueOrDefault<String>(
-      widget!.valor?.toString(),
-      '0',
-    ));
+      text: formatQuantidadeRelatorio(widget.valor ?? 0),
+    );
     _model.textFieldFocusNode ??= FocusNode();
   }
 
@@ -65,15 +66,19 @@ class _QtdFieldMaoObraRealizadoAtividadeRelatorioWidgetState
         '_model.textController',
         Duration(milliseconds: 2000),
         () async {
+          final qtd = tryParseQuantidadeRelatorio(_model.textController.text);
+          if (qtd == null || qtd < 0) return;
+
           _model.detalhesItem =
               await SQLiteManager.instance.getDetalhesItemAtividade(
-            uuid: widget!.uuid!,
+            uuid: widget.uuid!,
           );
           await SQLiteManager.instance.updateItemAtividade(
-            qtdRealizada: int.tryParse(_model.textController.text),
-            uuid: widget!.uuid!,
+            qtdRealizada: qtd,
+            uuid: widget.uuid!,
             qtdUtilizada: _model.detalhesItem?.firstOrNull?.qtdUtilizada,
           );
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -100,7 +105,8 @@ class _QtdFieldMaoObraRealizadoAtividadeRelatorioWidgetState
       ),
       style: rdoCompactFieldTextStyle(context),
       textAlign: TextAlign.center,
-      keyboardType: TextInputType.number,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: _formatters,
       validator: _model.textControllerValidator.asValidator(context),
     );
   }

@@ -6,6 +6,7 @@ import 'sync_tenant_headers.dart';
 import 'package:http/http.dart' as http;
 import 'package:sqflite/sqflite.dart';
 import 'dart:convert';
+import '/backend/api_requests/api_config.dart';
 
 void _updateSyncStatus(bool success, String message, int downloaded) {
   try {
@@ -61,7 +62,7 @@ Future syncEmpresaUserPermissions() async {
 
     final response = await http.post(
       Uri.parse(
-        'https://api.rdopro.com.br/api/v1/sync/empresa-user-permissions/download',
+        '$kApiBaseUrl/api/v1/sync/empresa-user-permissions/download',
       ),
       headers: syncAuthHeaders(),
       body: json.encode({'ultima_sync': lastSync, 'force_full': true}),

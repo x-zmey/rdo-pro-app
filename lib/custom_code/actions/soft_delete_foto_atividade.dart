@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import '/backend/sqlite/situacao_soft_delete.dart';
 import 'package:http/http.dart' as http;
 import 'package:sqflite/sqflite.dart';
@@ -58,7 +60,7 @@ Future<void> softDeleteFotoAtividade(int localFotoId) async {
     final serverId = map.isNotEmpty ? _asInt(map.first['id_servidor']) : null;
     if (serverId != null && serverId > 0) {
       final uri = Uri.parse(
-        'https://api.rdopro.com.br/api/relatorio/atividade/foto/$serverId/delete',
+        '$kApiBaseUrl/api/relatorio/atividade/foto/$serverId/delete',
       );
       final resp = await http.delete(
         uri,

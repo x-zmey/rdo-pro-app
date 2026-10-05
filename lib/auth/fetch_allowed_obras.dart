@@ -5,6 +5,7 @@ import '/backend/api_requests/api_calls.dart';
 import '/backend/sqlite/situacao_soft_delete.dart';
 import '/backend/sqlite/sqlite_manager.dart';
 import '/custom_code/actions/download_obra_foto_local.dart';
+import '/custom_code/actions/index.dart' as actions;
 import '/flutter_flow/flutter_flow_util.dart';
 
 class _AllowedObraRef {
@@ -488,6 +489,14 @@ ORDER BY o.nome
 
 /// Lista de obras acessíveis (respeita obra_travada + allowed_obra_ids do servidor).
 Future<List<CarregaObrasRow>> loadAccessibleObras() async {
+  // Espelha a API antes de listar o SQLite (mesma falha da mão de obra / OS).
+  try {
+    final online = await actions.checkInternetConnection();
+    if (online) {
+      await actions.syncObras();
+    }
+  } catch (_) {}
+
   if (!MembershipAccess.obraTravada) {
     return SQLiteManager.instance.carregaObras(
       creatorUuid: FFAppState().creatorUuid,

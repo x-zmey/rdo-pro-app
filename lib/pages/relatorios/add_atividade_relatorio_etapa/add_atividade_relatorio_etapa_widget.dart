@@ -48,6 +48,26 @@ String _labelMaoObraRelatorioPresente(GetMaoObraRelatorioRow e) {
   return '$d — $c';
 }
 
+({List<String> options, List<String> labels}) _dropdownOpcoesUnicasEtapa(
+  Iterable<String?> uuids,
+  Iterable<String?> labels,
+) {
+  final uList = uuids.toList();
+  final lList = labels.toList();
+  final seen = <String>{};
+  final options = <String>[];
+  final optionLabels = <String>[];
+  for (var i = 0; i < uList.length; i++) {
+    final u = (uList[i] ?? '').trim();
+    if (u.isEmpty || u == '0') continue;
+    if (!seen.add(u)) continue;
+    final label = i < lList.length ? (lList[i] ?? '').trim() : '';
+    options.add(u);
+    optionLabels.add(label.isEmpty ? u : label);
+  }
+  return (options: options, labels: optionLabels);
+}
+
 class AddAtividadeRelatorioEtapaWidget extends StatefulWidget {
   const AddAtividadeRelatorioEtapaWidget({
     super.key,
@@ -80,6 +100,74 @@ class _AddAtividadeRelatorioEtapaWidgetState
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
   int _listasItensAtividadeRefresh = 0;
+
+  late final Future<List<dynamic>> _futureDadosPagina;
+  late Future<List<GetitensdaobraRow>> _futureInsumosObra;
+  late Future<List<CarregaItensObraRow>> _futureEquipamentosObra;
+  late Future<List<GetMaoObraRelatorioRow>> _futureMaoObraRelatorio;
+
+  Future<List<CarregaItensObraRow>> _loadEquipamentosObra() async {
+    final obraUuid = (widget.obraUuid ?? '').trim();
+    if (obraUuid.isEmpty) return <CarregaItensObraRow>[];
+    try {
+      await actions.refreshObraItensPorTipo(
+        obraUuid: obraUuid,
+        tipo: 'equipamento',
+      );
+    } catch (_) {}
+    return SQLiteManager.instance.carregaItensObra(
+      tipo: 'equipamento',
+      obraId: widget.obraId,
+      obraUuid: obraUuid,
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _model = createModel(context, () => AddAtividadeRelatorioEtapaModel());
+    _futureDadosPagina = Future.wait<dynamic>([
+      SQLiteManager.instance.getDadosAtividade(
+        uuid: widget.atividadeUuid!,
+      ),
+      SQLiteManager.instance.obraLocais(
+        obraUuid: widget.obraUuid!,
+      ),
+      () async {
+        final obraUuid = (widget.obraUuid ?? '').trim();
+        if (obraUuid.isEmpty) return <GetOrdensServicoRow>[];
+        try {
+          await actions.refreshOrdensPorObra(obraUuid: obraUuid);
+        } catch (_) {}
+        return SQLiteManager.instance.getOrdensServico(obraUuid: obraUuid);
+      }(),
+    ]);
+    _futureInsumosObra = SQLiteManager.instance.getitensdaobra(
+      relatorioUuid: widget.relatorioUuid!,
+    );
+    _futureEquipamentosObra = _loadEquipamentosObra();
+    _futureMaoObraRelatorio =
+        SQLiteManager.instance.getMaoObraRelatorio(
+      relatorioUuid: widget.relatorioUuid!,
+    ).then((rows) {
+      final seen = <String>{};
+      final out = <GetMaoObraRelatorioRow>[];
+      for (final e in rows) {
+        if (e.statusPresenca.trim().toLowerCase() != 'presente') continue;
+        final u = (e.obraItemUuid ?? '').trim();
+        if (u.isEmpty) continue;
+        if (seen.add(u)) out.add(e);
+      }
+      return out;
+    });
+
+    _model.switchOrdemValue = false;
+    _model.textFieldDescricaoFocusNode ??= FocusNode();
+    _model.textFieldQtdRealizadaFocusNode ??= FocusNode();
+    _model.textFieldQtdRealizadaFocusNode!
+        .addListener(_onQtdRealizadaFocusChange);
+    _model.textFieldUnidadeFocusNode ??= FocusNode();
+  }
 
   void _atualizarListasItensAtividade() {
     if (!mounted) return;
@@ -154,22 +242,6 @@ class _AddAtividadeRelatorioEtapaWidgetState
   }
 
   @override
-  void initState() {
-    super.initState();
-    _model = createModel(context, () => AddAtividadeRelatorioEtapaModel());
-
-    _model.switchOrdemValue = false;
-
-    _model.textFieldDescricaoFocusNode ??= FocusNode();
-
-    _model.textFieldQtdRealizadaFocusNode ??= FocusNode();
-    _model.textFieldQtdRealizadaFocusNode!
-        .addListener(_onQtdRealizadaFocusChange);
-
-    _model.textFieldUnidadeFocusNode ??= FocusNode();
-  }
-
-  @override
   void dispose() {
     _model.textFieldQtdRealizadaFocusNode
         ?.removeListener(_onQtdRealizadaFocusChange);
@@ -229,19 +301,7 @@ class _AddAtividadeRelatorioEtapaWidgetState
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<dynamic>>(
-      future: Future.wait<dynamic>([
-        SQLiteManager.instance.getDadosAtividade(
-          uuid: widget!.atividadeUuid!,
-        ),
-        SQLiteManager.instance.obraLocais(
-          obraUuid: widget!.obraUuid!,
-        ),
-        (widget.obraUuid != null && widget.obraUuid!.trim().isNotEmpty)
-            ? SQLiteManager.instance.getOrdensServico(
-                obraUuid: widget.obraUuid,
-              )
-            : Future<List<GetOrdensServicoRow>>.value(const []),
-      ]),
+      future: _futureDadosPagina,
       builder: (context, snapshot) {
         // Customize what your widget looks like when it's loading.
         if (!snapshot.hasData) {
@@ -886,16 +946,27 @@ class _AddAtividadeRelatorioEtapaWidgetState
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           FutureBuilder<List<GetitensdaobraRow>>(
-                            future: SQLiteManager.instance.getitensdaobra(
-                              relatorioUuid: widget!.relatorioUuid!,
-                            ),
+                            future: _futureInsumosObra,
                             builder: (context, snapshot) {
+                              if (snapshot.hasError) {
+                                return Text(
+                                  'Não foi possível carregar insumos.',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: theme.error,
+                                  ),
+                                );
+                              }
                               if (!snapshot.hasData) {
                                 return LinearProgressIndicator(
                                   color: theme.primary,
                                 );
                               }
                               final itens = snapshot.data!;
+                              final opcoes = _dropdownOpcoesUnicasEtapa(
+                                itens.map((e) => e.uuid),
+                                itens.map((e) => e.nome),
+                              );
 
                               return FlutterFlowDropDown<String>(
                                 multiSelectController:
@@ -903,14 +974,8 @@ class _AddAtividadeRelatorioEtapaWidgetState
                                         FormFieldController<List<String>?>(
                                   _model.dropDownInsumoValue ??= <String>[],
                                 ),
-                                options: List<String>.from(itens
-                                    .map((e) => e.uuid)
-                                    .withoutNulls
-                                    .toList()),
-                                optionLabels: itens
-                                    .map((e) => e.nome)
-                                    .withoutNulls
-                                    .toList(),
+                                options: opcoes.options,
+                                optionLabels: opcoes.labels,
                                 onMultiSelectChanged: (vals) async {
                                   await _onMultiSelectItensAtividade(
                                     tipo: 'insumo',
@@ -967,18 +1032,27 @@ class _AddAtividadeRelatorioEtapaWidgetState
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           FutureBuilder<List<CarregaItensObraRow>>(
-                            future: SQLiteManager.instance.carregaItensObra(
-                              tipo: 'equipamento',
-                              obraId: widget!.obraId,
-                              obraUuid: widget!.obraUuid!,
-                            ),
+                            future: _futureEquipamentosObra,
                             builder: (context, snapshot) {
+                              if (snapshot.hasError) {
+                                return Text(
+                                  'Não foi possível carregar equipamentos.',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: theme.error,
+                                  ),
+                                );
+                              }
                               if (!snapshot.hasData) {
                                 return LinearProgressIndicator(
                                   color: theme.primary,
                                 );
                               }
                               final itens = snapshot.data!;
+                              final opcoes = _dropdownOpcoesUnicasEtapa(
+                                itens.map((e) => e.uuid),
+                                itens.map((e) => e.descricao),
+                              );
 
                               return FlutterFlowDropDown<String>(
                                 multiSelectController: _model
@@ -987,10 +1061,8 @@ class _AddAtividadeRelatorioEtapaWidgetState
                                   _model.dropDownEquipamentosValue ??=
                                       <String>[],
                                 ),
-                                options: List<String>.from(
-                                    itens.map((e) => e.uuid).toList()),
-                                optionLabels:
-                                    itens.map((e) => e.descricao).toList(),
+                                options: opcoes.options,
+                                optionLabels: opcoes.labels,
                                 onMultiSelectChanged: (vals) async {
                                   await _onMultiSelectItensAtividade(
                                     tipo: 'equipamento',
@@ -1048,36 +1120,23 @@ class _AddAtividadeRelatorioEtapaWidgetState
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           FutureBuilder<List<GetMaoObraRelatorioRow>>(
-                            future: SQLiteManager.instance
-                                .getMaoObraRelatorio(
-                              relatorioUuid: widget!.relatorioUuid!,
-                            ).then((rows) {
-                              final seen = <String>{};
-                              final out = <GetMaoObraRelatorioRow>[];
-                              for (final e in rows) {
-                                if (e.statusPresenca
-                                        .trim()
-                                        .toLowerCase() !=
-                                    'presente') {
-                                  continue;
-                                }
-                                final u =
-                                    (e.obraItemUuid ?? '').trim();
-                                if (u.isEmpty) continue;
-                                if (seen.add(u)) out.add(e);
-                              }
-                              return out;
-                            }),
+                            future: _futureMaoObraRelatorio,
                             builder: (context, snapshot) {
+                              if (snapshot.hasError) {
+                                return Text(
+                                  'Não foi possível carregar mão de obra.',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: theme.error,
+                                  ),
+                                );
+                              }
                               if (!snapshot.hasData) {
                                 return LinearProgressIndicator(
                                   color: theme.primary,
                                 );
                               }
-                              final itensDropdown = snapshot.data!
-                                  .where((e) =>
-                                      (e.obraItemUuid ?? '').trim().isNotEmpty)
-                                  .toList();
+                              final itensDropdown = snapshot.data!;
 
                               if (itensDropdown.isEmpty) {
                                 return avisoCampo(
@@ -1087,18 +1146,21 @@ class _AddAtividadeRelatorioEtapaWidgetState
                                 );
                               }
 
+                              final opcoes = _dropdownOpcoesUnicasEtapa(
+                                itensDropdown
+                                    .map((e) => (e.obraItemUuid ?? '').trim()),
+                                itensDropdown
+                                    .map(_labelMaoObraRelatorioPresente),
+                              );
+
                               return FlutterFlowDropDown<String>(
                                 multiSelectController:
                                     _model.dropDownMaoObraValueController ??=
                                         FormFieldController<List<String>?>(
                                   _model.dropDownMaoObraValue ??= <String>[],
                                 ),
-                                options: itensDropdown
-                                    .map((e) => (e.obraItemUuid ?? '').trim())
-                                    .toList(),
-                                optionLabels: itensDropdown
-                                    .map(_labelMaoObraRelatorioPresente)
-                                    .toList(),
+                                options: opcoes.options,
+                                optionLabels: opcoes.labels,
                                 onMultiSelectChanged: (vals) async {
                                   await _onMultiSelectItensAtividade(
                                     tipo: 'mao_obra',

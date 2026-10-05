@@ -8,6 +8,8 @@ import 'sync_tenant_headers.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -165,7 +167,7 @@ Future syncUserObras() async {
     final headers = syncAuthHeaders();
 
     final response = await http.post(
-      Uri.parse('https://api.rdopro.com.br/api/v1/sync/user-obras/download'),
+      Uri.parse('$kApiBaseUrl/api/v1/sync/user-obras/download'),
       headers: headers,
       body: json.encode({
         'ultima_sync': lastSync,

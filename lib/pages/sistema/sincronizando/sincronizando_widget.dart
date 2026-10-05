@@ -18,7 +18,14 @@ export 'sincronizando_model.dart';
 /// crie uma pagina que vai rodar as sincronizações com loading e relatorio
 /// gerencimanento de cada etapa  que está sincronizando
 class SincronizandoWidget extends StatefulWidget {
-  const SincronizandoWidget({super.key});
+  const SincronizandoWidget({
+    super.key,
+    this.forceFullSync = false,
+  });
+
+  /// Quando true, zera as marcas de sync e força download completo
+  /// (obras, itens, etapas, tarefas) nesta execução.
+  final bool forceFullSync;
 
   static String routeName = 'sincronizando';
   static String routePath = '/sincronizando';
@@ -42,6 +49,9 @@ class _SincronizandoWidgetState extends State<SincronizandoWidget>
 
     // On page load action.
     SchedulerBinding.instance.addPostFrameCallback((_) async {
+      if (widget.forceFullSync) {
+        await actions.requestForcedFullResync();
+      }
       final syncId = await actions.startSyncHistory();
       try {
         await actions.checkSyncStatus();
@@ -322,7 +332,9 @@ class _SincronizandoWidgetState extends State<SincronizandoWidget>
             mainAxisSize: MainAxisSize.max,
             children: [
               Text(
-                'Atualizando dados',
+                widget.forceFullSync
+                    ? 'Sincronização completa'
+                    : 'Atualizando dados',
                 textAlign: TextAlign.center,
                 style: FlutterFlowTheme.of(context).headlineMedium.override(
                       font: GoogleFonts.interTight(
@@ -341,7 +353,9 @@ class _SincronizandoWidgetState extends State<SincronizandoWidget>
               Padding(
                 padding: EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
                 child: Text(
-                  'Aguarde enquanto sincronizamos seus dados com o servidor',
+                  widget.forceFullSync
+                      ? 'Baixando todos os cadastros novamente. Pode demorar um pouco mais.'
+                      : 'Aguarde enquanto sincronizamos seus dados com o servidor',
                   textAlign: TextAlign.center,
                   style: FlutterFlowTheme.of(context).bodyMedium.override(
                         font: GoogleFonts.inter(

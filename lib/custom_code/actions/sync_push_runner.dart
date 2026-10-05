@@ -68,6 +68,10 @@ Future<void> _runFullSyncPipelineInternal() async {
     await actions.synRelatoriosAnexos();
     await actions.synRelatorioEquipamentoRecebido();
     await actions.syncRelatorioOcorrencias();
+    await actions.syncChecklistTemplates();
+    await actions.syncChecklistsPreenchidos();
+    await actions.syncPlanosAcoes();
+    await actions.syncSolucoesPlanosAcoes();
     await actions.finishSuccessSync(syncId);
   } catch (_) {
     await actions.finishErrorSync(syncId);

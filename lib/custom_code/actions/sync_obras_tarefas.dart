@@ -11,11 +11,18 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'index.dart'; // Imports other custom actions
 
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dart:math';
+
+/// Preferência legada (one-shot). Recovery contínuo = full resync diário.
+const String _kObraTarefasFullResyncV2 = 'obra_etapa_tarefas_full_resync_v2';
+const String _kDailyScope = 'obra_etapa_tarefas';
 
 // ===== FUNÇÕES UTILITÁRIAS =====
 
@@ -81,12 +88,18 @@ Future syncObrasTarefas() async {
 
     // ===== DOWNLOAD - Buscar atualizações do servidor =====
     try {
-      final lastSync = await _getUltimaSync('obra_etapa_tarefas');
-      print('📥 Buscando tarefas desde: $lastSync');
+      final prefs = await SharedPreferences.getInstance();
+      final alreadyRepaired = prefs.getBool(_kObraTarefasFullResyncV2) ?? false;
+      final needsDaily = await shouldForceDailyFullResync(_kDailyScope);
+      final forceFull = !alreadyRepaired || needsDaily;
+      final lastSync =
+          forceFull ? kSyncEpoch : await _getUltimaSync('obra_etapa_tarefas');
+      print(
+          '📥 Buscando tarefas desde: $lastSync${forceFull ? ' (resync completo)' : ''}');
 
       final downloadResponse = await http.post(
         Uri.parse(
-            'https://api.rdopro.com.br/api/v1/sync/obras/etapa-tarefas/download'),
+            '$kApiBaseUrl/api/v1/sync/obras/etapa-tarefas/download'),
         headers: headers,
         body: json.encode({'ultima_sync': lastSync}),
       );
@@ -110,6 +123,10 @@ Future syncObrasTarefas() async {
             where: 'synced = ?',
             whereArgs: [1],
           );
+        }
+        if (forceFull) {
+          await prefs.setBool(_kObraTarefasFullResyncV2, true);
+          await markDailyFullResyncDone(_kDailyScope);
         }
         print('✅ Download concluído: $downloadedCount tarefas');
       } else if (downloadResponse.statusCode == 401) {

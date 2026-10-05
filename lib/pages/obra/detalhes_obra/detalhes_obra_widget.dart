@@ -1263,6 +1263,31 @@ class _DetalhesObraWidgetState extends State<DetalhesObraWidget>
                                           );
                                         },
                                       ),
+                                      _buildAtalhoCelula(
+                                        context,
+                                        icon: Icons.checklist_rtl_rounded,
+                                        label: 'Checklists',
+                                        onTap: () {
+                                          context.pushNamed(
+                                            ChecklistsWidget.routeName,
+                                            queryParameters: {
+                                              'obraId': serializeParam(
+                                                idServidor,
+                                                ParamType.int,
+                                              ),
+                                            }.withoutNulls,
+                                            extra: <String, dynamic>{
+                                              '__transition_info__':
+                                                  const TransitionInfo(
+                                                hasTransition: true,
+                                                transitionType:
+                                                    PageTransitionType
+                                                        .bottomToTop,
+                                              ),
+                                            },
+                                          );
+                                        },
+                                      ),
                                     ],
                                   ),
                                 );

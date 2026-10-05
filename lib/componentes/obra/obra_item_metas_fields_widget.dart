@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '/app_state.dart';
 import '/flutter_flow/brazilian_currency_input_formatter.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
+import '/backend/api_requests/api_config.dart';
 
 class ObraItemMetaRow {
   ObraItemMetaRow({this.tarefaId, this.metaText = ''});
@@ -93,7 +94,7 @@ class ObraItemMetasController extends ChangeNotifier {
       final token = FFAppState().UserToken;
       final response = await http.get(
         Uri.parse(
-          'https://api.rdopro.com.br/api/obras/$obraId/list-apenas-tarefas',
+          '$kApiBaseUrl/api/obras/$obraId/list-apenas-tarefas',
         ),
         headers: {
           'Authorization': 'Bearer $token',

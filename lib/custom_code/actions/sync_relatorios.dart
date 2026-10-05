@@ -12,6 +12,8 @@ import 'sync_relatorio_download_merge_guard.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'index.dart'; // Imports other custom actions
 
 import 'index.dart'; // Imports other custom actions
@@ -68,6 +70,83 @@ Future<int?> _getIdLocalPorUuid(String tabela, String uuid) async {
 
 Future<String> _getUltimaSync(String tabela) async {
   return lastSyncDateForCurrentCreator(tabela);
+}
+
+/// ISO do Dart (`DateTime.now().toIso8601String`) — não é `server_time` da API.
+/// Esse formato era gravado no upload e virava MAX(last_sync_date), escondendo RDOs.
+bool _looksLikeDeviceClockWatermark(String raw) {
+  final s = raw.trim();
+  if (!s.contains('T')) return false;
+  // Epoch canônico (`...000Z`) e server_time (`Y-m-d H:i:s`) não entram aqui.
+  // Dart costuma emitir micros (≥4 dígitos): 2026-08-14T15:26:46.364552
+  return RegExp(r'T\d{2}:\d{2}:\d{2}\.\d{4,}').hasMatch(s);
+}
+
+/// Cursor de download: evita watermark inflado por upload/`DateTime.now()` e
+/// força catch-up quando não há RDO local do tenant.
+Future<String> _watermarkDownloadRelatorios(dynamic db, String raw) async {
+  const epoch = '2000-01-01T00:00:00.000Z';
+  final cu = currentCreatorUuidForSync();
+  if (cu.isEmpty) return epoch;
+
+  final rawTrim = raw.trim();
+  if (rawTrim.isEmpty) return epoch;
+
+  // Recuperação: cursor vindo do relógio do aparelho → full download uma vez.
+  if (_looksLikeDeviceClockWatermark(rawTrim)) {
+    print(
+        '⚠️ Watermark de relógio do aparelho ($rawTrim) — download completo (epoch)');
+    try {
+      // Evita que MAX(last_sync_date) continue pegando ISO do Dart nos próximos syncs.
+      await db.rawUpdate(
+        '''
+UPDATE relatorios
+SET last_sync_date = NULL
+WHERE LOWER(TRIM(COALESCE(created_by, ''))) = LOWER(?)
+  AND last_sync_date IS NOT NULL
+  AND INSTR(last_sync_date, 'T') > 0
+  AND INSTR(last_sync_date, '.') > 0
+''',
+        [cu],
+      );
+    } catch (e) {
+      print('⚠️ limpeza watermark relogio: $e');
+    }
+    return epoch;
+  }
+
+  try {
+    final countRows = await db.rawQuery(
+      '''
+SELECT COUNT(*) AS c FROM relatorios
+WHERE LOWER(TRIM(COALESCE(created_by, ''))) = LOWER(?)
+  AND (situacao IS NULL OR CAST(situacao AS INTEGER) != -2)
+''',
+      [cu],
+    );
+    final localCount = (countRows.isEmpty)
+        ? 0
+        : (int.tryParse('${countRows.first['c']}') ?? 0);
+    if (localCount == 0) {
+      print('⚠️ Sem relatórios locais do tenant — download completo (epoch)');
+      return epoch;
+    }
+  } catch (e) {
+    print('⚠️ contagem local relatorios: $e');
+  }
+
+  final dt = _parseFlexibleDateTime(rawTrim);
+  if (dt == null) return epoch;
+
+  final now = DateTime.now().toUtc();
+  if (dt.isAfter(now.add(const Duration(minutes: 2)))) {
+    print('⚠️ Watermark no futuro ($rawTrim) — usando epoch');
+    return epoch;
+  }
+
+  // Lookback anti-skew leve (fuso / clock skew entre app e API).
+  final lookback = dt.subtract(const Duration(hours: 12));
+  return lookback.toIso8601String();
 }
 
 String _generateUuid() {
@@ -399,7 +478,7 @@ Future syncRelatorios() async {
         print(relatoriosParaEnviar);
         // FAZER UPLOAD
         final uploadResponse = await http.post(
-          Uri.parse('https://api.rdopro.com.br/api/v1/sync/relatorios/upload'),
+          Uri.parse('$kApiBaseUrl/api/v1/sync/relatorios/upload'),
           headers: headers,
           body: json.encode({'dados': relatoriosParaEnviar}),
         );
@@ -421,22 +500,42 @@ Future syncRelatorios() async {
             );
           }
 
-          // MARCAR ORDENS COMO SINCRONIZADAS
+          // MARCAR COMO SINCRONIZADOS — não avançar last_sync_date com relógio do
+          // aparelho (isso vira cursor de download e bloqueia RDOs já existentes no servidor).
           final sinc = uploadBody['sincronizados'];
           if (sinc is! List) {
             print('⚠️ relatorios upload: sincronizados ausente ou inválido');
           }
+          final lastSyncUpload = (stUpload.trim().isNotEmpty)
+              ? stUpload.trim()
+              : null;
           for (var relatorio in (sinc is List ? sinc : const [])) {
             if (relatorio is! Map) continue;
             final u = relatorio['uuid']?.toString();
             if (u == null || u.isEmpty) continue;
+            final patch = <String, dynamic>{
+              'synced': 1,
+              'sync_try_count': 0,
+            };
+            // Só preenche last_sync se ainda estiver vazio (não sobrescreve cursor de download).
+            if (lastSyncUpload != null) {
+              final existing = await db.query(
+                'relatorios',
+                columns: ['last_sync_date'],
+                where: 'uuid = ?',
+                whereArgs: [u],
+                limit: 1,
+              );
+              final cur = existing.isEmpty
+                  ? ''
+                  : (existing.first['last_sync_date']?.toString() ?? '').trim();
+              if (cur.isEmpty) {
+                patch['last_sync_date'] = lastSyncUpload;
+              }
+            }
             await db.update(
               'relatorios',
-              {
-                'synced': 1,
-                'last_sync_date': DateTime.now().toIso8601String(),
-                'sync_try_count': 0,
-              },
+              patch,
               where: 'uuid = ?',
               whereArgs: [u],
             );
@@ -474,11 +573,12 @@ Future syncRelatorios() async {
 
     // ===== 2. DOWNLOAD - Buscar atualizações =====
     try {
-      final lastSync = await _getUltimaSync('relatorios');
+      var lastSync = await _getUltimaSync('relatorios');
+      lastSync = await _watermarkDownloadRelatorios(db, lastSync);
       print('📥 Buscando relatorios desde: $lastSync');
 
       final downloadResponse = await http.post(
-        Uri.parse('https://api.rdopro.com.br/api/v1/sync/relatorios/download'),
+        Uri.parse('$kApiBaseUrl/api/v1/sync/relatorios/download'),
         headers: headers,
         body: json.encode({'ultima_sync': lastSync}),
       );

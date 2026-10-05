@@ -12,6 +12,8 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'index.dart'; // Imports other custom actions
 
 import 'index.dart'; // Imports other custom actions
@@ -29,9 +31,9 @@ import 'sync_relatorios_atividades.dart' show syncRelatoriosAtividades;
 
 /// Trim evita newline final na URL (405 MethodNotAllowed com `%0A`).
 const String _kUrlUploadRelatorioAtividadeFotos =
-    'https://api.rdopro.com.br/api/v1/sync/relatorios/atividade-fotos/upload';
+    '$kApiBaseUrl/api/v1/sync/relatorios/atividade-fotos/upload';
 const String _kUrlDownloadRelatorioAtividadeFotos =
-    'https://api.rdopro.com.br/api/v1/sync/relatorios/atividade-fotos/download';
+    '$kApiBaseUrl/api/v1/sync/relatorios/atividade-fotos/download';
 
 Uri _uriRelatorioAtividadeFotosUpload() =>
     Uri.parse(_kUrlUploadRelatorioAtividadeFotos.trim());

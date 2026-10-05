@@ -11,6 +11,8 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math';
@@ -32,6 +34,88 @@ Future<void> _salvarMapeamento(
       print('❌ Erro ao salvar mapeamento: $e');
     }
   }
+}
+
+int? _asInt(dynamic v) {
+  if (v == null) return null;
+  if (v is int) return v;
+  if (v is num) return v.toInt();
+  return int.tryParse(v.toString().trim());
+}
+
+Future<int?> _idServidorPorUuid(String tabela, String? uuid) async {
+  final u = (uuid ?? '').trim();
+  if (u.isEmpty) return null;
+  final db = await SQLiteManager.instance.database;
+  final rows = await db.query(
+    'sync_id_mapping',
+    columns: ['id_servidor'],
+    where: 'tabela = ? AND uuid = ?',
+    whereArgs: [tabela, u],
+    limit: 1,
+  );
+  if (rows.isEmpty) return null;
+  return _asInt(rows.first['id_servidor']);
+}
+
+Future<int?> _idLocalPorIdServidor(String tabela, int idServidor) async {
+  final db = await SQLiteManager.instance.database;
+  final mapeamento = await db.query(
+    'sync_id_mapping',
+    where: 'tabela = ? AND id_servidor = ?',
+    whereArgs: [tabela, idServidor],
+    limit: 1,
+  );
+  if (mapeamento.isEmpty) return null;
+  final uuid = (mapeamento.first['uuid'] ?? '').toString();
+  if (uuid.isEmpty) return null;
+  final registro =
+      await db.query(tabela, where: 'uuid = ?', whereArgs: [uuid], limit: 1);
+  return registro.isNotEmpty ? _asInt(registro.first['id']) : null;
+}
+
+Future<String?> _uuidPorIdLocal(String tabela, int? localId) async {
+  if (localId == null || localId < 1) return null;
+  final db = await SQLiteManager.instance.database;
+  final rows = await db.query(
+    tabela,
+    columns: ['uuid'],
+    where: 'id = ?',
+    whereArgs: [localId],
+    limit: 1,
+  );
+  if (rows.isEmpty) return null;
+  final u = (rows.first['uuid'] ?? '').toString().trim();
+  return u.isEmpty ? null : u;
+}
+
+/// Resolve o PK do servidor a partir de uuid e/ou id local SQLite.
+Future<int?> _resolverIdServidor({
+  required String tabela,
+  String? uuid,
+  int? idLocalOuServidor,
+}) async {
+  final viaUuid = await _idServidorPorUuid(tabela, uuid);
+  if (viaUuid != null) return viaUuid;
+
+  final localUuid = await _uuidPorIdLocal(tabela, idLocalOuServidor);
+  final viaLocal = await _idServidorPorUuid(tabela, localUuid);
+  if (viaLocal != null) return viaLocal;
+
+  // Legado: o valor já pode ser o id do servidor.
+  final candidate = idLocalOuServidor;
+  if (candidate != null && candidate > 0) {
+    final db = await SQLiteManager.instance.database;
+    final map = await db.query(
+      'sync_id_mapping',
+      columns: ['uuid'],
+      where: 'tabela = ? AND id_servidor = ?',
+      whereArgs: [tabela, candidate],
+      limit: 1,
+    );
+    if (map.isNotEmpty) return candidate;
+  }
+  return null;
 }
 
 Future<String> _getUltimaSync(String tabela) async {
@@ -105,8 +189,9 @@ Future syncChecklistsPreenchidos() async {
           whereArgs: [0],
         );
 
-        // PREPARAR DADOS PARA ENVIO
-        final checklistsParaEnviar = checklistsComUuid.map((checklist) {
+        // PREPARAR DADOS PARA ENVIO (IDs do servidor, não os locais do SQLite)
+        final checklistsParaEnviar = <Map<String, dynamic>>[];
+        for (final checklist in checklistsComUuid) {
           // TRATAR JSON_RESPOSTAS - garantir que é um Map válido
           dynamic jsonRespostas = checklist['json_respostas'];
           if (jsonRespostas is String) {
@@ -119,27 +204,56 @@ Future syncChecklistsPreenchidos() async {
             jsonRespostas = {};
           }
 
-          return {
+          final templateUuid =
+              (checklist['checklist_template_uuid'] ?? '').toString().trim();
+          final obraUuid = (checklist['obra_uuid'] ?? '').toString().trim();
+          final templateServerId = await _resolverIdServidor(
+            tabela: 'checklists_templates',
+            uuid: templateUuid.isEmpty ? null : templateUuid,
+            idLocalOuServidor: _asInt(checklist['checklist_template_id']),
+          );
+          final obraServerId = await _resolverIdServidor(
+            tabela: 'obras',
+            uuid: obraUuid.isEmpty ? null : obraUuid,
+            idLocalOuServidor: _asInt(checklist['obra_id']),
+          );
+          final usuarioServerId = _asInt(checklist['usuario_id']) ??
+              (FFAppState().UserID > 0 ? FFAppState().UserID : null);
+
+          if (templateServerId == null ||
+              obraServerId == null ||
+              usuarioServerId == null ||
+              usuarioServerId < 1) {
+            print(
+              '⚠️ Checklist ${checklist['uuid']} sem mapeamento '
+              '(template=$templateServerId obra=$obraServerId usuario=$usuarioServerId) — pulando upload',
+            );
+            continue;
+          }
+
+          checklistsParaEnviar.add({
             'uuid': checklist['uuid'],
-            'checklist_template_id': checklist['checklist_template_id'],
-            'obra_id': checklist['obra_id'],
-            'usuario_id': checklist['usuario_id'], // Enviar o usuario_id do app
+            'checklist_template_id': templateServerId,
+            'obra_id': obraServerId,
+            'usuario_id': usuarioServerId,
             'json_respostas': jsonRespostas,
-            'nota_final': checklist['nota_final']
-                ?.toString(), // Converter para string se necessário
+            'nota_final': checklist['nota_final']?.toString(),
             'situacao': checklist['situacao'] ?? 'pendente',
             'created_by': checklist['created_by'],
             'created_at': checklist['created_at'],
             'updated_at': checklist['updated_at'],
-          };
-        }).toList();
+          });
+        }
 
+        if (checklistsParaEnviar.isEmpty) {
+          print('ℹ️ Nenhum checklist com IDs de servidor resolvidos para enviar');
+        } else {
         print('📤 Enviando ${checklistsParaEnviar.length} checklists...');
 
         // FAZER UPLOAD
         final uploadResponse = await http.post(
           Uri.parse(
-              'https://api.rdopro.com.br/api/v1/sync/checklists-preenchidos/upload'),
+              '$kApiBaseUrl/api/v1/sync/checklists-preenchidos/upload'),
           headers: headers,
           body: json.encode({'dados': checklistsParaEnviar}),
         );
@@ -151,8 +265,15 @@ Future syncChecklistsPreenchidos() async {
           final uploadResult = json.decode(uploadResponse.body);
 
           if (uploadResult['status'] == 'ok') {
-            // MARCAR CHECKLISTS COMO SINCRONIZADOS
-            for (var checklist in uploadResult['sincronizados']) {
+            // MARCAR CHECKLISTS COMO SINCRONIZADOS + mapear id servidor
+            for (var checklist in uploadResult['sincronizados'] ?? []) {
+              final uuid = (checklist['uuid'] ?? '').toString();
+              if (uuid.isEmpty) continue;
+              final serverId = _asInt(checklist['id']);
+              if (serverId != null) {
+                await _salvarMapeamento(
+                    'checklists_preenchidos', serverId, uuid);
+              }
               await db.update(
                 'checklists_preenchidos',
                 {
@@ -161,7 +282,7 @@ Future syncChecklistsPreenchidos() async {
                   'sync_try_count': 0,
                 },
                 where: 'uuid = ?',
-                whereArgs: [checklist['uuid']],
+                whereArgs: [uuid],
               );
               uploadedCount++;
             }
@@ -187,6 +308,7 @@ Future syncChecklistsPreenchidos() async {
           print('❌ Erro no upload: ${uploadResponse.statusCode}');
           print('❌ Body do erro: ${uploadResponse.body}');
         }
+        }
       } else {
         print('ℹ️ Nenhum checklist para enviar');
       }
@@ -201,7 +323,7 @@ Future syncChecklistsPreenchidos() async {
 
       final downloadResponse = await http.post(
         Uri.parse(
-            'https://api.rdopro.com.br/api/v1/sync/checklists-preenchidos/download'),
+            '$kApiBaseUrl/api/v1/sync/checklists-preenchidos/download'),
         headers: headers,
         body: json.encode({'ultima_sync': lastSync}),
       );
@@ -287,23 +409,67 @@ Future<void> _processarChecklistPreenchido(
   final notaFinal = checklistServer['nota_final']?.toString();
   final situacao = checklistServer['situacao'] ?? 'pendente';
 
+  final templateServerId = _asInt(checklistServer['checklist_template_id']);
+  final obraServerId = _asInt(checklistServer['obra_id']);
+  final templateLocalId = templateServerId == null
+      ? null
+      : (await _idLocalPorIdServidor(
+              'checklists_templates', templateServerId) ??
+          templateServerId);
+  final obraLocalId = obraServerId == null
+      ? null
+      : (await _idLocalPorIdServidor('obras', obraServerId) ?? obraServerId);
+
+  String? templateUuid = checklistServer['checklist_template_uuid']?.toString();
+  if ((templateUuid == null || templateUuid.isEmpty) &&
+      templateServerId != null) {
+    final map = await db.query(
+      'sync_id_mapping',
+      columns: ['uuid'],
+      where: 'tabela = ? AND id_servidor = ?',
+      whereArgs: ['checklists_templates', templateServerId],
+      limit: 1,
+    );
+    if (map.isNotEmpty) {
+      templateUuid = map.first['uuid']?.toString();
+    }
+  }
+
+  String? obraUuid = checklistServer['obra_uuid']?.toString();
+  if ((obraUuid == null || obraUuid.isEmpty) && obraServerId != null) {
+    final map = await db.query(
+      'sync_id_mapping',
+      columns: ['uuid'],
+      where: 'tabela = ? AND id_servidor = ?',
+      whereArgs: ['obras', obraServerId],
+      limit: 1,
+    );
+    if (map.isNotEmpty) {
+      obraUuid = map.first['uuid']?.toString();
+    }
+  }
+
+  final payload = {
+    'checklist_template_id': templateLocalId,
+    'checklist_template_uuid': templateUuid,
+    'obra_id': obraLocalId,
+    'obra_uuid': obraUuid,
+    'usuario_id': checklistServer['usuario_id'],
+    'json_respostas': jsonRespostas,
+    'nota_final': notaFinal,
+    'situacao': situacao,
+    'created_by': checklistServer['created_by'],
+    'synced': 1,
+    'last_sync_date': serverTime,
+    'created_at': checklistServer['created_at'],
+    'updated_at': checklistServer['updated_at'],
+  };
+
   if (existe.isNotEmpty) {
     // UPDATE
     await db.update(
       'checklists_preenchidos',
-      {
-        'checklist_template_id': checklistServer['checklist_template_id'],
-        'obra_id': checklistServer['obra_id'],
-        'usuario_id': checklistServer['usuario_id'],
-        'json_respostas': jsonRespostas,
-        'nota_final': notaFinal,
-        'situacao': situacao,
-        'created_by': checklistServer['created_by'],
-        'synced': 1,
-        'last_sync_date': serverTime,
-        'created_at': checklistServer['created_at'],
-        'updated_at': checklistServer['updated_at'],
-      },
+      payload,
       where: 'uuid = ?',
       whereArgs: [uuid],
     );
@@ -314,17 +480,7 @@ Future<void> _processarChecklistPreenchido(
       'checklists_preenchidos',
       {
         'uuid': uuid,
-        'checklist_template_id': checklistServer['checklist_template_id'],
-        'obra_id': checklistServer['obra_id'],
-        'usuario_id': checklistServer['usuario_id'],
-        'json_respostas': jsonRespostas,
-        'nota_final': notaFinal,
-        'situacao': situacao,
-        'created_by': checklistServer['created_by'],
-        'synced': 1,
-        'last_sync_date': serverTime,
-        'created_at': checklistServer['created_at'],
-        'updated_at': checklistServer['updated_at'],
+        ...payload,
       },
     );
     print('✅ Novo checklist inserido: $uuid');

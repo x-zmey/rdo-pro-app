@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '/backend/sqlite/init.dart';
+import '/backend/sqlite/sincronizar_custos_os_uso.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'queries/read.dart';
 import 'queries/update.dart';
@@ -436,6 +437,16 @@ class SQLiteManager {
     String? accountOwnerUuid,
   }) =>
       performGetModelosChecklist(
+        _database,
+        obraId: obraId,
+        accountOwnerUuid: _ownerOr(accountOwnerUuid),
+      );
+
+  Future<List<GetChecklistsPreenchidosRow>> getChecklistsPreenchidos({
+    int? obraId,
+    String? accountOwnerUuid,
+  }) =>
+      performGetChecklistsPreenchidos(
         _database,
         obraId: obraId,
         accountOwnerUuid: _ownerOr(accountOwnerUuid),
@@ -1042,6 +1053,16 @@ class SQLiteManager {
         _database,
         uuid: uuid,
         qtdRealizada: qtdRealizada,
+      );
+
+  Future<void> sincronizarCustosOsComUsoAtividades({
+    int? relatorioId,
+    String? relatorioUuid,
+  }) =>
+      performSincronizarCustosOsComUsoAtividades(
+        _database,
+        relatorioId: relatorioId,
+        relatorioUuid: relatorioUuid,
       );
 
   Future updateEquipamentoRecebido({

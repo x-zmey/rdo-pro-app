@@ -11,6 +11,8 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'index.dart'; // Imports other custom actions
 
 import 'package:http/http.dart' as http;
@@ -116,7 +118,7 @@ Future<int> _downloadVinculosPorObra(
     if (serverObraId == null) continue;
 
     final uri = Uri.parse(
-      'https://api.rdopro.com.br/api/obras/$serverObraId/locais',
+      '$kApiBaseUrl/api/obras/$serverObraId/locais',
     );
     final resp = await http.get(uri, headers: headers);
 
@@ -194,7 +196,7 @@ Future syncObraLocais() async {
       print('📥 Buscando locais desde: $lastSync');
 
       final downloadResponse = await http.post(
-        Uri.parse('https://api.rdopro.com.br/api/v1/sync/locais/download'),
+        Uri.parse('$kApiBaseUrl/api/v1/sync/locais/download'),
         headers: headers,
         body: json.encode({'ultima_sync': lastSync}),
       );

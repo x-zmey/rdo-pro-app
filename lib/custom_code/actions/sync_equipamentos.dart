@@ -11,6 +11,8 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'index.dart'; // Imports other custom actions
 
 import 'index.dart'; // Imports other custom actions
@@ -172,7 +174,7 @@ Future syncEquipamentos() async {
 
       final downloadResponse = await http.post(
         Uri.parse(
-            'https://api.rdopro.com.br/api/v1/sync/equipamentos/download'),
+            '$kApiBaseUrl/api/v1/sync/equipamentos/download'),
         headers: headers,
         body: json.encode({'ultima_sync': lastSync}),
       );

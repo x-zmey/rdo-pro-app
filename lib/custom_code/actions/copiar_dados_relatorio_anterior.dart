@@ -347,7 +347,7 @@ INSERT INTO relatorio_mao_obra_presenca (
       saida,
       intIni,
       intFim,
-      '8',
+      _horasPresencaParaCopia(status),
       createdBy,
       agora,
       kSituacaoAtivo,
@@ -355,4 +355,13 @@ INSERT INTO relatorio_mao_obra_presenca (
       agora,
     ]);
   }
+}
+
+/// Ausente/licença/etc. → 0h; presente/atrasado → jornada padrão do RDO (8h).
+String _horasPresencaParaCopia(String status) {
+  final s = status.trim().toLowerCase();
+  if (s == 'presente' || s == 'atrasado') {
+    return '8';
+  }
+  return '0';
 }

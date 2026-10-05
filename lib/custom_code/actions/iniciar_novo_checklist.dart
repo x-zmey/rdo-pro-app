@@ -12,192 +12,181 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:math';
 
+import 'checklist_offline.dart';
+
 Future<String> iniciarNovoChecklist(
   int templateId,
   int obraId,
   int usuarioId,
 ) async {
-  print('👤 Template ID: $templateId');
-  print('🏗️ Obra ID: $obraId');
-  print('👤 Usuário ID: $usuarioId');
-
   try {
     final db = await SQLiteManager.instance.database;
 
-    // Buscar template do SQLite
     final templates = await db.query(
       'checklists_templates',
       where: 'id = ?',
       whereArgs: [templateId],
+      limit: 1,
     );
-
-    print('📋 Templates encontrados: ${templates.length}');
-
     if (templates.isEmpty) {
       throw Exception('Template de checklist não encontrado');
     }
 
     final template = templates.first;
-
-    // VERIFICAR OS CAMPOS EXISTENTES
-    print('🔍 Campos do template: ${template.keys}');
-    print('🔍 Template completo: $template');
-
-    // O campo correto é json_config, não json_template!
+    final templateUuid = (template['uuid'] ?? '').toString();
     final templateJson = template['json_config'] as String?;
-
-    if (templateJson == null) {
+    if (templateJson == null || templateJson.trim().isEmpty) {
       throw Exception('Campo json_config não encontrado ou está nulo');
     }
 
-    print('📄 JSON do template: $templateJson');
-
-    final templateData = json.decode(templateJson);
-
-    // Validar estrutura do template
+    final templateData =
+        Map<String, dynamic>.from(json.decode(templateJson) as Map);
     if (templateData['areas'] == null) {
       throw Exception('Template sem áreas definidas');
     }
 
-    // Criar estrutura com respostas vazias
     final checklistComRespostas = _inicializarRespostas(templateData);
-
-    // Gerar UUID único
     final uuid = _generateUuid();
+    final now = DateTime.now().toIso8601String();
+    final creatorUuid = FFAppState().creatorUuid.trim();
+    final userUuid = FFAppState().UserUuid.trim();
 
-    // Criar objeto de resultado
+    String? obraUuid;
+    final obraLocal = await db.query(
+      'obras',
+      columns: ['uuid'],
+      where: 'id = ?',
+      whereArgs: [obraId],
+      limit: 1,
+    );
+    if (obraLocal.isNotEmpty) {
+      final u = (obraLocal.first['uuid'] ?? '').toString().trim();
+      if (u.isNotEmpty) obraUuid = u;
+    }
+    if (obraUuid == null || obraUuid.isEmpty) {
+      final obraRows = await db.query(
+        'sync_id_mapping',
+        columns: ['uuid'],
+        where: 'tabela = ? AND id_servidor = ?',
+        whereArgs: ['obras', obraId],
+        limit: 1,
+      );
+      if (obraRows.isNotEmpty) {
+        obraUuid = obraRows.first['uuid']?.toString();
+      }
+    }
+
+    await db.insert('checklists_preenchidos', {
+      'uuid': uuid,
+      'checklist_template_id': templateId,
+      'checklist_template_uuid':
+          templateUuid.isEmpty ? null : templateUuid,
+      'obra_id': obraId,
+      'obra_uuid': obraUuid,
+      'usuario_id': usuarioId,
+      'usuario_uuid': userUuid.isEmpty ? null : userUuid,
+      'json_respostas': json.encode(checklistComRespostas),
+      'nota_final': null,
+      'situacao': 'preenchendo',
+      'created_by': creatorUuid.isNotEmpty ? creatorUuid : userUuid,
+      'synced': 0,
+      'sync_try_count': 0,
+      'last_sync_date': null,
+      'created_at': now,
+      'updated_at': now,
+    });
+
     final resultado = {
       'uuid': uuid,
       'template_data': checklistComRespostas,
       'template_id': templateId,
+      'template_uuid': templateUuid,
       'obra_id': obraId,
+      'obra_uuid': obraUuid,
       'usuario_id': usuarioId,
+      'usuario_uuid': userUuid,
       'template_name': template['nome'] ?? 'Checklist sem nome',
       'template_descricao': template['descricao'] ?? '',
-      'status': 'rascunho',
-      'data_criacao': DateTime.now().toIso8601String(),
+      'status': 'preenchendo',
+      'data_criacao': now,
       'versao_template': templateData['versao'] ?? '1.0',
     };
 
-    // Converter para JSON string
-    final resultadoJson = json.encode(resultado);
-
-    print('✅ Novo checklist iniciado: ${template['nome']}');
-    print('📝 UUID: $uuid');
-    print('🏗️ Obra ID: $obraId');
-    print('👤 Usuário ID: $usuarioId');
-
-    return resultadoJson;
+    return json.encode(resultado);
   } catch (e) {
-    print('❌ Erro ao iniciar checklist: $e');
-
-    // Retornar erro como JSON string também
-    final erro = {
+    return json.encode({
       'erro': true,
       'mensagem': e.toString(),
       'template_id': templateId,
       'obra_id': obraId,
-    };
-
-    return json.encode(erro);
+    });
   }
 }
 
 Map<String, dynamic> _inicializarRespostas(Map<String, dynamic> template) {
-  try {
-    final areas = template['areas'] as List;
+  final templateComRespostas = Map<String, dynamic>.from(template);
+  final areas = (template['areas'] as List? ?? []);
 
-    // Copiar o template para não modificar o original
-    final templateComRespostas = Map<String, dynamic>.from(template);
+  final novasAreas = areas.map<Map<String, dynamic>>((area) {
+    final areaMap = Map<String, dynamic>.from(area as Map);
+    final items = areaMap['items'] as List? ?? [];
 
-    // Processar cada área
-    final novasAreas = areas.map<Map<String, dynamic>>((area) {
-      final areaMap = Map<String, dynamic>.from(area);
-      final items = areaMap['items'] as List? ?? [];
+    final novosItems = items.map<Map<String, dynamic>>((item) {
+      final itemMap = Map<String, dynamic>.from(item as Map);
+      final tipo = normalizeChecklistItemType(itemMap['type']);
+      itemMap['type'] = tipo;
 
-      // Processar cada item da área
-      final novosItems = items.map<Map<String, dynamic>>((item) {
-        final itemMap = Map<String, dynamic>.from(item);
-        final tipo = itemMap['type'] as String? ?? '';
-        final id = itemMap['id']?.toString() ?? 'sem-id';
+      itemMap['respostaComentario'] ??= itemMap['comentario'];
+      itemMap['anexosComplementares'] ??= <dynamic>[];
+      itemMap['anexosComplementaresOpcao'] ??= <dynamic>[];
+      itemMap['planoAcao'] ??= null;
 
-        print('🔄 Inicializando item: $id - Tipo: $tipo');
-
-        // Adicionar campos de resposta baseado no tipo
-        switch (tipo) {
-          case 'Avaliativo Sim/Não':
-            itemMap['respostaBoolean'] = null;
-            itemMap['anexosComplementares'] = [];
-            itemMap['anexosComplementaresOpcao'] = [];
-            itemMap['comentario'] = null;
-            break;
-
-          case 'Avaliativo Emojis':
-            itemMap['respostaEmoji'] = null;
-            itemMap['comentario'] = null;
-            break;
-
-          case 'Texto longo':
-            itemMap['respostaTexto'] = null;
-            itemMap['comentario'] = null;
-            break;
-
-          case 'Data':
-            itemMap['respostaData'] = null;
-            itemMap['comentario'] = null;
-            break;
-
-          case 'Número':
-            itemMap['respostaNumero'] = null;
-            itemMap['comentario'] = null;
-            break;
-
-          case 'Opções':
-            itemMap['respostaOpcao'] = null;
-            itemMap['anexosComplementares'] = [];
-            itemMap['comentario'] = null;
-            break;
-
-          default:
-            // Para tipos desconhecidos, usar campo genérico
-            itemMap['resposta'] = null;
-            itemMap['comentario'] = null;
-            print('⚠️ Tipo desconhecido: $tipo - usando resposta genérica');
-        }
-
-        return itemMap;
-      }).toList();
-
-      areaMap['items'] = novosItems;
-      return areaMap;
+      switch (tipo) {
+        case 'Avaliativo Sim/Não':
+          itemMap['respostaBoolean'] ??= null;
+          break;
+        case 'Avaliativo Emojis':
+          itemMap['respostaEmoji'] ??= null;
+          break;
+        case 'Texto':
+        case 'Cadastro':
+          itemMap['respostaTexto'] ??= null;
+          break;
+        case 'Data':
+          itemMap['respostaData'] ??= null;
+          break;
+        case 'Número':
+          itemMap['respostaNumero'] ??= null;
+          break;
+        case 'Opção':
+          itemMap['respostaOpcao'] ??= null;
+          break;
+        case 'Anexo':
+          itemMap['anexos'] ??= <dynamic>[];
+          break;
+        default:
+          itemMap['resposta'] ??= null;
+      }
+      return itemMap;
     }).toList();
 
-    templateComRespostas['areas'] = novasAreas;
+    areaMap['items'] = novosItems;
+    return areaMap;
+  }).toList();
 
-    // Adicionar campos gerais do checklist
-    templateComRespostas['comentario_geral'] = null;
-    templateComRespostas['assinatura'] = null;
-    templateComRespostas['anexos_gerais'] = [];
-    templateComRespostas['data_inicio_preenchimento'] =
-        DateTime.now().toIso8601String();
-
-    print('✅ Template inicializado com ${novasAreas.length} áreas');
-
-    return templateComRespostas;
-  } catch (e) {
-    print('❌ Erro ao inicializar respostas: $e');
-    return template; // Retornar template original em caso de erro
-  }
+  templateComRespostas['areas'] = novasAreas;
+  templateComRespostas['comentario_geral'] ??= null;
+  templateComRespostas['assinatura'] ??= null;
+  templateComRespostas['anexos_gerais'] ??= <dynamic>[];
+  templateComRespostas['data_inicio_preenchimento'] =
+      DateTime.now().toIso8601String();
+  return templateComRespostas;
 }
 
 String _generateUuid() {
   final random = Random();
-  final hexDigits = '0123456789abcdef';
-
-  String generatePart(int length) {
-    return List.generate(length, (index) => hexDigits[random.nextInt(16)])
-        .join();
-  }
-
-  return '${generatePart(8)}-${generatePart(4)}-4${generatePart(3)}-${generatePart(4)}-${generatePart(12)}';
+  const hexDigits = '0123456789abcdef';
+  String part(int length) =>
+      List.generate(length, (_) => hexDigits[random.nextInt(16)]).join();
+  return '${part(8)}-${part(4)}-4${part(3)}-${part(4)}-${part(12)}';
 }

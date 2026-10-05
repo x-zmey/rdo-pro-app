@@ -11,6 +11,8 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'index.dart'; // Imports other custom actions
 
 import 'package:http/http.dart' as http;
@@ -164,7 +166,7 @@ Future syncOrdensAssinaturas() async {
         // FAZER UPLOAD
         final uploadResponse = await http.post(
           Uri.parse(
-              'https://api.rdopro.com.br/api/v1/sync/ordens/assinaturas-upload'),
+              '$kApiBaseUrl/api/v1/sync/ordens/assinaturas-upload'),
           headers: headers,
           body: json.encode({'dados': ordensAssinaturasParaEnviar}),
         );
@@ -211,16 +213,17 @@ Future syncOrdensAssinaturas() async {
       print('❌ Erro no upload: $e');
     }*/
 
-    // ===== 2. DOWNLOAD - Buscar atualizações =====
+    // ===== 2. DOWNLOAD - completo (evita watermark pular assinaturas novas) =====
     try {
-      final lastSync = await _getUltimaSync('ordem_servico_assinaturas');
-      print('📥 Buscando ordens assinaturas desde: $lastSync');
+      print('📥 Buscando todas as assinaturas de OS (tenant)...');
 
       final downloadResponse = await http.post(
         Uri.parse(
-            'https://api.rdopro.com.br/api/v1/sync/ordens-servico/assinaturas/download'),
+            '$kApiBaseUrl/api/v1/sync/ordens-servico/assinaturas/download'),
         headers: headers,
-        body: json.encode({'ultima_sync': lastSync}),
+        body: json.encode(<String, dynamic>{
+          'ultima_sync': null,
+        }),
       );
 
       if (downloadResponse.statusCode == 200) {

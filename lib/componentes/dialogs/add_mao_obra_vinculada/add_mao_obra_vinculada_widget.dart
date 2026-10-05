@@ -85,10 +85,22 @@ class _AddMaoObraVinculadaWidgetState extends State<AddMaoObraVinculadaWidget> {
   late Future<List<CarregaItensObraRow>> _itensObraFuture;
   int _itensObraReloadToken = 0;
 
-  Future<List<CarregaItensObraRow>> _loadItensObra() {
+  Future<List<CarregaItensObraRow>> _loadItensObra() async {
+    final obraUuid = (widget.obraUuid ?? '').trim();
+    if (obraUuid.isEmpty) {
+      return <CarregaItensObraRow>[];
+    }
+    // Tela da obra usa a API; o dropdown lia só SQLite (podia estar desatualizado
+    // por watermark do sync). Com internet, espelha a mesma fonte antes de listar.
+    try {
+      await actions.refreshObraItensPorTipo(
+        obraUuid: obraUuid,
+        tipo: 'mao_obra',
+      );
+    } catch (_) {}
     return SQLiteManager.instance.carregaItensObra(
       tipo: 'mao_obra',
-      obraUuid: widget.obraUuid!,
+      obraUuid: obraUuid,
       obraId: 0,
     );
   }

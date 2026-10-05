@@ -16,12 +16,14 @@ class QtdCustoItemOrdemRelatorioWidget extends StatefulWidget {
     required this.uuid,
     required this.relatorioUuid,
     this.valor,
+    this.hintText,
     this.onQuantidadeChanged,
   });
 
   final String? uuid;
   final String? relatorioUuid;
   final int? valor;
+  final String? hintText;
   /// Chamado quando o valor digitado muda (para recalcular saldo na lista).
   final ValueChanged<int?>? onQuantidadeChanged;
 
@@ -126,7 +128,7 @@ class _QtdCustoItemOrdemRelatorioWidgetState
         obscureText: false,
         decoration: rdoCompactFieldDecoration(
           context,
-          hint: 'Qtd',
+          hint: widget.hintText ?? 'Qtd',
           fillColor: FlutterFlowTheme.of(context).primaryBackground,
         ),
         style: rdoCompactFieldTextStyle(context),

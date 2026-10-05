@@ -87,6 +87,40 @@ class _SelecionarTarefaAtividadeWidgetState
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
   bool _salvando = false;
+  late Future<List<GetOrdensServicoRow>> _ordensFuture;
+  late Future<List<ListaEtapasObraRow>> _etapasFuture;
+  int _listasReloadToken = 0;
+
+  late Future<void> _listasReady;
+
+  Future<void> _refreshListasLocais() async {
+    final obraUuid = (widget.obraUuid ?? '').trim();
+    if (obraUuid.isEmpty) return;
+    try {
+      await Future.wait([
+        actions.refreshOrdensPorObra(obraUuid: obraUuid),
+        actions.refreshEtapasTarefasPorObra(obraUuid: obraUuid),
+        actions.syncOrdensTarefas(),
+      ]);
+    } catch (_) {}
+  }
+
+  Future<List<GetOrdensServicoRow>> _loadOrdens() async {
+    final obraUuid = (widget.obraUuid ?? '').trim();
+    if (obraUuid.isEmpty) return <GetOrdensServicoRow>[];
+    await _listasReady;
+    return SQLiteManager.instance.getOrdensServico(
+      obraUuid: obraUuid,
+      userId: FFAppState().creatorId,
+    );
+  }
+
+  Future<List<ListaEtapasObraRow>> _loadEtapas() async {
+    final obraUuid = (widget.obraUuid ?? '').trim();
+    if (obraUuid.isEmpty) return <ListaEtapasObraRow>[];
+    await _listasReady;
+    return SQLiteManager.instance.listaEtapasObra(obraUuid: obraUuid);
+  }
 
   @override
   void initState() {
@@ -95,6 +129,9 @@ class _SelecionarTarefaAtividadeWidgetState
 
     _model.switchOrdemValue = false;
     _model.usarTarefaListaOrdem = true;
+    _listasReady = _refreshListasLocais();
+    _ordensFuture = _loadOrdens();
+    _etapasFuture = _loadEtapas();
   }
 
   @override
@@ -279,9 +316,8 @@ class _SelecionarTarefaAtividadeWidgetState
       children: [
         _rotulo('Etapa'),
         FutureBuilder<List<ListaEtapasObraRow>>(
-          future: SQLiteManager.instance.listaEtapasObra(
-            obraUuid: widget.obraUuid!,
-          ),
+          key: ValueKey('etapas_$_listasReloadToken'),
+          future: _etapasFuture,
           builder: (context, snapshot) {
             if (!snapshot.hasData) return _carregando();
             final etapas = snapshot.data!;
@@ -475,10 +511,8 @@ class _SelecionarTarefaAtividadeWidgetState
             const SizedBox(height: 10),
             _rotulo('Ordem de serviço'),
             FutureBuilder<List<GetOrdensServicoRow>>(
-              future: SQLiteManager.instance.getOrdensServico(
-                obraUuid: widget.obraUuid!,
-                userId: FFAppState().creatorId,
-              ),
+              key: ValueKey('ordens_$_listasReloadToken'),
+              future: _ordensFuture,
               builder: (context, snapshot) {
                 if (!snapshot.hasData) return _carregando();
                 final ordens = snapshot.data!;

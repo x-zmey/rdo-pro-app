@@ -78,6 +78,15 @@ class _OrdensCustoRelatorioWidgetState
     _model = createModel(context, () => OrdensCustoRelatorioModel());
   }
 
+  Future<List<GetOrdensServicoRelatorioRow>> _carregarOrdens() async {
+    await SQLiteManager.instance.sincronizarCustosOsComUsoAtividades(
+      relatorioUuid: widget.relatorioUuid,
+    );
+    return SQLiteManager.instance.getOrdensServicoRelatorio(
+      relatorioUuid: widget.relatorioUuid!,
+    );
+  }
+
   @override
   void dispose() {
     _model.maybeDispose();
@@ -90,9 +99,7 @@ class _OrdensCustoRelatorioWidgetState
     final theme = FlutterFlowTheme.of(context);
 
     return FutureBuilder<List<GetOrdensServicoRelatorioRow>>(
-      future: SQLiteManager.instance.getOrdensServicoRelatorio(
-        relatorioUuid: widget!.relatorioUuid!,
-      ),
+      future: _carregarOrdens(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return Center(
@@ -252,12 +259,13 @@ class _OrdensCustoRelatorioWidgetState
                   child: LinearProgressIndicator(color: theme.primary),
                 );
               }
-              final itens = snapshot.data!;
+              final itens =
+                  snapshot.data!.where((item) => !item.isFixo).toList();
               if (itens.isEmpty) {
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   child: Text(
-                    'Sem itens de custo previstos',
+                    'Nenhum custo variável para lançar. Insumos, mão de obra e equipamentos vêm das atividades; avulsos você informa aqui.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.inter(
                       fontSize: 12,
@@ -337,9 +345,10 @@ class _OrdensCustoRelatorioWidgetState
     final custoItemId = item.id;
     final qtdPrevista = item.qtdPrevista ?? 0.0;
     final qtdDigitada = _qtdRealizadaDigitadaPorItemId.containsKey(custoItemId)
-        ? _qtdRealizadaDigitadaPorItemId[custoItemId]!
-        : (item.qtdRealizada ?? 0);
-    final saldo = qtdPrevista - qtdDigitada;
+        ? (_qtdRealizadaDigitadaPorItemId[custoItemId] ?? 0).toDouble()
+        : item.qtdRealizadaNum;
+    final acumulado = item.qtdAcumuladaNum;
+    final saldo = qtdPrevista - acumulado - qtdDigitada;
     final unidade = valueOrDefault<String>(item.unidade, '');
     final sufixo = unidade.isNotEmpty ? ' $unidade' : '';
 
@@ -352,13 +361,30 @@ class _OrdensCustoRelatorioWidgetState
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              valueOrDefault<String>(item.descricao, 'N/A'),
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: theme.primaryText,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  valueOrDefault<String>(item.descricao, 'N/A'),
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: theme.primaryText,
+                  ),
+                ),
+                Text(
+                  item.isVinculadoAtividade
+                      ? (item.qtdManual
+                          ? 'Editado manualmente'
+                          : 'Da atividade — editável')
+                      : 'Avulso — informe a quantidade',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    color: theme.secondaryText,
+                  ),
+                ),
+              ],
             ),
           ),
           SizedBox(
@@ -395,8 +421,12 @@ class _OrdensCustoRelatorioWidgetState
               child: QtdCustoItemOrdemRelatorioWidget(
                 key: Key('Keyglh_${item.id}'),
                 uuid: item.uuid!,
-                relatorioUuid: widget!.relatorioUuid!,
-                valor: valueOrDefault<int>(item.qtdRealizada, 0),
+                relatorioUuid: widget.relatorioUuid!,
+                valor: valueOrDefault<int>(
+                  item.qtdRealizadaNum.round(),
+                  0,
+                ),
+                hintText: item.isVinculadoAtividade ? 'Da atividade' : 'Qtd',
                 onQuantidadeChanged: (v) {
                   safeSetState(() {
                     _qtdRealizadaDigitadaPorItemId[custoItemId] = v ?? 0;

@@ -11,7 +11,10 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'package:http/http.dart' as http;
+import 'package:sqflite/sqflite.dart';
 import 'dart:convert';
 import 'dart:math';
 
@@ -133,7 +136,7 @@ Future syncChecklistTemplates() async {
 
       final response = await http.post(
         Uri.parse(
-            'https://api.rdopro.com.br/api/v1/sync/checklists/categorias/download'),
+            '$kApiBaseUrl/api/v1/sync/checklists/categorias/download'),
         headers: headers,
         body: json.encode({'ultima_sync': lastSync}),
       );
@@ -159,23 +162,28 @@ Future syncChecklistTemplates() async {
         }
         print('✅ Download categorias concluído');
       } else {
-        print('❌ Erro categorias: ${response.statusCode}');
-        return;
+        print(
+            '⚠️ Erro categorias: ${response.statusCode} — seguindo com templates');
       }
     } catch (e) {
-      print('❌ Erro no download categorias: $e');
-      _updateSyncStatus(false, 'Erro no download categorias: $e', 0, 0);
-      return;
+      print('⚠️ Erro no download categorias: $e — seguindo com templates');
     }
 
     // ===== 2. DOWNLOAD - TEMPLATES =====
     try {
-      final lastSync = await _getUltimaSync('checklists_templates');
-      print('📥 Buscando templates desde: $lastSync');
+      // Se ainda não há modelos locais, força download completo (evita watermark stale).
+      final localCount = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM checklists_templates'),
+          ) ??
+          0;
+      final lastSync = localCount == 0
+          ? '1970-01-01 00:00:00'
+          : await _getUltimaSync('checklists_templates');
+      print('📥 Buscando templates desde: $lastSync (locais=$localCount)');
 
       final response = await http.post(
         Uri.parse(
-            'https://api.rdopro.com.br/api/v1/sync/checklists/templates/download'),
+            '$kApiBaseUrl/api/v1/sync/checklists/templates/download'),
         headers: headers,
         body: json.encode({'ultima_sync': lastSync}),
       );
@@ -187,8 +195,15 @@ Future syncChecklistTemplates() async {
         print('📥 Recebidos ${templates.length} templates');
 
         for (var templateServer in templates) {
-          await _processarTemplate(templateServer, result['server_time']);
-          downloadedCount++;
+          try {
+            await _processarTemplate(
+                Map<String, dynamic>.from(templateServer as Map),
+                result['server_time']?.toString() ??
+                    DateTime.now().toIso8601String());
+            downloadedCount++;
+          } catch (e) {
+            print('❌ Falha ao processar template: $e');
+          }
         }
 
         // Atualizar last_sync_date
@@ -202,7 +217,7 @@ Future syncChecklistTemplates() async {
         }
         print('✅ Download templates concluído: $downloadedCount templates');
       } else {
-        print('❌ Erro templates: ${response.statusCode}');
+        print('❌ Erro templates: ${response.statusCode} body=${response.body}');
         return;
       }
     } catch (e) {
@@ -213,12 +228,18 @@ Future syncChecklistTemplates() async {
 
     // ===== 3. DOWNLOAD - TEMPLATE_OBRAS =====
     try {
-      final lastSync = await _getUltimaSync('checklists_template_obras');
-      print('📥 Buscando template_obras desde: $lastSync');
+      final localLinks = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM checklists_template_obras'),
+          ) ??
+          0;
+      final lastSync = localLinks == 0
+          ? '1970-01-01 00:00:00'
+          : await _getUltimaSync('checklists_template_obras');
+      print('📥 Buscando template_obras desde: $lastSync (locais=$localLinks)');
 
       final response = await http.post(
         Uri.parse(
-            'https://api.rdopro.com.br/api/v1/sync/checklists/template-obras/download'),
+            '$kApiBaseUrl/api/v1/sync/checklists/template-obras/download'),
         headers: headers,
         body: json.encode({'ultima_sync': lastSync}),
       );
@@ -231,9 +252,16 @@ Future syncChecklistTemplates() async {
             '📥 Recebidas ${templateObras.length} vinculações template-obras');
 
         for (var templateObraServer in templateObras) {
-          await _processarTemplateObra(
-              templateObraServer, result['server_time']);
-          templateObrasCount++;
+          try {
+            await _processarTemplateObra(
+              Map<String, dynamic>.from(templateObraServer as Map),
+              result['server_time']?.toString() ??
+                  DateTime.now().toIso8601String(),
+            );
+            templateObrasCount++;
+          } catch (e) {
+            print('❌ Falha ao processar template_obra: $e');
+          }
         }
 
         // Atualizar last_sync_date
@@ -353,6 +381,11 @@ Future<void> _processarTemplate(
   String jsonConfigString =
       _converterJsonParaString(templateServer['json_config']);
   int isModelo = _converterBoolParaInt(templateServer['is_modelo']);
+  // SQLite guarda created_by como TEXT (UUID do tenant). API manda id numérico.
+  final createdByRaw = templateServer['created_by_uuid'] ??
+      templateServer['created_by'] ??
+      FFAppState().creatorUuid;
+  final createdBy = createdByRaw?.toString() ?? '';
 
   // VERIFICAR SE EXISTE
   final existe = await db.query(
@@ -365,47 +398,31 @@ Future<void> _processarTemplate(
   print('🔍 jsonConfig conteúdo: ${templateServer['json_config']}');
   print('🔍 jsonConfigString após conversão: $jsonConfigString');
 
+  final row = <String, dynamic>{
+    'nome': templateServer['nome']?.toString() ?? '',
+    'descricao': templateServer['descricao']?.toString(),
+    'categoria_id': categoriaIdLocal,
+    'json_config': jsonConfigString,
+    'is_modelo': isModelo,
+    'created_by': createdBy,
+    'versao': templateServer['versao'] ?? 1,
+    'status': templateServer['status']?.toString() ?? 'ativo',
+    'synced': 1,
+    'last_sync_date': serverTime,
+    'created_at': templateServer['created_at']?.toString(),
+    'updated_at': templateServer['updated_at']?.toString(),
+  };
+
   if (existe.isNotEmpty) {
-    // UPDATE
     await db.update(
       'checklists_templates',
-      {
-        'nome': templateServer['nome']?.toString() ?? '',
-        'descricao': templateServer['descricao']?.toString(),
-        'categoria_id': categoriaIdLocal,
-        'json_config': jsonConfigString,
-        'is_modelo': isModelo,
-        'created_by': templateServer['created_by'],
-        'versao': templateServer['versao'] ?? 1,
-        'status': templateServer['status']?.toString() ?? 'ativo',
-        'synced': 1,
-        'last_sync_date': serverTime,
-        'created_at': templateServer['created_at']?.toString(),
-        'updated_at': templateServer['updated_at']?.toString(),
-      },
+      row,
       where: 'uuid = ?',
       whereArgs: [uuid],
     );
   } else {
-    // INSERT
-    await db.insert(
-      'checklists_templates',
-      {
-        'uuid': uuid,
-        'nome': templateServer['nome']?.toString() ?? '',
-        'descricao': templateServer['descricao']?.toString(),
-        'categoria_id': categoriaIdLocal,
-        'json_config': jsonConfigString,
-        'is_modelo': isModelo,
-        'created_by': templateServer['created_by'],
-        'versao': templateServer['versao'] ?? 1,
-        'status': templateServer['status']?.toString() ?? 'ativo',
-        'synced': 1,
-        'last_sync_date': serverTime,
-        'created_at': templateServer['created_at']?.toString(),
-        'updated_at': templateServer['updated_at']?.toString(),
-      },
-    );
+    row['uuid'] = uuid;
+    await db.insert('checklists_templates', row);
   }
 }
 
@@ -422,33 +439,42 @@ Future<void> _processarTemplateObra(
         'checklists_template_obras', templateObraServer['id'] as int, uuid);
   }
 
+  final templateUuid =
+      (templateObraServer['checklist_template_uuid'] ?? '').toString().trim();
+  final obraUuid = (templateObraServer['obra_uuid'] ?? '').toString().trim();
+  final obraIdServidor = _toIntOrNull(templateObraServer['obra_id']);
+  final templateIdServidor =
+      _toIntOrNull(templateObraServer['checklist_template_id']);
+
   // ✅ USA UUIDs DIRETOS (MAIS SIMPLES E RÁPIDO)
   int? templateIdLocal;
-  if (templateObraServer['checklist_template_uuid'] != null) {
-    // Busca ID local DIRETAMENTE pelo UUID do template
-    templateIdLocal = await _getIdLocalPorUuid(
+  if (templateUuid.isNotEmpty) {
+    templateIdLocal =
+        await _getIdLocalPorUuid('checklists_templates', templateUuid);
+  }
+  if (templateIdLocal == null && templateIdServidor != null) {
+    templateIdLocal = await _getIdLocalPorIdServidor(
       'checklists_templates',
-      templateObraServer['checklist_template_uuid'] as String,
+      templateIdServidor,
     );
-    if (templateIdLocal == null) {
-      print(
-          '⚠️ Template não encontrado pelo UUID: ${templateObraServer['checklist_template_uuid']}');
-      return;
-    }
+  }
+  if (templateIdLocal == null) {
+    print(
+        '⚠️ Template não encontrado (uuid=$templateUuid id=$templateIdServidor)');
+    return;
   }
 
   int? obraIdLocal;
-  if (templateObraServer['obra_uuid'] != null) {
-    // Busca ID local DIRETAMENTE pelo UUID da obra
-    obraIdLocal = await _getIdLocalPorUuid(
-      'obras',
-      templateObraServer['obra_uuid'] as String,
-    );
-    if (obraIdLocal == null) {
-      print(
-          '⚠️ Obra não encontrada pelo UUID: ${templateObraServer['obra_uuid']}');
-      return;
-    }
+  if (obraUuid.isNotEmpty) {
+    obraIdLocal = await _getIdLocalPorUuid('obras', obraUuid);
+  }
+  if (obraIdLocal == null && obraIdServidor != null) {
+    obraIdLocal =
+        await _getIdLocalPorIdServidor('obras', obraIdServidor);
+  }
+  if (obraIdLocal == null) {
+    print('⚠️ Obra não encontrada (uuid=$obraUuid id=$obraIdServidor)');
+    return;
   }
 
   // VERIFICAR SE EXISTE (por UUID ou pelas chaves únicas)
@@ -458,39 +484,39 @@ Future<void> _processarTemplateObra(
     whereArgs: [uuid, templateIdLocal, obraIdLocal],
   );
 
+  final row = <String, dynamic>{
+    'checklist_template_id': templateIdLocal,
+    'checklist_template_uuid': templateUuid.isEmpty ? null : templateUuid,
+    'obra_id': obraIdLocal,
+    'obra_uuid': obraUuid.isEmpty ? null : obraUuid,
+    'synced': 1,
+    'last_sync_date': serverTime,
+    'updated_at': templateObraServer['updated_at']?.toString(),
+  };
+
   if (existe.isNotEmpty) {
-    // UPDATE
     await db.update(
       'checklists_template_obras',
-      {
-        'checklist_template_id': templateIdLocal,
-        'obra_id': obraIdLocal,
-        'synced': 1,
-        'last_sync_date': serverTime,
-        'updated_at': templateObraServer['updated_at']?.toString(),
-      },
+      row,
       where: 'id = ?',
       whereArgs: [existe.first['id']],
     );
     print(
         '🔄 Template-Obra atualizado: Template $templateIdLocal ↔ Obra $obraIdLocal');
   } else {
-    // INSERT
-    await db.insert(
-      'checklists_template_obras',
-      {
-        'uuid': uuid,
-        'checklist_template_id': templateIdLocal,
-        'obra_id': obraIdLocal,
-        'synced': 1,
-        'last_sync_date': serverTime,
-        'created_at': templateObraServer['created_at']?.toString(),
-        'updated_at': templateObraServer['updated_at']?.toString(),
-      },
-    );
+    row['uuid'] = uuid;
+    row['created_at'] = templateObraServer['created_at']?.toString();
+    await db.insert('checklists_template_obras', row);
     print(
         '✅ Nova vinculação Template-Obra: Template $templateIdLocal ↔ Obra $obraIdLocal');
   }
+}
+
+int? _toIntOrNull(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value.toString());
 }
 
 // ===== FUNÇÕES RESTANTES =====

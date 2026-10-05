@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'auth/app_update_check.dart';
 import 'auth/custom_auth/auth_util.dart';
@@ -76,6 +77,32 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   GoRouter.optionURLReflectsImperativeAPIs = true;
   usePathUrlStrategy();
+
+  // Evita bloco cinza gigante (RenderErrorBox ~100000px) quando um filho quebra
+  // em release — ex.: seção abaixo de Status em Gerenciar Atividade.
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    assert(() {
+      debugPrint('ErrorWidget: ${details.exceptionAsString()}');
+      return true;
+    }());
+    return const Material(
+      color: Color(0xFFFFEBEE),
+      child: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(12),
+          child: Text(
+            'Não foi possível montar este trecho da tela. '
+            'Volte e abra de novo; se continuar, sincronize o app.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Color(0xFFB71C1C), fontSize: 13),
+          ),
+        ),
+      ),
+    );
+  };
+
+  // Sem depender de download de fontes (rede / Play Services instáveis).
+  GoogleFonts.config.allowRuntimeFetching = false;
 
   await SQLiteManager.initialize();
   await FlutterFlowTheme.initialize();

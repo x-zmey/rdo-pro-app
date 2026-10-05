@@ -8,6 +8,7 @@ import '/backend/sqlite/sqlite_manager.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'download_obra_foto_local.dart';
 import 'obra_foto_url.dart';
+import '/backend/api_requests/api_config.dart';
 
 /// Cache da última resposta do servidor nesta sessão (evita spam de API).
 Map<String, Map<String, String>>? _fotosServidorCache;
@@ -178,7 +179,7 @@ Future<Map<String, Map<String, String>>?> _buscarFotosNoServidor() async {
   try {
     final resposta = await http
         .post(
-          Uri.parse('https://api.rdopro.com.br/api/v1/sync/obras/download'),
+          Uri.parse('$kApiBaseUrl/api/v1/sync/obras/download'),
           headers: {
             'Authorization': 'Bearer $token',
             'Accept': 'application/json',

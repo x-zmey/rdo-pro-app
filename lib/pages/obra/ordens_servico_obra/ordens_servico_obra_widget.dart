@@ -4,6 +4,7 @@ import '/backend/sqlite/queries/read.dart'
     show GetOrdensServicoRow, GetTarefasOrdemRow;
 import '/componentes/navegacao/barra_navegacao_principal.dart';
 import '/componentes/ui/rdo_estilo.dart';
+import '/custom_code/actions/index.dart' as actions;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
@@ -144,6 +145,11 @@ class _OrdensServicoObraWidgetState extends State<OrdensServicoObraWidget> {
   Future<List<_OrdemComTarefas>> _fetchOrdensComTarefas() async {
     final obraUuid = (widget.obraUuid ?? '').trim();
     if (obraUuid.isEmpty) return const [];
+
+    try {
+      await actions.refreshOrdensPorObra(obraUuid: obraUuid);
+      await actions.syncOrdensTarefas();
+    } catch (_) {}
 
     final ordens = await SQLiteManager.instance.getOrdensServico(
       obraUuid: obraUuid,

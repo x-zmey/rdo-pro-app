@@ -11,102 +11,102 @@ import 'package:flutter/material.dart';
 
 import 'dart:convert';
 
+import 'checklist_complementos.dart';
+import 'checklist_offline.dart';
+
 String calcularProgressoChecklist(String checklistDataJson) {
   try {
-    final checklistData = json.decode(checklistDataJson);
-    final templateData = checklistData['template_data'];
-    final areas = templateData['areas'] as List;
+    final checklistData = decodeChecklistEnvelope(checklistDataJson);
+    if (checklistData == null) {
+      throw Exception('JSON inválido');
+    }
+    final templateData = templateDataFromEnvelope(checklistData);
+    final areas = templateData?['areas'] as List? ?? [];
 
-    int totalItens = 0;
-    int itensRespondidos = 0;
-    int itensObrigatorios = 0;
-    int itensObrigatoriosRespondidos = 0;
+    var totalItens = 0;
+    var itensRespondidos = 0;
+    var itensObrigatorios = 0;
+    var itensObrigatoriosRespondidos = 0;
+    var complementosPendentes = 0;
 
     for (final area in areas) {
-      final items = area['items'] as List;
-
+      if (area is! Map) continue;
+      final items = area['items'] as List? ?? [];
       for (final item in items) {
+        if (item is! Map) continue;
         totalItens++;
+        final obrigatorio =
+            item['obrigatorio'] == true || item['required'] == true;
+        if (obrigatorio) itensObrigatorios++;
 
-        final obrigatorio = item['obrigatorio'] == true;
-        if (obrigatorio) {
-          itensObrigatorios++;
-        }
-
-        final tipo = item['type'] as String;
-        bool respondido = false;
-
-        switch (tipo) {
-          case 'Avaliativo Sim/Não':
-            respondido = item['respostaBoolean'] != null;
-            break;
-          case 'Avaliativo Emojis':
-            respondido = item['respostaEmoji'] != null;
-            break;
-          case 'Texto longo':
-            respondido = item['respostaTexto'] != null &&
-                (item['respostaTexto'] as String).isNotEmpty;
-            break;
-          case 'Data':
-            respondido = item['respostaData'] != null;
-            break;
-          case 'Número':
-            respondido = item['respostaNumero'] != null;
-            break;
-          case 'Opções':
-            respondido = item['respostaOpcao'] != null;
-            break;
-          default:
-            respondido = item['resposta'] != null;
-        }
-
+        final tipo = normalizeChecklistItemType(item['type']);
+        final respondido = _isRespondido(tipo, item);
         if (respondido) {
           itensRespondidos++;
-          if (obrigatorio) {
-            itensObrigatoriosRespondidos++;
-          }
+          if (obrigatorio) itensObrigatoriosRespondidos++;
+        }
+
+        final pendencias = checklistPendenciasComplementos(item);
+        if (pendencias.isNotEmpty) {
+          complementosPendentes += pendencias.length;
         }
       }
     }
 
     final progressoTotal =
-        totalItens > 0 ? (itensRespondidos / totalItens) * 100 : 0;
+        totalItens > 0 ? (itensRespondidos / totalItens) * 100 : 0.0;
     final progressoObrigatorios = itensObrigatorios > 0
         ? (itensObrigatoriosRespondidos / itensObrigatorios) * 100
-        : 0;
-    final completo = itensObrigatoriosRespondidos == itensObrigatorios;
+        : 100.0;
+    final completo = itensObrigatoriosRespondidos == itensObrigatorios &&
+        complementosPendentes == 0;
 
-    final resultado = {
+    return json.encode({
       'total_itens': totalItens,
       'itens_respondidos': itensRespondidos,
       'itens_obrigatorios': itensObrigatorios,
       'itens_obrigatorios_respondidos': itensObrigatoriosRespondidos,
+      'complementos_pendentes': complementosPendentes,
       'progresso_total': progressoTotal.round(),
       'progresso_obrigatorios': progressoObrigatorios.round(),
       'completo': completo,
-      'pode_finalizar':
-          completo, // Só pode finalizar se todos obrigatórios respondidos
-    };
-
-    print(
-        '📊 Progresso: $itensRespondidos/$totalItens itens ($progressoTotal%)');
-    print(
-        '🎯 Obrigatórios: $itensObrigatoriosRespondidos/$itensObrigatorios ($progressoObrigatorios%)');
-
-    return json.encode(resultado);
+      'pode_finalizar': completo,
+    });
   } catch (e) {
-    print('❌ Erro ao calcular progresso: $e');
-
     return json.encode({
       'total_itens': 0,
       'itens_respondidos': 0,
       'itens_obrigatorios': 0,
       'itens_obrigatorios_respondidos': 0,
+      'complementos_pendentes': 0,
       'progresso_total': 0,
       'progresso_obrigatorios': 0,
       'completo': false,
       'pode_finalizar': false,
       'erro': e.toString(),
     });
+  }
+}
+
+bool _isRespondido(String tipo, Map item) {
+  switch (tipo) {
+    case 'Avaliativo Sim/Não':
+      return item['respostaBoolean'] != null;
+    case 'Avaliativo Emojis':
+      return (item['respostaEmoji']?.toString() ?? '').trim().isNotEmpty;
+    case 'Texto':
+    case 'Cadastro':
+      return (item['respostaTexto']?.toString() ?? '').trim().isNotEmpty;
+    case 'Data':
+      return item['respostaData'] != null &&
+          item['respostaData'].toString().trim().isNotEmpty;
+    case 'Número':
+      return item['respostaNumero'] != null;
+    case 'Opção':
+      return (item['respostaOpcao']?.toString() ?? '').trim().isNotEmpty;
+    case 'Anexo':
+      return checklistAnexosRespostaPreenchidos(item);
+    default:
+      return item['resposta'] != null;
   }
 }

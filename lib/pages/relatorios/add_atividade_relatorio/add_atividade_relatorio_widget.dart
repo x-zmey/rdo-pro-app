@@ -69,6 +69,44 @@ Color _corBarraProgresso(BuildContext context, double porcentagem) {
   return t.error;
 }
 
+/// Uuid vazio/duplicado derruba o DropdownButton2 (bloco cinza em release).
+({List<String> options, List<String> labels}) _dropdownOpcoesUnicas(
+  Iterable<String?> uuids,
+  Iterable<String?> labels,
+) {
+  final uList = uuids.toList();
+  final lList = labels.toList();
+  final seen = <String>{};
+  final options = <String>[];
+  final optionLabels = <String>[];
+  for (var i = 0; i < uList.length; i++) {
+    final u = (uList[i] ?? '').trim();
+    if (u.isEmpty || u == '0') continue;
+    if (!seen.add(u)) continue;
+    final label = i < lList.length ? (lList[i] ?? '').trim() : '';
+    options.add(u);
+    optionLabels.add(label.isEmpty ? u : label);
+  }
+  return (options: options, labels: optionLabels);
+}
+
+Widget _snapshotListaErroOuLoading(
+  BuildContext context,
+  AsyncSnapshot snapshot, {
+  required Color loadingColor,
+}) {
+  if (snapshot.hasError) {
+    return Text(
+      'Não foi possível carregar esta lista. Tente sincronizar.',
+      style: GoogleFonts.inter(
+        fontSize: 12,
+        color: FlutterFlowTheme.of(context).error,
+      ),
+    );
+  }
+  return LinearProgressIndicator(color: loadingColor);
+}
+
 class _DadosPaginaAtividade {
   const _DadosPaginaAtividade({
     required this.atividadeRows,
@@ -127,6 +165,12 @@ class _AddAtividadeRelatorioWidgetState
   late final Future<_DadosPaginaAtividade> _futureDadosPagina;
 
   Future<_DadosPaginaAtividade> _carregarDadosPagina() async {
+    final obraUuid = (widget.obraUuid ?? '').trim();
+    if (obraUuid.isNotEmpty) {
+      try {
+        await actions.refreshOrdensPorObra(obraUuid: obraUuid);
+      } catch (_) {}
+    }
     final atividadeRows = await SQLiteManager.instance.getDadosAtividade(
       uuid: widget.atividadeUuid!,
     );
@@ -193,19 +237,35 @@ class _AddAtividadeRelatorioWidgetState
   late Future<List<CarregaItensObraRow>> _futureItensObraEquipamento;
   late Future<List<GetMaoObraRelatorioRow>> _futureMaoObraPresente;
 
-  Future<List<CarregaItensObraRow>> _loadItensObraInsumo() {
+  Future<List<CarregaItensObraRow>> _loadItensObraInsumo() async {
+    final obraUuid = (widget.obraUuid ?? '').trim();
+    if (obraUuid.isEmpty) return <CarregaItensObraRow>[];
+    try {
+      await actions.refreshObraItensPorTipo(
+        obraUuid: obraUuid,
+        tipo: 'insumo',
+      );
+    } catch (_) {}
     return SQLiteManager.instance.carregaItensObra(
       tipo: 'insumo',
       obraId: widget.obraId,
-      obraUuid: widget.obraUuid!,
+      obraUuid: obraUuid,
     );
   }
 
-  Future<List<CarregaItensObraRow>> _loadItensObraEquipamento() {
+  Future<List<CarregaItensObraRow>> _loadItensObraEquipamento() async {
+    final obraUuid = (widget.obraUuid ?? '').trim();
+    if (obraUuid.isEmpty) return <CarregaItensObraRow>[];
+    try {
+      await actions.refreshObraItensPorTipo(
+        obraUuid: obraUuid,
+        tipo: 'equipamento',
+      );
+    } catch (_) {}
     return SQLiteManager.instance.carregaItensObra(
       tipo: 'equipamento',
       obraId: widget.obraId,
-      obraUuid: widget.obraUuid!,
+      obraUuid: obraUuid,
     );
   }
 
@@ -1423,11 +1483,17 @@ class _AddAtividadeRelatorioWidgetState
                               future: _futureItensObraInsumo,
                               builder: (context, snapshot) {
                                 if (!snapshot.hasData) {
-                                  return LinearProgressIndicator(
-                                    color: theme.primary,
+                                  return _snapshotListaErroOuLoading(
+                                    context,
+                                    snapshot,
+                                    loadingColor: theme.primary,
                                   );
                                 }
                                 final itens = snapshot.data!;
+                                final opcoes = _dropdownOpcoesUnicas(
+                                  itens.map((e) => e.uuid),
+                                  itens.map((e) => e.descricao),
+                                );
 
                                 return FlutterFlowDropDown<String>(
                                   multiSelectController:
@@ -1435,10 +1501,8 @@ class _AddAtividadeRelatorioWidgetState
                                           FormFieldController<List<String>?>(
                                     _model.dropDownInsumoValue ??= <String>[],
                                   ),
-                                  options: List<String>.from(
-                                      itens.map((e) => e.uuid).toList()),
-                                  optionLabels:
-                                      itens.map((e) => e.descricao).toList(),
+                                  options: opcoes.options,
+                                  optionLabels: opcoes.labels,
                                   onMultiSelectChanged: (vals) async {
                                     await _onMultiSelectItensAtividade(
                                       tipo: 'insumo',
@@ -1508,11 +1572,17 @@ class _AddAtividadeRelatorioWidgetState
                               future: _futureItensObraEquipamento,
                               builder: (context, snapshot) {
                                 if (!snapshot.hasData) {
-                                  return LinearProgressIndicator(
-                                    color: theme.primary,
+                                  return _snapshotListaErroOuLoading(
+                                    context,
+                                    snapshot,
+                                    loadingColor: theme.primary,
                                   );
                                 }
                                 final itens = snapshot.data!;
+                                final opcoes = _dropdownOpcoesUnicas(
+                                  itens.map((e) => e.uuid),
+                                  itens.map((e) => e.descricao),
+                                );
 
                                 return FlutterFlowDropDown<String>(
                                   multiSelectController: _model
@@ -1521,10 +1591,8 @@ class _AddAtividadeRelatorioWidgetState
                                     _model.dropDownEquipamentosValue ??=
                                         <String>[],
                                   ),
-                                  options: List<String>.from(
-                                      itens.map((e) => e.uuid).toList()),
-                                  optionLabels:
-                                      itens.map((e) => e.descricao).toList(),
+                                  options: opcoes.options,
+                                  optionLabels: opcoes.labels,
                                   onMultiSelectChanged: (vals) async {
                                     await _onMultiSelectItensAtividade(
                                       tipo: 'equipamento',
@@ -1594,8 +1662,10 @@ class _AddAtividadeRelatorioWidgetState
                               future: _futureMaoObraPresente,
                               builder: (context, snapshot) {
                                 if (!snapshot.hasData) {
-                                  return LinearProgressIndicator(
-                                    color: theme.primary,
+                                  return _snapshotListaErroOuLoading(
+                                    context,
+                                    snapshot,
+                                    loadingColor: theme.primary,
                                   );
                                 }
                                 final itensDropdown = snapshot.data!
@@ -1625,6 +1695,13 @@ class _AddAtividadeRelatorioWidgetState
                                   );
                                 }
 
+                                final opcoes = _dropdownOpcoesUnicas(
+                                  itensDropdown.map(
+                                      (e) => (e.obraItemUuid ?? '').trim()),
+                                  itensDropdown
+                                      .map(_labelMaoObraRelatorioPresente),
+                                );
+
                                 return Column(
                                   crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
@@ -1634,13 +1711,8 @@ class _AddAtividadeRelatorioWidgetState
                                               FormFieldController<List<String>?>(
                                         _model.dropDownMaoObraValue ??= <String>[],
                                       ),
-                                      options: itensDropdown
-                                          .map((e) =>
-                                              (e.obraItemUuid ?? '').trim())
-                                          .toList(),
-                                      optionLabels: itensDropdown
-                                          .map(_labelMaoObraRelatorioPresente)
-                                          .toList(),
+                                      options: opcoes.options,
+                                      optionLabels: opcoes.labels,
                                       onMultiSelectChanged: (vals) async {
                                         await _onMultiSelectItensAtividade(
                                           tipo: 'mao_obra',

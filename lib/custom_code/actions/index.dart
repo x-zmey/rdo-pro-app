@@ -14,22 +14,36 @@ export 'sync_clientes.dart' show syncClientes;
 export 'finish_success_sync.dart' show finishSuccessSync;
 export 'finish_error_sync.dart' show finishErrorSync;
 export 'start_sync_history.dart' show startSyncHistory;
+export 'sync_last_sync_for_creator.dart' show requestForcedFullResync;
 export 'sync_modelos_relatorios.dart' show syncModelosRelatorios;
-export 'sync_obras_etapas.dart' show syncObrasEtapas;
+export 'sync_obras_etapas.dart'
+    show syncObrasEtapas, refreshEtapasTarefasPorObra;
 export 'sync_obras_tarefas.dart' show syncObrasTarefas;
-export 'sync_obras_itens.dart' show syncObrasItens;
+export 'sync_obras_itens.dart'
+    show syncObrasItens, refreshObraItensPorTipo;
 export 'sync_checklist_templates.dart' show syncChecklistTemplates;
 export 'sync_checklists_preenchidos.dart' show syncChecklistsPreenchidos;
 export 'sync_planos_acoes.dart' show syncPlanosAcoes;
 export 'sync_solucoes_planos_acoes.dart' show syncSolucoesPlanosAcoes;
 export 'iniciar_novo_checklist.dart' show iniciarNovoChecklist;
-export 'salvar_resposta_emoji.dart' show salvarRespostaEmoji;
+export 'salvar_resposta_emoji.dart'
+    show
+        salvarRespostaEmoji,
+        salvarRespostaOpcao,
+        salvarRespostaNumero,
+        salvarRespostaData,
+        salvarRespostaBoolean,
+        salvarComentarioItemChecklist,
+        salvarPlanoAcaoItemChecklist,
+        salvarAnexosComplementaresItemChecklist,
+        salvarAnexosRespostaItemChecklist,
+        carregarChecklistPreenchido;
 export 'salvar_resposta_texto.dart' show salvarRespostaTexto;
 export 'calcular_progresso_checklist.dart' show calcularProgressoChecklist;
 export 'finalizar_checklist.dart' show finalizarChecklist;
 export 'inserir_ordem_servico_no_relatorio.dart'
     show inserirOrdemServicoNoRelatorio;
-export 'sync_ordens.dart' show syncOrdens;
+export 'sync_ordens.dart' show syncOrdens, refreshOrdensPorObra;
 export 'sync_ordens_tarefas.dart' show syncOrdensTarefas;
 export 'sync_ordens_custos.dart' show syncOrdensCustos;
 export 'sync_ordens_assinaturas.dart' show syncOrdensAssinaturas;

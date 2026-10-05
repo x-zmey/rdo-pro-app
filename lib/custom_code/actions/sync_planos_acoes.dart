@@ -11,6 +11,8 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 // Set your action name, define your arguments and return parameter,
 // and then add the boilerplate code using the green button on the right!
 
@@ -35,6 +37,62 @@ Future<void> _salvarMapeamento(
       print('❌ Erro ao salvar mapeamento: $e');
     }
   }
+}
+
+int? _asInt(dynamic v) {
+  if (v == null) return null;
+  if (v is int) return v;
+  if (v is num) return v.toInt();
+  return int.tryParse(v.toString().trim());
+}
+
+Future<int?> _idServidorPorUuid(String tabela, String? uuid) async {
+  final u = (uuid ?? '').trim();
+  if (u.isEmpty) return null;
+  final db = await SQLiteManager.instance.database;
+  final rows = await db.query(
+    'sync_id_mapping',
+    columns: ['id_servidor'],
+    where: 'tabela = ? AND uuid = ?',
+    whereArgs: [tabela, u],
+    limit: 1,
+  );
+  if (rows.isEmpty) return null;
+  return _asInt(rows.first['id_servidor']);
+}
+
+Future<int?> _idLocalPorIdServidor(String tabela, int idServidor) async {
+  final db = await SQLiteManager.instance.database;
+  final mapeamento = await db.query(
+    'sync_id_mapping',
+    where: 'tabela = ? AND id_servidor = ?',
+    whereArgs: [tabela, idServidor],
+    limit: 1,
+  );
+  if (mapeamento.isEmpty) return null;
+  final uuid = (mapeamento.first['uuid'] ?? '').toString();
+  if (uuid.isEmpty) return null;
+  final registro =
+      await db.query(tabela, where: 'uuid = ?', whereArgs: [uuid], limit: 1);
+  return registro.isNotEmpty ? _asInt(registro.first['id']) : null;
+}
+
+Future<String?> _uuidChecklistPreenchido(Map<String, dynamic> plano) async {
+  final direct = (plano['checklist_preenchido_uuid'] ?? '').toString().trim();
+  if (direct.isNotEmpty) return direct;
+  final localId = _asInt(plano['checklist_preenchido_id']);
+  if (localId == null || localId < 1) return null;
+  final db = await SQLiteManager.instance.database;
+  final rows = await db.query(
+    'checklists_preenchidos',
+    columns: ['uuid'],
+    where: 'id = ?',
+    whereArgs: [localId],
+    limit: 1,
+  );
+  if (rows.isEmpty) return null;
+  final u = (rows.first['uuid'] ?? '').toString().trim();
+  return u.isEmpty ? null : u;
 }
 
 Future<String> _getUltimaSync(String tabela) async {
@@ -108,9 +166,9 @@ Future syncPlanosAcoes() async {
           whereArgs: [0],
         );
 
-        // PREPARAR DADOS PARA ENVIO
-        final planosParaEnviar = planosComUuid.map((plano) {
-          // TRATAR CAMPOS JSON - converter de string para objeto
+        // PREPARAR DADOS PARA ENVIO (checklist_preenchido_id = PK do servidor)
+        final planosParaEnviar = <Map<String, dynamic>>[];
+        for (final plano in planosComUuid) {
           dynamic anexos = plano['anexos'];
           if (anexos is String) {
             try {
@@ -129,9 +187,21 @@ Future syncPlanosAcoes() async {
             }
           }
 
-          return {
+          final checklistUuid = await _uuidChecklistPreenchido(plano);
+          final checklistServerId =
+              await _idServidorPorUuid('checklists_preenchidos', checklistUuid);
+          if (checklistServerId == null) {
+            print(
+              '⚠️ Plano ${plano['uuid']} sem checklist no servidor '
+              '(uuid=$checklistUuid) — pulando upload',
+            );
+            continue;
+          }
+
+          planosParaEnviar.add({
             'uuid': plano['uuid'],
-            'checklist_preenchido_id': plano['checklist_preenchido_id'],
+            'checklist_preenchido_id': checklistServerId,
+            'checklist_preenchido_uuid': checklistUuid,
             'area_id': plano['area_id'],
             'item_id': plano['item_id'],
             'descricao': plano['descricao'],
@@ -140,22 +210,25 @@ Future syncPlanosAcoes() async {
             'resposta': plano['resposta'],
             'prazo': plano['prazo'],
             'prioridade': plano['prioridade'],
-            'anexos': anexos ?? [], // Garantir que seja array
+            'anexos': anexos ?? [],
             'responsavel_id': plano['responsavel_id'],
             'created_by': plano['created_by'],
             'status': plano['status'],
-            'historico': historico ?? [], // Garantir que seja array
+            'historico': historico ?? [],
             'created_at': plano['created_at'],
             'updated_at': plano['updated_at'],
-          };
-        }).toList();
+          });
+        }
 
+        if (planosParaEnviar.isEmpty) {
+          print('ℹ️ Nenhum plano com checklist no servidor para enviar');
+        } else {
         print('📤 Enviando ${planosParaEnviar.length} planos de ação...');
 
         // FAZER UPLOAD
         final uploadResponse = await http.post(
           Uri.parse(
-              'https://api.rdopro.com.br/api/v1/sync/planos-acoes/upload'),
+              '$kApiBaseUrl/api/v1/sync/planos-acoes/upload'),
           headers: headers,
           body: json.encode({'dados': planosParaEnviar}),
         );
@@ -164,19 +237,44 @@ Future syncPlanosAcoes() async {
           final uploadResult = json.decode(uploadResponse.body);
 
           if (uploadResult['status'] == 'ok') {
-            // MARCAR PLANOS COMO SINCRONIZADOS
-            for (var plano in uploadResult['sincronizados']) {
-              await db.update(
-                'planos_acoes',
-                {
-                  'synced': 1,
-                  'last_sync_date': DateTime.now().toIso8601String(),
-                  'sync_try_count': 0,
-                },
-                where: 'uuid = ?',
-                whereArgs: [plano['uuid']],
-              );
-              uploadedCount++;
+            final sincronizados = uploadResult['sincronizados'];
+            if (sincronizados is List && sincronizados.isNotEmpty) {
+              for (var plano in sincronizados) {
+                final uuid = (plano['uuid'] ?? '').toString();
+                if (uuid.isEmpty) continue;
+                final serverId = _asInt(plano['id']);
+                if (serverId != null) {
+                  await _salvarMapeamento('planos_acoes', serverId, uuid);
+                }
+                await db.update(
+                  'planos_acoes',
+                  {
+                    'synced': 1,
+                    'last_sync_date': DateTime.now().toIso8601String(),
+                    'sync_try_count': 0,
+                  },
+                  where: 'uuid = ?',
+                  whereArgs: [uuid],
+                );
+                uploadedCount++;
+              }
+            } else {
+              // API legada devolve só {status: ok} — marca o lote enviado.
+              for (final plano in planosParaEnviar) {
+                final uuid = (plano['uuid'] ?? '').toString();
+                if (uuid.isEmpty) continue;
+                await db.update(
+                  'planos_acoes',
+                  {
+                    'synced': 1,
+                    'last_sync_date': DateTime.now().toIso8601String(),
+                    'sync_try_count': 0,
+                  },
+                  where: 'uuid = ?',
+                  whereArgs: [uuid],
+                );
+                uploadedCount++;
+              }
             }
             print('✅ Upload concluído: $uploadedCount planos');
           } else {
@@ -199,6 +297,7 @@ Future syncPlanosAcoes() async {
           }
           print('❌ Erro no upload: ${uploadResponse.statusCode}');
         }
+        }
       } else {
         print('ℹ️ Nenhum plano de ação para enviar');
       }
@@ -213,7 +312,7 @@ Future syncPlanosAcoes() async {
 
       final downloadResponse = await http.post(
         Uri.parse(
-            'https://api.rdopro.com.br/api/v1/sync/planos-acoes/download'),
+            '$kApiBaseUrl/api/v1/sync/planos-acoes/download'),
         headers: headers,
         body: json.encode({'ultima_sync': lastSync}),
       );
@@ -300,36 +399,57 @@ Future<void> _processarPlanoAcao(
   final status = planoServer['status'] ?? 'Em andamento';
 
   // TRATAR CAMPOS NUMÉRICOS - garantir que são int
-  final checklistPreenchidoId = _toInt(planoServer['checklist_preenchido_id']);
+  final checklistServerId = _toInt(planoServer['checklist_preenchido_id']);
+  final checklistLocalId =
+      await _idLocalPorIdServidor('checklists_preenchidos', checklistServerId) ??
+          checklistServerId;
+  String checklistUuid =
+      (planoServer['checklist_preenchido_uuid'] ?? '').toString().trim();
+  if (checklistUuid.isEmpty && checklistServerId > 0) {
+    final map = await db.query(
+      'sync_id_mapping',
+      columns: ['uuid'],
+      where: 'tabela = ? AND id_servidor = ?',
+      whereArgs: ['checklists_preenchidos', checklistServerId],
+      limit: 1,
+    );
+    if (map.isNotEmpty) {
+      checklistUuid = map.first['uuid']?.toString() ?? '';
+    }
+  }
   final areaId = _toInt(planoServer['area_id']);
   final itemId = _toInt(planoServer['item_id']);
   final responsavelId = _toInt(planoServer['responsavel_id']);
   final createdBy = _toInt(planoServer['created_by']);
 
+  final payload = {
+    'checklist_preenchido_id': checklistLocalId,
+    'checklist_preenchido_uuid':
+        checklistUuid.isEmpty ? null : checklistUuid,
+    'area_id': areaId,
+    'item_id': itemId,
+    'descricao': planoServer['descricao'],
+    'area': planoServer['area'],
+    'pergunta': planoServer['pergunta'],
+    'resposta': planoServer['resposta'],
+    'prazo': planoServer['prazo'],
+    'prioridade': planoServer['prioridade'],
+    'anexos': anexos,
+    'responsavel_id': responsavelId,
+    'created_by': createdBy,
+    'status': status,
+    'historico': historico,
+    'synced': 1,
+    'last_sync_date': serverTime,
+    'created_at': planoServer['created_at'],
+    'updated_at': planoServer['updated_at'],
+  };
+
   if (existe.isNotEmpty) {
     // UPDATE
     await db.update(
       'planos_acoes',
-      {
-        'checklist_preenchido_id': checklistPreenchidoId,
-        'area_id': areaId,
-        'item_id': itemId,
-        'descricao': planoServer['descricao'],
-        'area': planoServer['area'],
-        'pergunta': planoServer['pergunta'],
-        'resposta': planoServer['resposta'],
-        'prazo': planoServer['prazo'],
-        'prioridade': planoServer['prioridade'],
-        'anexos': anexos, // Agora é string JSON
-        'responsavel_id': responsavelId,
-        'created_by': createdBy,
-        'status': status,
-        'historico': historico, // Agora é string JSON
-        'synced': 1,
-        'last_sync_date': serverTime,
-        'created_at': planoServer['created_at'],
-        'updated_at': planoServer['updated_at'],
-      },
+      payload,
       where: 'uuid = ?',
       whereArgs: [uuid],
     );
@@ -340,24 +460,7 @@ Future<void> _processarPlanoAcao(
       'planos_acoes',
       {
         'uuid': uuid,
-        'checklist_preenchido_id': checklistPreenchidoId,
-        'area_id': areaId,
-        'item_id': itemId,
-        'descricao': planoServer['descricao'],
-        'area': planoServer['area'],
-        'pergunta': planoServer['pergunta'],
-        'resposta': planoServer['resposta'],
-        'prazo': planoServer['prazo'],
-        'prioridade': planoServer['prioridade'],
-        'anexos': anexos, // Agora é string JSON
-        'responsavel_id': responsavelId,
-        'created_by': createdBy,
-        'status': status,
-        'historico': historico, // Agora é string JSON
-        'synced': 1,
-        'last_sync_date': serverTime,
-        'created_at': planoServer['created_at'],
-        'updated_at': planoServer['updated_at'],
+        ...payload,
       },
     );
     print('✅ Novo plano ação inserido: ${planoServer['descricao']}');

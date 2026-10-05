@@ -287,15 +287,31 @@ class _MedicoesWidgetState extends State<MedicoesWidget> {
 
   Color _corStatusChip(BuildContext context, Map<String, dynamic> m) {
     final theme = FlutterFlowTheme.of(context);
-    final st = (m['status'] ?? '').toString();
+    final sid = _statusId(m);
+    // Prioriza status_id (fonte canônica); a coluna string `status` pode ficar defasada.
+    switch (sid) {
+      case 1:
+        return const Color(0xFF2196F3); // Preenchendo
+      case 2:
+        return const Color(0xFF7B1FA2); // Em aprovação
+      case 3:
+        return theme.success; // Aprovada
+      case 4:
+        return theme.error; // Reprovado
+    }
+    final st = (m['status'] ?? '').toString().trim().toLowerCase();
     switch (st) {
       case 'em_aprovacao':
-        return theme.warning;
+      case 'assinatura_pendente':
+        return const Color(0xFF7B1FA2);
       case 'aprovada':
         return theme.success;
       case 'reprovado':
+      case 'recusada':
         return theme.error;
       case 'preenchendo':
+      case 'rascunho':
+        return const Color(0xFF2196F3);
       default:
         return theme.secondaryText;
     }

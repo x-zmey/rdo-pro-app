@@ -9,15 +9,25 @@ bool relatorioPodeEditarOuApagar(int? statusId) {
   return statusId != 2 && statusId != 3;
 }
 
+int? parseRelatorioStatusId(dynamic raw) {
+  if (raw == null) return null;
+  if (raw is int) return raw;
+  if (raw is num) return raw.toInt();
+  return int.tryParse(raw.toString().trim());
+}
+
+/// Cores canônicas por `status_id` (igual medições/OS).
 Color corStatusRelatorioChip(BuildContext context, int? statusId) {
   final t = FlutterFlowTheme.of(context);
   switch (statusId ?? 1) {
+    case 1:
+      return const Color(0xFF2196F3); // Preenchendo
     case 2:
-      return t.warning;
+      return const Color(0xFF7B1FA2); // Em aprovação
     case 3:
-      return t.success;
+      return t.success; // Aprovado
     case 4:
-      return t.error;
+      return t.error; // Reprovado
     default:
       return t.secondaryText;
   }
@@ -40,8 +50,7 @@ String labelRelatorioStatus({
   required int? statusId,
   String? statusNome,
 }) {
-  final n = statusNome?.trim();
-  if (n != null && n.isNotEmpty) return n;
+  // Prioriza status_id (fonte canônica); statusNome da join pode ficar defasado.
   switch (statusId ?? 0) {
     case 1:
       return 'Preenchendo';
@@ -52,6 +61,8 @@ String labelRelatorioStatus({
     case 4:
       return 'Reprovado';
     default:
+      final n = statusNome?.trim();
+      if (n != null && n.isNotEmpty) return n;
       return '—';
   }
 }

@@ -1,14 +1,19 @@
+import 'dart:convert';
+import 'dart:io';
+
 import '/componentes/forms/avaliativo_emojis_checklist/avaliativo_emojis_checklist_widget.dart';
+import '/componentes/forms/avaliativo_sim_nao_checklist/avaliativo_sim_nao_checklist_widget.dart';
 import '/componentes/forms/campo_cadastro_checklist/campo_cadastro_checklist_widget.dart';
 import '/componentes/forms/campo_data_checklist/campo_data_checklist_widget.dart';
 import '/componentes/forms/campo_numero_int_checklist/campo_numero_int_checklist_widget.dart';
 import '/componentes/forms/campo_texto_checklist/campo_texto_checklist_widget.dart';
 import '/componentes/forms/dropdown_opcoes_checklist/dropdown_opcoes_checklist_widget.dart';
+import '/custom_code/actions/checklist_complementos.dart';
+import '/custom_code/actions/index.dart' as actions;
 import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
-import 'dart:ui';
 import '/flutter_flow/custom_functions.dart' as functions;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -16,16 +21,6 @@ import 'package:provider/provider.dart';
 import 'checklist_respondendo_model.dart';
 export 'checklist_respondendo_model.dart';
 
-/// agora crie uma pagina de respondendo um checklist nela vai ter areas do
-/// checklist e dentro de cada area tem diversas perguntas em diversos
-/// formatos cada pergunta pode permitir que insire um comentario alem da
-/// resposta como também um anexo e plano de ação, tem pergunta que o formato
-/// dela é de selecionar uma opção, tem outras que é para escrever uma
-/// resposta e outras como selecionar um icone tipo se está feliz ou triste e
-/// diversos formatos, quero que no topo va mostrando quando perguntas já
-/// respondeu e quantas faltas como também andamento das respostas do
-/// checklist e abaixo de tudo colocar o botão concluir que só permite
-/// concluir depois de tudo respondido
 class ChecklistRespondendoWidget extends StatefulWidget {
   const ChecklistRespondendoWidget({super.key});
 
@@ -40,8 +35,8 @@ class ChecklistRespondendoWidget extends StatefulWidget {
 class _ChecklistRespondendoWidgetState
     extends State<ChecklistRespondendoWidget> {
   late ChecklistRespondendoModel _model;
-
   final scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _finalizando = false;
 
   @override
   void initState() {
@@ -52,13 +47,597 @@ class _ChecklistRespondendoWidgetState
   @override
   void dispose() {
     _model.dispose();
-
     super.dispose();
+  }
+
+  Map<String, dynamic> _progresso() {
+    try {
+      final raw =
+          actions.calcularProgressoChecklist(FFAppState().checklistAtualJson);
+      final decoded = json.decode(raw);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (_) {}
+    return {
+      'total_itens': 0,
+      'itens_respondidos': 0,
+      'progresso_total': 0,
+      'pode_finalizar': false,
+    };
+  }
+
+  String _tipoItem(dynamic item) {
+    final raw = getJsonField(item, r"$['type']");
+    switch ((raw ?? '').toString().trim().toLowerCase()) {
+      case 'texto longo':
+      case 'texto':
+        return 'Texto';
+      case 'opções':
+      case 'opcoes':
+      case 'opção':
+      case 'opcao':
+        return 'Opção';
+      case 'avaliativo sim/não':
+      case 'avaliativo sim/nao':
+      case 'sim/não':
+      case 'sim/nao':
+        return 'Avaliativo Sim/Não';
+      case 'avaliativo emojis':
+      case 'emojis':
+        return 'Avaliativo Emojis';
+      case 'número':
+      case 'numero':
+        return 'Número';
+      case 'data':
+        return 'Data';
+      case 'cadastro':
+        return 'Cadastro';
+      case 'anexo':
+      case 'arquivo':
+        return 'Anexo';
+      default:
+        return (raw ?? 'Texto').toString();
+    }
+  }
+
+  bool get _somenteLeitura {
+    final dados =
+        functions.getDadosFromChecklist(FFAppState().checklistAtualJson);
+    final status = (dados is Map ? dados['status'] : null)?.toString() ?? '';
+    return status == 'respondido' || status == 'concluido';
+  }
+
+  Future<void> _mostrarComentario(dynamic areaId, dynamic itemId,
+      String comentarioAtual) async {
+    final controller = TextEditingController(text: comentarioAtual);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Comentário'),
+        content: TextField(
+          controller: controller,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            hintText: 'Comentário do item',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await actions.salvarComentarioItemChecklist(
+        FFAppState().checklistAtualJson,
+        areaId.toString(),
+        itemId.toString(),
+        controller.text,
+      );
+      if (mounted) safeSetState(() {});
+    }
+    controller.dispose();
+  }
+
+  Future<void> _mostrarPlanoAcao(
+    dynamic areaId,
+    dynamic itemId,
+    Map? planoAtual,
+  ) async {
+    final descCtrl = TextEditingController(
+      text: (planoAtual?['descricao'] ?? '').toString(),
+    );
+    final prazoCtrl = TextEditingController(
+      text: (planoAtual?['prazo'] ?? '').toString(),
+    );
+    final respCtrl = TextEditingController(
+      text: (planoAtual?['responsavel_nome'] ??
+              planoAtual?['responsavel'] ??
+              '')
+          .toString(),
+    );
+    var prioridade = (planoAtual?['prioridade'] ?? 'media').toString();
+    var anexosPlano = checklistListaAnexos(planoAtual?['anexos']);
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Plano de ação'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: descCtrl,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Descrição *',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: respCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Responsável',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: prazoCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Prazo (AAAA-MM-DD)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: ['baixa', 'media', 'alta'].contains(prioridade)
+                      ? prioridade
+                      : 'media',
+                  decoration: const InputDecoration(
+                    labelText: 'Prioridade',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'baixa', child: Text('Baixa')),
+                    DropdownMenuItem(value: 'media', child: Text('Média')),
+                    DropdownMenuItem(value: 'alta', child: Text('Alta')),
+                  ],
+                  onChanged: (v) => setLocal(() => prioridade = v ?? 'media'),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final path = await actions.pickAndSaveFileLocal();
+                    if (path == null || path.isEmpty) return;
+                    setLocal(() {
+                      anexosPlano = [
+                        ...anexosPlano,
+                        checklistAnexoFromLocalPath(path),
+                      ];
+                    });
+                  },
+                  icon: const Icon(Icons.attach_file, size: 18),
+                  label: const Text('Anexar arquivo'),
+                ),
+                if (anexosPlano.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  ...List.generate(anexosPlano.length, (i) {
+                    final a = anexosPlano[i];
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.insert_drive_file, size: 20),
+                      title: Text(
+                        checklistNomeAnexo(a),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: () => setLocal(() {
+                          anexosPlano = [...anexosPlano]..removeAt(i);
+                        }),
+                      ),
+                    );
+                  }),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (descCtrl.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(
+                      content: Text('Informe a descrição do plano de ação.'),
+                    ),
+                  );
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Salvar'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (ok == true) {
+      await actions.salvarPlanoAcaoItemChecklist(
+        FFAppState().checklistAtualJson,
+        areaId.toString(),
+        itemId.toString(),
+        descCtrl.text,
+        prazoCtrl.text,
+        prioridade,
+        null,
+        respCtrl.text,
+        anexos: anexosPlano,
+      );
+      if (mounted) safeSetState(() {});
+    }
+    descCtrl.dispose();
+    prazoCtrl.dispose();
+    respCtrl.dispose();
+  }
+
+  Future<void> _mostrarAnexos({
+    required dynamic areaId,
+    required dynamic itemId,
+    required List<Map<String, dynamic>> anexosAtuais,
+    required bool complementar,
+    String titulo = 'Anexos',
+  }) async {
+    var anexos = [...anexosAtuais];
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text(titulo),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (anexos.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Text('Nenhum arquivo anexado.'),
+                    ),
+                  ...List.generate(anexos.length, (i) {
+                    final a = anexos[i];
+                    final path = checklistPathAnexo(a);
+                    final isImage = path.toLowerCase().endsWith('.jpg') ||
+                        path.toLowerCase().endsWith('.jpeg') ||
+                        path.toLowerCase().endsWith('.png');
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: isImage && File(path).existsSync()
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: Image.file(
+                                  File(path),
+                                  width: 40,
+                                  height: 40,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      const Icon(Icons.insert_drive_file),
+                                ),
+                              )
+                            : const Icon(Icons.insert_drive_file),
+                        title: Text(
+                          checklistNomeAnexo(a),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: _somenteLeitura
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.delete_outline),
+                                onPressed: () => setLocal(() {
+                                  anexos = [...anexos]..removeAt(i);
+                                }),
+                              ),
+                      ),
+                    );
+                  }),
+                  if (!_somenteLeitura)
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final path = await actions.pickAndSaveFileLocal();
+                        if (path == null || path.isEmpty) return;
+                        setLocal(() {
+                          anexos = [
+                            ...anexos,
+                            checklistAnexoFromLocalPath(path),
+                          ];
+                        });
+                      },
+                      icon: const Icon(Icons.add),
+                      label: const Text('Adicionar arquivo'),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(_somenteLeitura ? 'Fechar' : 'Cancelar'),
+            ),
+            if (!_somenteLeitura)
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Salvar'),
+              ),
+          ],
+        ),
+      ),
+    );
+
+    if (ok == true && !_somenteLeitura) {
+      if (complementar) {
+        await actions.salvarAnexosComplementaresItemChecklist(
+          FFAppState().checklistAtualJson,
+          areaId.toString(),
+          itemId.toString(),
+          anexos,
+        );
+      } else {
+        await actions.salvarAnexosRespostaItemChecklist(
+          FFAppState().checklistAtualJson,
+          areaId.toString(),
+          itemId.toString(),
+          anexos,
+        );
+      }
+      if (mounted) safeSetState(() {});
+    }
+  }
+
+  Future<void> _finalizar() async {
+    if (_somenteLeitura || _finalizando) return;
+    final prog = _progresso();
+    if (prog['pode_finalizar'] != true) {
+      final pend = (prog['complementos_pendentes'] as num?)?.toInt() ?? 0;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            pend > 0
+                ? 'Há $pend complemento(s) obrigatório(s) pendente(s) (comentário, plano ou anexo).'
+                : 'Responda todos os itens obrigatórios antes de finalizar.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _finalizando = true);
+    try {
+      final result = await actions.finalizarChecklist(
+        FFAppState().checklistAtualJson,
+        '',
+        '',
+      );
+      final decoded = json.decode(result);
+      if (decoded is Map && decoded['sucesso'] == true) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Checklist finalizado. Nota: ${decoded['nota_final'] ?? 0}%',
+            ),
+          ),
+        );
+        context.safePop();
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              decoded is Map
+                  ? (decoded['mensagem']?.toString() ?? 'Erro ao finalizar')
+                  : 'Erro ao finalizar',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _finalizando = false);
+    }
+  }
+
+  Widget _campoResposta({
+    required String tipo,
+    required dynamic areaItem,
+    required dynamic perguntaItem,
+    required int perguntaIndex,
+    required int totalPerguntas,
+  }) {
+    final areaId = getJsonField(areaItem, r"$['id']");
+    final itemId = getJsonField(perguntaItem, r"$['id']");
+
+    switch (tipo) {
+      case 'Texto':
+        return CampoTextoChecklistWidget(
+          key: Key('txt_${perguntaIndex}_$totalPerguntas'),
+          index: itemId,
+          areaId: areaId,
+          perguntaId: itemId,
+        );
+      case 'Avaliativo Emojis':
+        return AvaliativoEmojisChecklistWidget(
+          key: Key('emo_${areaId}_$itemId'),
+          index: itemId,
+          areaId: areaId,
+          perguntaId: itemId,
+          valorAtual:
+              getJsonField(perguntaItem, r"$['respostaEmoji']")?.toString(),
+          opcoes: perguntaItem is Map &&
+                  perguntaItem['emojiRatingOptions'] is List
+              ? List<dynamic>.from(
+                  perguntaItem['emojiRatingOptions'] as List)
+              : null,
+        );
+      case 'Avaliativo Sim/Não':
+        final raw = getJsonField(perguntaItem, r"$['respostaBoolean']");
+        bool? valor;
+        if (raw is bool) {
+          valor = raw;
+        } else if (raw != null) {
+          valor = raw.toString() == 'true' || raw.toString() == '1';
+        }
+        return AvaliativoSimNaoChecklistWidget(
+          key: Key('bool_${perguntaIndex}_$totalPerguntas'),
+          areaId: areaId,
+          itemId: itemId,
+          valorAtual: valor,
+        );
+      case 'Opção':
+        return DropdownOpcoesChecklistWidget(
+          key: Key('opt_${perguntaIndex}_$totalPerguntas'),
+          areaId: areaId,
+          itemId: itemId,
+          opcoes: perguntaItem['options'] is List
+              ? List<dynamic>.from(perguntaItem['options'] as List)
+              : null,
+          valorAtual:
+              getJsonField(perguntaItem, r"$['respostaOpcao']")?.toString(),
+        );
+      case 'Número':
+        return CampoNumeroIntChecklistWidget(
+          key: Key('num_${perguntaIndex}_$totalPerguntas'),
+          index: itemId,
+          areaId: areaId,
+          perguntaId: itemId,
+        );
+      case 'Data':
+        return CampoDataChecklistWidget(
+          key: Key('dat_${perguntaIndex}_$totalPerguntas'),
+          index: itemId,
+          areaId: areaId,
+          perguntaId: itemId,
+        );
+      case 'Cadastro':
+        return CampoCadastroChecklistWidget(
+          key: Key('cad_${perguntaIndex}_$totalPerguntas'),
+          index: itemId,
+          areaId: areaId,
+          perguntaId: itemId,
+        );
+      case 'Anexo':
+        final anexosResposta = checklistListaAnexos(
+          perguntaItem is Map ? perguntaItem['anexos'] : null,
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (anexosResposta.isEmpty)
+              Text(
+                'Nenhum arquivo na resposta.',
+                style: FlutterFlowTheme.of(context).bodySmall.override(
+                      font: GoogleFonts.inter(),
+                      color: FlutterFlowTheme.of(context).secondaryText,
+                    ),
+              ),
+            ...anexosResposta.map(
+              (a) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    const Icon(Icons.insert_drive_file, size: 16),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        checklistNomeAnexo(a),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: FlutterFlowTheme.of(context).bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FFButtonWidget(
+                onPressed: () => _mostrarAnexos(
+                  areaId: areaId,
+                  itemId: itemId,
+                  anexosAtuais: anexosResposta,
+                  complementar: false,
+                  titulo: 'Anexos da resposta',
+                ),
+                text: anexosResposta.isEmpty
+                    ? 'Adicionar anexos'
+                    : 'Gerenciar anexos (${anexosResposta.length})',
+                icon: const Icon(Icons.attach_file, size: 14),
+                options: FFButtonOptions(
+                  height: 36,
+                  padding: const EdgeInsetsDirectional.fromSTEB(12, 0, 12, 0),
+                  color: FlutterFlowTheme.of(context).primaryBackground,
+                  textStyle: FlutterFlowTheme.of(context).bodySmall,
+                  elevation: 0,
+                  borderSide: BorderSide(
+                    color: FlutterFlowTheme.of(context).alternate,
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+          ],
+        );
+      default:
+        return CampoTextoChecklistWidget(
+          key: Key('def_${perguntaIndex}_$totalPerguntas'),
+          index: itemId,
+          areaId: areaId,
+          perguntaId: itemId,
+        );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     context.watch<FFAppState>();
+
+    final dados =
+        functions.getDadosFromChecklist(FFAppState().checklistAtualJson);
+    final nome = (dados is Map
+            ? (dados['template_name'] ?? dados['nome'] ?? 'Checklist')
+            : 'Checklist')
+        .toString();
+    final prog = _progresso();
+    final total = (prog['total_itens'] as num?)?.toInt() ?? 0;
+    final respondidos = (prog['itens_respondidos'] as num?)?.toInt() ?? 0;
+    final pct = (prog['progresso_total'] as num?)?.toInt() ?? 0;
+    final podeFinalizar =
+        prog['pode_finalizar'] == true && !_somenteLeitura;
+    final areas =
+        functions.getAreasFromChecklist(FFAppState().checklistAtualJson);
 
     return GestureDetector(
       onTap: () {
@@ -71,716 +650,545 @@ class _ChecklistRespondendoWidgetState
         body: SafeArea(
           top: true,
           child: Column(
-            mainAxisSize: MainAxisSize.max,
             children: [
-              Padding(
-                padding: EdgeInsetsDirectional.fromSTEB(4.0, 20.0, 4.0, 4.0),
-                child: Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: FlutterFlowTheme.of(context).primary,
-                    borderRadius: BorderRadius.circular(0.0),
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.max,
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              Container(
+                width: double.infinity,
+                color: FlutterFlowTheme.of(context).primary,
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.max,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              valueOrDefault<String>(
-                                functions
-                                    .getDadosFromChecklist('[\'nome\']')
-                                    ?.toString(),
-                                'Sem nome',
-                              ),
-                              style: FlutterFlowTheme.of(context)
-                                  .headlineSmall
-                                  .override(
-                                    font: GoogleFonts.interTight(
-                                      fontWeight: FontWeight.w600,
-                                      fontStyle: FlutterFlowTheme.of(context)
-                                          .headlineSmall
-                                          .fontStyle,
-                                    ),
-                                    color: Colors.white,
-                                    letterSpacing: 0.0,
+                        Expanded(
+                          child: Text(
+                            nome,
+                            style: FlutterFlowTheme.of(context)
+                                .headlineSmall
+                                .override(
+                                  font: GoogleFonts.interTight(
                                     fontWeight: FontWeight.w600,
-                                    fontStyle: FlutterFlowTheme.of(context)
-                                        .headlineSmall
-                                        .fontStyle,
                                   ),
-                            ),
-                            FlutterFlowIconButton(
-                              borderRadius: 20.0,
-                              buttonSize: 40.0,
-                              fillColor: Color(0x33FFFFFF),
-                              icon: Icon(
-                                Icons.close,
-                                color: Colors.white,
-                                size: 20.0,
-                              ),
-                              onPressed: () {
-                                print('IconButton pressed ...');
-                              },
-                            ),
-                          ],
+                                  color: Colors.white,
+                                  letterSpacing: 0.0,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
                         ),
-                        Row(
-                          mainAxisSize: MainAxisSize.max,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        FlutterFlowIconButton(
+                          borderRadius: 20.0,
+                          buttonSize: 40.0,
+                          fillColor: const Color(0x33FFFFFF),
+                          icon: const Icon(
+                            Icons.close,
+                            color: Colors.white,
+                            size: 20.0,
+                          ),
+                          onPressed: () => context.safePop(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12.0),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Column(
-                              mainAxisSize: MainAxisSize.max,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Progresso: 12/25 perguntas',
-                                  style: FlutterFlowTheme.of(context)
-                                      .bodyMedium
-                                      .override(
-                                        font: GoogleFonts.inter(
-                                          fontWeight:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontWeight,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .fontStyle,
-                                        ),
-                                        color: Colors.white,
-                                        fontSize: 14.0,
-                                        letterSpacing: 0.0,
-                                        fontWeight: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontWeight,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .bodyMedium
-                                            .fontStyle,
-                                      ),
-                                ),
-                                Text(
-                                  '48% concluído',
-                                  style: FlutterFlowTheme.of(context)
-                                      .bodySmall
-                                      .override(
-                                        font: GoogleFonts.inter(
-                                          fontWeight:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodySmall
-                                                  .fontWeight,
-                                          fontStyle:
-                                              FlutterFlowTheme.of(context)
-                                                  .bodySmall
-                                                  .fontStyle,
-                                        ),
-                                        color: Color(0xCCFFFFFF),
-                                        fontSize: 12.0,
-                                        letterSpacing: 0.0,
-                                        fontWeight: FlutterFlowTheme.of(context)
-                                            .bodySmall
-                                            .fontWeight,
-                                        fontStyle: FlutterFlowTheme.of(context)
-                                            .bodySmall
-                                            .fontStyle,
-                                      ),
-                                ),
-                              ],
-                            ),
                             Text(
-                              'Área 2 de 5',
+                              'Progresso: $respondidos/$total perguntas',
                               style: FlutterFlowTheme.of(context)
                                   .bodyMedium
                                   .override(
-                                    font: GoogleFonts.inter(
-                                      fontWeight: FlutterFlowTheme.of(context)
-                                          .bodyMedium
-                                          .fontWeight,
-                                      fontStyle: FlutterFlowTheme.of(context)
-                                          .bodyMedium
-                                          .fontStyle,
-                                    ),
+                                    font: GoogleFonts.inter(),
                                     color: Colors.white,
                                     fontSize: 14.0,
-                                    letterSpacing: 0.0,
-                                    fontWeight: FlutterFlowTheme.of(context)
-                                        .bodyMedium
-                                        .fontWeight,
-                                    fontStyle: FlutterFlowTheme.of(context)
-                                        .bodyMedium
-                                        .fontStyle,
+                                  ),
+                            ),
+                            Text(
+                              _somenteLeitura
+                                  ? 'Checklist respondido'
+                                  : '$pct% concluído',
+                              style: FlutterFlowTheme.of(context)
+                                  .bodySmall
+                                  .override(
+                                    font: GoogleFonts.inter(),
+                                    color: const Color(0xCCFFFFFF),
+                                    fontSize: 12.0,
                                   ),
                             ),
                           ],
                         ),
-                        Container(
-                          width: double.infinity,
-                          height: 8.0,
+                        Text(
+                          '${areas.length} área${areas.length == 1 ? '' : 's'}',
+                          style:
+                              FlutterFlowTheme.of(context).bodyMedium.override(
+                                    font: GoogleFonts.inter(),
+                                    color: Colors.white,
+                                    fontSize: 14.0,
+                                  ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12.0),
+                    Container(
+                      width: double.infinity,
+                      height: 8.0,
+                      decoration: BoxDecoration(
+                        color: const Color(0x33FFFFFF),
+                        borderRadius: BorderRadius.circular(4.0),
+                      ),
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: (pct.clamp(0, 100) / 100.0),
+                        child: Container(
                           decoration: BoxDecoration(
-                            color: Color(0x33FFFFFF),
+                            color: FlutterFlowTheme.of(context).tertiary,
                             borderRadius: BorderRadius.circular(4.0),
                           ),
-                          child: Align(
-                            alignment: AlignmentDirectional(-1.0, 0.0),
-                            child: Container(
-                              width: MediaQuery.sizeOf(context).width * 0.48,
-                              height: double.infinity,
-                              decoration: BoxDecoration(
-                                color: FlutterFlowTheme.of(context).tertiary,
-                                borderRadius: BorderRadius.circular(4.0),
-                              ),
-                            ),
-                          ),
                         ),
-                      ].divide(SizedBox(height: 12.0)),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
               Expanded(
-                child: Padding(
-                  padding: EdgeInsetsDirectional.fromSTEB(4.0, 0.0, 4.0, 0.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Builder(
-                        builder: (context) {
-                          final areas = functions
-                              .getAreasFromChecklist(
-                                  FFAppState().checklistAtualJson)
-                              .toList();
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(8, 16, 8, 24),
+                  itemCount: areas.length,
+                  itemBuilder: (context, areasIndex) {
+                    final areasItem = areas[areasIndex];
+                    final perguntasRaw =
+                        getJsonField(areasItem, r"$['items']");
+                    final perguntas = perguntasRaw is List
+                        ? perguntasRaw
+                        : <dynamic>[];
 
-                          return ListView.builder(
-                            padding: EdgeInsets.zero,
-                            shrinkWrap: true,
-                            scrollDirection: Axis.vertical,
-                            itemCount: areas.length,
-                            itemBuilder: (context, areasIndex) {
-                              final areasItem = areas[areasIndex];
-                              return Padding(
-                                padding: EdgeInsets.all(4.0),
-                                child: Container(
-                                  width: double.infinity,
-                                  decoration: BoxDecoration(
-                                    color: FlutterFlowTheme.of(context)
-                                        .primaryBackground,
-                                    borderRadius: BorderRadius.circular(12.0),
-                                    border: Border.all(
-                                      color: FlutterFlowTheme.of(context)
-                                          .alternate,
-                                      width: 1.0,
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12.0),
+                      child: Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color:
+                              FlutterFlowTheme.of(context).primaryBackground,
+                          borderRadius: BorderRadius.circular(12.0),
+                          border: Border.all(
+                            color: FlutterFlowTheme.of(context).alternate,
+                            width: 1.0,
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.shield_outlined,
+                                    color:
+                                        FlutterFlowTheme.of(context).primary,
+                                    size: 20.0,
+                                  ),
+                                  const SizedBox(width: 8.0),
+                                  Expanded(
+                                    child: Text(
+                                      getJsonField(
+                                        areasItem,
+                                        r"$['name']",
+                                      ).toString(),
+                                      style: FlutterFlowTheme.of(context)
+                                          .titleMedium
+                                          .override(
+                                            font: GoogleFonts.interTight(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                            letterSpacing: 0.0,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                     ),
                                   ),
-                                  child: Padding(
-                                    padding: EdgeInsets.all(4.0),
+                                ],
+                              ),
+                              const SizedBox(height: 12.0),
+                              ...List.generate(perguntas.length, (i) {
+                                final perguntaItem = perguntas[i];
+                                final tipo = _tipoItem(perguntaItem);
+                                final areaId = getJsonField(
+                                  areasItem,
+                                  r"$['id']",
+                                );
+                                final itemId = getJsonField(
+                                  perguntaItem,
+                                  r"$['id']",
+                                );
+                                final comentario = (getJsonField(
+                                          perguntaItem,
+                                          r"$['respostaComentario']",
+                                        ) ??
+                                        getJsonField(
+                                          perguntaItem,
+                                          r"$['comentario']",
+                                        ) ??
+                                        '')
+                                    .toString();
+                                final planoRaw = perguntaItem is Map
+                                    ? perguntaItem['planoAcao']
+                                    : null;
+                                final plano =
+                                    planoRaw is Map ? planoRaw : null;
+                                final itemMap = perguntaItem is Map
+                                    ? Map<String, dynamic>.from(perguntaItem)
+                                    : <String, dynamic>{};
+                                final anexosComp = checklistListaAnexos(
+                                  itemMap['anexosComplementares'],
+                                );
+                                final mostraComentario =
+                                    checklistMostraComplemento(
+                                        itemMap, 'comentario');
+                                final mostraPlano =
+                                    checklistMostraComplemento(
+                                        itemMap, 'plano_acao');
+                                final mostraAnexo =
+                                    checklistMostraComplemento(
+                                        itemMap, 'anexo');
+                                final exigeComentario =
+                                    checklistExigeComplemento(
+                                        itemMap, 'comentario');
+                                final exigePlano = checklistExigeComplemento(
+                                    itemMap, 'plano_acao');
+                                final exigeAnexo = checklistExigeComplemento(
+                                    itemMap, 'anexo');
+                                final pendencias =
+                                    checklistPendenciasComplementos(itemMap);
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12.0),
+                                  child: Container(
+                                    width: double.infinity,
+                                    decoration: BoxDecoration(
+                                      color: FlutterFlowTheme.of(context)
+                                          .secondaryBackground,
+                                      borderRadius: BorderRadius.circular(8.0),
+                                    ),
+                                    padding: const EdgeInsets.all(12.0),
                                     child: Column(
-                                      mainAxisSize: MainAxisSize.max,
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        Row(
-                                          mainAxisSize: MainAxisSize.max,
-                                          children: [
-                                            Icon(
-                                              Icons.shield_outlined,
-                                              color:
-                                                  FlutterFlowTheme.of(context)
-                                                      .primary,
-                                              size: 20.0,
-                                            ),
-                                            Expanded(
-                                              child: Text(
-                                                getJsonField(
-                                                  areasItem,
-                                                  r'''$['name']''',
-                                                ).toString(),
-                                                style:
-                                                    FlutterFlowTheme.of(context)
-                                                        .titleMedium
-                                                        .override(
-                                                          font: GoogleFonts
-                                                              .interTight(
-                                                            fontWeight:
-                                                                FontWeight.w600,
-                                                            fontStyle:
-                                                                FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .titleMedium
-                                                                    .fontStyle,
-                                                          ),
-                                                          letterSpacing: 0.0,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                          fontStyle:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .titleMedium
-                                                                  .fontStyle,
-                                                        ),
+                                        Text(
+                                          getJsonField(
+                                            perguntaItem,
+                                            r"$['description']",
+                                          ).toString(),
+                                          style: FlutterFlowTheme.of(context)
+                                              .bodyMedium
+                                              .override(
+                                                font: GoogleFonts.inter(
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                                letterSpacing: 0.0,
+                                                fontWeight: FontWeight.w500,
                                               ),
-                                            ),
-                                          ].divide(SizedBox(width: 8.0)),
                                         ),
-                                        Builder(
-                                          builder: (context) {
-                                            final pergunta = getJsonField(
-                                              areasItem,
-                                              r'''$['items']''',
-                                            ).toList();
-
-                                            return ListView.builder(
-                                              padding: EdgeInsets.zero,
-                                              primary: false,
-                                              shrinkWrap: true,
-                                              scrollDirection: Axis.vertical,
-                                              itemCount: pergunta.length,
-                                              itemBuilder:
-                                                  (context, perguntaIndex) {
-                                                final perguntaItem =
-                                                    pergunta[perguntaIndex];
-                                                return Padding(
-                                                  padding: EdgeInsets.all(4.0),
-                                                  child: Container(
-                                                    width: double.infinity,
-                                                    decoration: BoxDecoration(
-                                                      color: FlutterFlowTheme
-                                                              .of(context)
-                                                          .secondaryBackground,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              8.0),
-                                                    ),
-                                                    child: Padding(
-                                                      padding:
-                                                          EdgeInsets.all(4.0),
-                                                      child: Column(
-                                                        mainAxisSize:
-                                                            MainAxisSize.max,
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .start,
-                                                        children: [
-                                                          Text(
-                                                            getJsonField(
-                                                              perguntaItem,
-                                                              r'''$['description']''',
-                                                            ).toString(),
-                                                            style: FlutterFlowTheme
+                                        const SizedBox(height: 12.0),
+                                        IgnorePointer(
+                                          ignoring: _somenteLeitura,
+                                          child: _campoResposta(
+                                            tipo: tipo,
+                                            areaItem: areasItem,
+                                            perguntaItem: perguntaItem,
+                                            perguntaIndex: i,
+                                            totalPerguntas: perguntas.length,
+                                          ),
+                                        ),
+                                        if (comentario.trim().isNotEmpty) ...[
+                                          const SizedBox(height: 8.0),
+                                          Text(
+                                            'Comentário: $comentario',
+                                            style: FlutterFlowTheme.of(context)
+                                                .bodySmall
+                                                .override(
+                                                  font: GoogleFonts.inter(),
+                                                  color: FlutterFlowTheme.of(
+                                                          context)
+                                                      .secondaryText,
+                                                ),
+                                          ),
+                                        ],
+                                        if (plano != null &&
+                                            (plano['descricao'] ?? '')
+                                                .toString()
+                                                .trim()
+                                                .isNotEmpty) ...[
+                                          const SizedBox(height: 4.0),
+                                          Text(
+                                            'Plano: ${plano['descricao']}'
+                                            '${(plano['responsavel_nome'] ?? plano['responsavel'] ?? '').toString().trim().isNotEmpty ? ' · ${(plano['responsavel_nome'] ?? plano['responsavel']).toString()}' : ''}'
+                                            '${checklistListaAnexos(plano['anexos']).isNotEmpty ? ' · ${checklistListaAnexos(plano['anexos']).length} anexo(s)' : ''}',
+                                            style: FlutterFlowTheme.of(context)
+                                                .bodySmall
+                                                .override(
+                                                  font: GoogleFonts.inter(),
+                                                  color: FlutterFlowTheme.of(
+                                                          context)
+                                                      .primary,
+                                                ),
+                                          ),
+                                        ],
+                                        if (anexosComp.isNotEmpty) ...[
+                                          const SizedBox(height: 4.0),
+                                          Text(
+                                            'Anexos: ${anexosComp.map(checklistNomeAnexo).join(', ')}',
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: FlutterFlowTheme.of(context)
+                                                .bodySmall
+                                                .override(
+                                                  font: GoogleFonts.inter(),
+                                                  color: FlutterFlowTheme.of(
+                                                          context)
+                                                      .secondaryText,
+                                                ),
+                                          ),
+                                        ],
+                                        if (pendencias.isNotEmpty) ...[
+                                          const SizedBox(height: 4.0),
+                                          Text(
+                                            'Pendente: ${pendencias.join(', ')}',
+                                            style: FlutterFlowTheme.of(context)
+                                                .bodySmall
+                                                .override(
+                                                  font: GoogleFonts.inter(),
+                                                  color: FlutterFlowTheme.of(
+                                                          context)
+                                                      .error,
+                                                ),
+                                          ),
+                                        ],
+                                        const SizedBox(height: 12.0),
+                                        Wrap(
+                                          spacing: 8.0,
+                                          runSpacing: 8.0,
+                                          children: [
+                                            if (mostraComentario)
+                                              FFButtonWidget(
+                                                onPressed: _somenteLeitura
+                                                    ? null
+                                                    : () => _mostrarComentario(
+                                                          areaId,
+                                                          itemId,
+                                                          comentario,
+                                                        ),
+                                                text: exigeComentario
+                                                    ? 'Comentário *'
+                                                    : 'Comentário',
+                                                icon: Icon(
+                                                  comentario.trim().isEmpty
+                                                      ? Icons
+                                                          .chat_bubble_outline
+                                                      : Icons.chat_bubble,
+                                                  size: 14.0,
+                                                ),
+                                                options: FFButtonOptions(
+                                                  height: 32.0,
+                                                  padding:
+                                                      const EdgeInsetsDirectional
+                                                          .fromSTEB(
+                                                          8.0, 4.0, 8.0, 4.0),
+                                                  iconPadding: EdgeInsets.zero,
+                                                  iconColor:
+                                                      FlutterFlowTheme.of(
+                                                              context)
+                                                          .secondaryText,
+                                                  color:
+                                                      FlutterFlowTheme.of(
+                                                              context)
+                                                          .primaryBackground,
+                                                  textStyle:
+                                                      FlutterFlowTheme.of(
+                                                              context)
+                                                          .bodySmall
+                                                          .override(
+                                                            font: GoogleFonts
+                                                                .inter(),
+                                                            color: FlutterFlowTheme
                                                                     .of(context)
-                                                                .bodyMedium
-                                                                .override(
-                                                                  font:
-                                                                      GoogleFonts
-                                                                          .inter(
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w500,
-                                                                    fontStyle: FlutterFlowTheme.of(
-                                                                            context)
-                                                                        .bodyMedium
-                                                                        .fontStyle,
-                                                                  ),
-                                                                  letterSpacing:
-                                                                      0.0,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w500,
-                                                                  fontStyle: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .bodyMedium
-                                                                      .fontStyle,
-                                                                ),
+                                                                .secondaryText,
                                                           ),
-                                                          if (perguntaItem[
-                                                                  'type'] ==
-                                                              "Texto")
-                                                            CampoTextoChecklistWidget(
-                                                              key: Key(
-                                                                  'Key1bo_${perguntaIndex}_of_${pergunta.length}'),
-                                                              index:
-                                                                  getJsonField(
-                                                                perguntaItem,
-                                                                r'''$['id']''',
-                                                              ),
-                                                              areaId:
-                                                                  getJsonField(
-                                                                areasItem,
-                                                                r'''$['id']''',
-                                                              ),
-                                                              perguntaId:
-                                                                  getJsonField(
-                                                                perguntaItem,
-                                                                r'''$['id']''',
-                                                              ),
-                                                            ),
-                                                          if (perguntaItem[
-                                                                  'type'] ==
-                                                              "Avaliativo Emojis")
-                                                            AvaliativoEmojisChecklistWidget(
-                                                              key: Key(
-                                                                  'Keyrx3_${perguntaIndex}_of_${pergunta.length}'),
-                                                              index:
-                                                                  getJsonField(
-                                                                perguntaItem,
-                                                                r'''$['id']''',
-                                                              ),
-                                                              areaId:
-                                                                  getJsonField(
-                                                                areasItem,
-                                                                r'''$['id']''',
-                                                              ),
-                                                              perguntaId:
-                                                                  getJsonField(
-                                                                perguntaItem,
-                                                                r'''$['id']''',
-                                                              ),
-                                                            ),
-                                                          if (perguntaItem[
-                                                                  'type'] ==
-                                                              "Opção")
-                                                            DropdownOpcoesChecklistWidget(
-                                                              key: Key(
-                                                                  'Key8v1_${perguntaIndex}_of_${pergunta.length}'),
-                                                              areaId:
-                                                                  getJsonField(
-                                                                areasItem,
-                                                                r'''$['id']''',
-                                                              ),
-                                                              itemId:
-                                                                  getJsonField(
-                                                                perguntaItem,
-                                                                r'''$['id']''',
-                                                              ),
-                                                              opcoes:
-                                                                  perguntaItem[
-                                                                      'options'],
-                                                            ),
-                                                          if (perguntaItem[
-                                                                  'type'] ==
-                                                              "Número")
-                                                            CampoNumeroIntChecklistWidget(
-                                                              key: Key(
-                                                                  'Keyse2_${perguntaIndex}_of_${pergunta.length}'),
-                                                              index:
-                                                                  getJsonField(
-                                                                perguntaItem,
-                                                                r'''$['id']''',
-                                                              ),
-                                                              areaId:
-                                                                  getJsonField(
-                                                                areasItem,
-                                                                r'''$['id']''',
-                                                              ),
-                                                              perguntaId:
-                                                                  getJsonField(
-                                                                perguntaItem,
-                                                                r'''$['id']''',
-                                                              ),
-                                                            ),
-                                                          if (perguntaItem[
-                                                                  'type'] ==
-                                                              "Data")
-                                                            CampoDataChecklistWidget(
-                                                              key: Key(
-                                                                  'Keyaor_${perguntaIndex}_of_${pergunta.length}'),
-                                                              index:
-                                                                  getJsonField(
-                                                                perguntaItem,
-                                                                r'''$['id']''',
-                                                              ),
-                                                              areaId:
-                                                                  getJsonField(
-                                                                areasItem,
-                                                                r'''$['id']''',
-                                                              ),
-                                                              perguntaId:
-                                                                  getJsonField(
-                                                                perguntaItem,
-                                                                r'''$['id']''',
-                                                              ),
-                                                            ),
-                                                          if (perguntaItem[
-                                                                  'type'] ==
-                                                              "Cadastro")
-                                                            CampoCadastroChecklistWidget(
-                                                              key: Key(
-                                                                  'Key75c_${perguntaIndex}_of_${pergunta.length}'),
-                                                              index:
-                                                                  getJsonField(
-                                                                perguntaItem,
-                                                                r'''$['id']''',
-                                                              ),
-                                                              areaId:
-                                                                  getJsonField(
-                                                                areasItem,
-                                                                r'''$['id']''',
-                                                              ),
-                                                              perguntaId:
-                                                                  getJsonField(
-                                                                perguntaItem,
-                                                                r'''$['id']''',
-                                                              ),
-                                                            ),
-                                                          Row(
-                                                            mainAxisSize:
-                                                                MainAxisSize
-                                                                    .max,
-                                                            children: [
-                                                              FFButtonWidget(
-                                                                onPressed: () {
-                                                                  print(
-                                                                      'Button pressed ...');
-                                                                },
-                                                                text:
-                                                                    'Comentário',
-                                                                icon: Icon(
-                                                                  Icons
-                                                                      .chat_bubble_outline,
-                                                                  size: 14.0,
-                                                                ),
-                                                                options:
-                                                                    FFButtonOptions(
-                                                                  height: 32.0,
-                                                                  padding: EdgeInsetsDirectional
-                                                                      .fromSTEB(
-                                                                          4.0,
-                                                                          4.0,
-                                                                          4.0,
-                                                                          4.0),
-                                                                  iconPadding: EdgeInsetsDirectional
-                                                                      .fromSTEB(
-                                                                          0.0,
-                                                                          0.0,
-                                                                          0.0,
-                                                                          0.0),
-                                                                  iconColor: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .secondaryText,
-                                                                  color: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .primaryBackground,
-                                                                  textStyle: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .bodySmall
-                                                                      .override(
-                                                                        font: GoogleFonts
-                                                                            .inter(
-                                                                          fontWeight: FlutterFlowTheme.of(context)
-                                                                              .bodySmall
-                                                                              .fontWeight,
-                                                                          fontStyle: FlutterFlowTheme.of(context)
-                                                                              .bodySmall
-                                                                              .fontStyle,
-                                                                        ),
-                                                                        color: FlutterFlowTheme.of(context)
-                                                                            .secondaryText,
-                                                                        letterSpacing:
-                                                                            0.0,
-                                                                        fontWeight: FlutterFlowTheme.of(context)
-                                                                            .bodySmall
-                                                                            .fontWeight,
-                                                                        fontStyle: FlutterFlowTheme.of(context)
-                                                                            .bodySmall
-                                                                            .fontStyle,
-                                                                      ),
-                                                                  elevation:
-                                                                      0.0,
-                                                                  borderSide:
-                                                                      BorderSide(
-                                                                    color: FlutterFlowTheme.of(
-                                                                            context)
-                                                                        .alternate,
-                                                                    width: 1.0,
-                                                                  ),
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                              4.0),
-                                                                ),
-                                                              ),
-                                                              FFButtonWidget(
-                                                                onPressed: () {
-                                                                  print(
-                                                                      'Button pressed ...');
-                                                                },
-                                                                text: ' Anexo',
-                                                                icon: Icon(
-                                                                  Icons
-                                                                      .attach_file,
-                                                                  size: 14.0,
-                                                                ),
-                                                                options:
-                                                                    FFButtonOptions(
-                                                                  height: 32.0,
-                                                                  padding: EdgeInsetsDirectional
-                                                                      .fromSTEB(
-                                                                          4.0,
-                                                                          4.0,
-                                                                          4.0,
-                                                                          4.0),
-                                                                  iconPadding: EdgeInsetsDirectional
-                                                                      .fromSTEB(
-                                                                          0.0,
-                                                                          0.0,
-                                                                          0.0,
-                                                                          0.0),
-                                                                  iconColor: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .secondaryText,
-                                                                  color: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .primaryBackground,
-                                                                  textStyle: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .bodySmall
-                                                                      .override(
-                                                                        font: GoogleFonts
-                                                                            .inter(
-                                                                          fontWeight: FlutterFlowTheme.of(context)
-                                                                              .bodySmall
-                                                                              .fontWeight,
-                                                                          fontStyle: FlutterFlowTheme.of(context)
-                                                                              .bodySmall
-                                                                              .fontStyle,
-                                                                        ),
-                                                                        color: FlutterFlowTheme.of(context)
-                                                                            .secondaryText,
-                                                                        letterSpacing:
-                                                                            0.0,
-                                                                        fontWeight: FlutterFlowTheme.of(context)
-                                                                            .bodySmall
-                                                                            .fontWeight,
-                                                                        fontStyle: FlutterFlowTheme.of(context)
-                                                                            .bodySmall
-                                                                            .fontStyle,
-                                                                      ),
-                                                                  elevation:
-                                                                      0.0,
-                                                                  borderSide:
-                                                                      BorderSide(
-                                                                    color: FlutterFlowTheme.of(
-                                                                            context)
-                                                                        .alternate,
-                                                                    width: 1.0,
-                                                                  ),
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                              4.0),
-                                                                ),
-                                                              ),
-                                                              FFButtonWidget(
-                                                                onPressed: () {
-                                                                  print(
-                                                                      'Button pressed ...');
-                                                                },
-                                                                text:
-                                                                    'Plano de Ação',
-                                                                icon: Icon(
-                                                                  Icons
-                                                                      .assignment,
-                                                                  size: 14.0,
-                                                                ),
-                                                                options:
-                                                                    FFButtonOptions(
-                                                                  height: 32.0,
-                                                                  padding: EdgeInsetsDirectional
-                                                                      .fromSTEB(
-                                                                          4.0,
-                                                                          4.0,
-                                                                          4.0,
-                                                                          4.0),
-                                                                  iconPadding: EdgeInsetsDirectional
-                                                                      .fromSTEB(
-                                                                          0.0,
-                                                                          0.0,
-                                                                          0.0,
-                                                                          0.0),
-                                                                  iconColor: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .secondaryText,
-                                                                  color: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .primaryBackground,
-                                                                  textStyle: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .bodySmall
-                                                                      .override(
-                                                                        font: GoogleFonts
-                                                                            .inter(
-                                                                          fontWeight: FlutterFlowTheme.of(context)
-                                                                              .bodySmall
-                                                                              .fontWeight,
-                                                                          fontStyle: FlutterFlowTheme.of(context)
-                                                                              .bodySmall
-                                                                              .fontStyle,
-                                                                        ),
-                                                                        color: FlutterFlowTheme.of(context)
-                                                                            .secondaryText,
-                                                                        letterSpacing:
-                                                                            0.0,
-                                                                        fontWeight: FlutterFlowTheme.of(context)
-                                                                            .bodySmall
-                                                                            .fontWeight,
-                                                                        fontStyle: FlutterFlowTheme.of(context)
-                                                                            .bodySmall
-                                                                            .fontStyle,
-                                                                      ),
-                                                                  elevation:
-                                                                      0.0,
-                                                                  borderSide:
-                                                                      BorderSide(
-                                                                    color: FlutterFlowTheme.of(
-                                                                            context)
-                                                                        .alternate,
-                                                                    width: 1.0,
-                                                                  ),
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                              4.0),
-                                                                ),
-                                                              ),
-                                                            ].divide(SizedBox(
-                                                                width: 12.0)),
-                                                          ),
-                                                        ].divide(SizedBox(
-                                                            height: 12.0)),
-                                                      ),
-                                                    ),
+                                                  elevation: 0.0,
+                                                  borderSide: BorderSide(
+                                                    color:
+                                                        FlutterFlowTheme.of(
+                                                                context)
+                                                            .alternate,
                                                   ),
-                                                );
-                                              },
-                                            );
-                                          },
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          4.0),
+                                                ),
+                                              ),
+                                            if (mostraAnexo)
+                                              FFButtonWidget(
+                                                onPressed: () => _mostrarAnexos(
+                                                  areaId: areaId,
+                                                  itemId: itemId,
+                                                  anexosAtuais: anexosComp,
+                                                  complementar: true,
+                                                  titulo: exigeAnexo
+                                                      ? 'Anexos *'
+                                                      : 'Anexos',
+                                                ),
+                                                text: anexosComp.isEmpty
+                                                    ? (exigeAnexo
+                                                        ? 'Anexo *'
+                                                        : 'Anexo')
+                                                    : 'Anexo (${anexosComp.length})',
+                                                icon: const Icon(
+                                                  Icons.attach_file,
+                                                  size: 14.0,
+                                                ),
+                                                options: FFButtonOptions(
+                                                  height: 32.0,
+                                                  padding:
+                                                      const EdgeInsetsDirectional
+                                                          .fromSTEB(
+                                                          8.0, 4.0, 8.0, 4.0),
+                                                  iconPadding: EdgeInsets.zero,
+                                                  iconColor:
+                                                      FlutterFlowTheme.of(
+                                                              context)
+                                                          .secondaryText,
+                                                  color:
+                                                      FlutterFlowTheme.of(
+                                                              context)
+                                                          .primaryBackground,
+                                                  textStyle:
+                                                      FlutterFlowTheme.of(
+                                                              context)
+                                                          .bodySmall
+                                                          .override(
+                                                            font: GoogleFonts
+                                                                .inter(),
+                                                            color: FlutterFlowTheme
+                                                                    .of(context)
+                                                                .secondaryText,
+                                                          ),
+                                                  elevation: 0.0,
+                                                  borderSide: BorderSide(
+                                                    color:
+                                                        FlutterFlowTheme.of(
+                                                                context)
+                                                            .alternate,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          4.0),
+                                                ),
+                                              ),
+                                            if (mostraPlano)
+                                              FFButtonWidget(
+                                                onPressed: _somenteLeitura
+                                                    ? null
+                                                    : () => _mostrarPlanoAcao(
+                                                          areaId,
+                                                          itemId,
+                                                          plano,
+                                                        ),
+                                                text: exigePlano
+                                                    ? 'Plano de Ação *'
+                                                    : 'Plano de Ação',
+                                                icon: const Icon(
+                                                  Icons.assignment,
+                                                  size: 14.0,
+                                                ),
+                                                options: FFButtonOptions(
+                                                  height: 32.0,
+                                                  padding:
+                                                      const EdgeInsetsDirectional
+                                                          .fromSTEB(
+                                                          8.0, 4.0, 8.0, 4.0),
+                                                  iconPadding: EdgeInsets.zero,
+                                                  iconColor:
+                                                      FlutterFlowTheme.of(
+                                                              context)
+                                                          .secondaryText,
+                                                  color:
+                                                      FlutterFlowTheme.of(
+                                                              context)
+                                                          .primaryBackground,
+                                                  textStyle:
+                                                      FlutterFlowTheme.of(
+                                                              context)
+                                                          .bodySmall
+                                                          .override(
+                                                            font: GoogleFonts
+                                                                .inter(),
+                                                            color: FlutterFlowTheme
+                                                                    .of(context)
+                                                                .secondaryText,
+                                                          ),
+                                                  elevation: 0.0,
+                                                  borderSide: BorderSide(
+                                                    color:
+                                                        FlutterFlowTheme.of(
+                                                                context)
+                                                            .alternate,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          4.0),
+                                                ),
+                                              ),
+                                          ],
                                         ),
-                                        Divider(
-                                          thickness: 1.0,
-                                          color: FlutterFlowTheme.of(context)
-                                              .alternate,
-                                        ),
-                                      ].divide(SizedBox(height: 16.0)),
+                                      ],
                                     ),
                                   ),
-                                ),
-                              );
-                            },
-                          );
-                        },
+                                );
+                              }),
+                            ],
+                          ),
+                        ),
                       ),
-                    ]
-                        .divide(SizedBox(height: 20.0))
-                        .addToStart(SizedBox(height: 20.0))
-                        .addToEnd(SizedBox(height: 100.0)),
-                  ),
+                    );
+                  },
                 ),
               ),
+              if (!_somenteLeitura)
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: FFButtonWidget(
+                      onPressed: (_finalizando || !podeFinalizar)
+                          ? null
+                          : _finalizar,
+                      text: _finalizando
+                          ? 'Finalizando...'
+                          : (podeFinalizar
+                              ? 'Finalizar checklist'
+                              : 'Responda os obrigatórios'),
+                      options: FFButtonOptions(
+                        width: double.infinity,
+                        height: 52.0,
+                        color: podeFinalizar
+                            ? FlutterFlowTheme.of(context).primary
+                            : FlutterFlowTheme.of(context).alternate,
+                        textStyle:
+                            FlutterFlowTheme.of(context).titleMedium.override(
+                                  font: GoogleFonts.interTight(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                        elevation: 0.0,
+                        borderRadius: BorderRadius.circular(12.0),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

@@ -9,6 +9,7 @@ import '/flutter_flow/flutter_flow_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import '/backend/api_requests/api_config.dart';
 
 Future<String?> showCadastrarEquipamentoObraDialog({
   required BuildContext context,
@@ -188,7 +189,7 @@ class _CadastrarEquipamentoObraDialogWidgetState
   Future<void> _fetchEquipamentosCatalogo() async {
     try {
       final response = await http.get(
-        Uri.parse('https://api.rdopro.com.br/api/equipamentos'),
+        Uri.parse('$kApiBaseUrl/api/equipamentos'),
         headers: _apiHeaders(json: false),
       );
       if (response.statusCode < 200 || response.statusCode >= 300) return;
@@ -275,7 +276,7 @@ class _CadastrarEquipamentoObraDialogWidgetState
 
       final response = await http.post(
         Uri.parse(
-          'https://api.rdopro.com.br/api/obras/$obraIdentifier/itens/equipamento',
+          '$kApiBaseUrl/api/obras/$obraIdentifier/itens/equipamento',
         ),
         headers: _apiHeaders(),
         body: jsonEncode(payload),
@@ -294,6 +295,10 @@ class _CadastrarEquipamentoObraDialogWidgetState
 
       await actions.syncEquipamentos();
       await actions.syncObrasItens();
+      await actions.refreshObraItensPorTipo(
+        obraUuid: widget.obraUuid.trim(),
+        tipo: 'equipamento',
+      );
 
       if (!mounted) return;
       Navigator.pop(context, _extractItemUuid(body));

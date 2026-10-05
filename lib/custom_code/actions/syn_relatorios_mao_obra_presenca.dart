@@ -11,6 +11,8 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'index.dart'; // Imports other custom actions
 
 import 'index.dart'; // Imports other custom actions
@@ -25,9 +27,9 @@ import 'sync_relatorio_download_merge_guard.dart';
 import '/backend/sqlite/situacao_soft_delete.dart';
 
 const String _kUrlUploadMaoObraPresenca =
-    'https://api.rdopro.com.br/api/v1/sync/relatorios/mao-obra-presencas/upload';
+    '$kApiBaseUrl/api/v1/sync/relatorios/mao-obra-presencas/upload';
 const String _kUrlDownloadMaoObraPresenca =
-    'https://api.rdopro.com.br/api/v1/sync/relatorios/mao-obra-presencas/download';
+    '$kApiBaseUrl/api/v1/sync/relatorios/mao-obra-presencas/download';
 
 Uri _uriMaoObraPresencaUpload() => Uri.parse(_kUrlUploadMaoObraPresenca.trim());
 

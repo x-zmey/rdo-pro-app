@@ -40,6 +40,19 @@ class AddOrdensCustoRelatorioWidget extends StatefulWidget {
 class _AddOrdensCustoRelatorioWidgetState
     extends State<AddOrdensCustoRelatorioWidget> {
   late AddOrdensCustoRelatorioModel _model;
+  late Future<List<GetOrdensServicoRow>> _ordensFuture;
+
+  Future<List<GetOrdensServicoRow>> _loadOrdens() async {
+    final obraUuid = (widget.obraUuid ?? '').trim();
+    if (obraUuid.isEmpty) return <GetOrdensServicoRow>[];
+    try {
+      await actions.refreshOrdensPorObra(obraUuid: obraUuid);
+    } catch (_) {}
+    return SQLiteManager.instance.getOrdensServico(
+      obraUuid: obraUuid,
+      userId: FFAppState().creatorId,
+    );
+  }
 
   @override
   void setState(VoidCallback callback) {
@@ -51,6 +64,7 @@ class _AddOrdensCustoRelatorioWidgetState
   void initState() {
     super.initState();
     _model = createModel(context, () => AddOrdensCustoRelatorioModel());
+    _ordensFuture = _loadOrdens();
   }
 
   @override
@@ -163,10 +177,7 @@ class _AddOrdensCustoRelatorioWidgetState
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     FutureBuilder<List<GetOrdensServicoRow>>(
-                      future: SQLiteManager.instance.getOrdensServico(
-                        obraUuid: widget!.obraUuid!,
-                        userId: FFAppState().creatorId,
-                      ),
+                      future: _ordensFuture,
                       builder: (context, snapshot) {
                         // Customize what your widget looks like when it's loading.
                         if (!snapshot.hasData) {

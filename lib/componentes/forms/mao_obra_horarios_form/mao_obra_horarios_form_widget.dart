@@ -5,6 +5,7 @@ import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/hh_mm_24h_input_formatter.dart';
+import '/flutter_flow/mao_obra_presenca_horas.dart';
 import '/flutter_flow/relatorio_horarios_validation.dart';
 import 'package:easy_debounce/easy_debounce.dart';
 import 'package:flutter/material.dart';
@@ -187,7 +188,7 @@ class _MaoObraHorariosFormWidgetState extends State<MaoObraHorariosFormWidget> {
       intervaloFim: _fim.text,
       uuid: widget.uuid,
       status: d.statusPresenca,
-      horasTrabalhadas: '',
+      horasTrabalhadas: horasTrabalhadasParaPersistir(d.statusPresenca),
       motivoAusencia: d.motivoAusencia,
       motivoSaidaCedo: _escapeSql(_motivoSaidaCedoParaPersistir()),
       motivoAtraso: _escapeSql(_motivoAtrasoParaPersistir()),
@@ -222,7 +223,7 @@ class _MaoObraHorariosFormWidgetState extends State<MaoObraHorariosFormWidget> {
       intervaloFim: _fim.text,
       uuid: widget.uuid,
       status: d?.statusPresenca,
-      horasTrabalhadas: '',
+      horasTrabalhadas: horasTrabalhadasParaPersistir(d?.statusPresenca),
       motivoAusencia: d?.motivoAusencia,
       motivoSaidaCedo: _escapeSql(_motivoSaidaCedoParaPersistir()),
       motivoAtraso: _escapeSql(_motivoAtrasoParaPersistir()),

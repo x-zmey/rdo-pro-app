@@ -11,14 +11,21 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'index.dart'; // Imports other custom actions
 
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dart:math';
 import '/backend/sqlite/situacao_soft_delete.dart';
 import '/auth/membership_access.dart';
 import 'download_obra_foto_local.dart';
+
+/// Preferência legada (one-shot). Recovery contínuo = full resync diário.
+const String _kObrasFullResyncV2 = 'obras_full_resync_v2';
+const String _kDailyScope = 'obras';
 
 // ===== FUNÇÕES UTILITÁRIAS (já existentes - copie da action anterior) =====
 
@@ -195,7 +202,7 @@ Future syncObras() async {
 
         // FAZER UPLOAD
         final uploadResponse = await http.post(
-          Uri.parse('https://api.rdopro.com.br/api/v1/sync/obras/upload'),
+          Uri.parse('$kApiBaseUrl/api/v1/sync/obras/upload'),
           headers: headers,
           body: json.encode({'dados': obrasParaEnviar}),
         );
@@ -244,8 +251,11 @@ Future syncObras() async {
 
     // ===== 2. DOWNLOAD - Buscar atualizações =====
     try {
-      // Full sync só se obra_travada e ainda faltam obras permitidas no SQLite.
-      var forceFull = false;
+      // Full sync: uma vez (watermark antigo) OU se obra_travada e faltam obras.
+      final prefs = await SharedPreferences.getInstance();
+      final alreadyRepaired = prefs.getBool(_kObrasFullResyncV2) ?? false;
+      final needsDaily = await shouldForceDailyFullResync(_kDailyScope);
+      var forceFull = !alreadyRepaired || needsDaily;
       if (MembershipAccess.obraTravada) {
         final allowed = FFAppState().allowedObraIds;
         if (allowed.isNotEmpty) {
@@ -281,12 +291,13 @@ Future syncObras() async {
         }
       }
       final lastSync = forceFull
-          ? '2000-01-01T00:00:00.000Z'
+          ? kSyncEpoch
           : await _getUltimaSync('obras');
-      print('📥 Buscando obras desde $token: $lastSync');
+      print(
+          '📥 Buscando obras desde: $lastSync${forceFull ? ' (resync completo)' : ''}');
 
       final downloadResponse = await http.post(
-        Uri.parse('https://api.rdopro.com.br/api/v1/sync/obras/download'),
+        Uri.parse('$kApiBaseUrl/api/v1/sync/obras/download'),
         headers: headers,
         body: json.encode({'ultima_sync': lastSync}),
       );
@@ -310,6 +321,10 @@ Future syncObras() async {
             where: 'synced = ?',
             whereArgs: [1],
           );
+        }
+        if (forceFull) {
+          await prefs.setBool(_kObrasFullResyncV2, true);
+          await markDailyFullResyncDone(_kDailyScope);
         }
         print('✅ Download concluído: $downloadedCount obras');
       } else if (downloadResponse.statusCode == 401) {

@@ -262,8 +262,8 @@ class _FlutterFlowDropDownState<T> extends State<FlutterFlowDropDown<T>> {
                     menuSetState(() {});
                   },
                   child: Container(
-                    height: double.infinity,
                     padding: horizontalMargin,
+                    alignment: AlignmentDirectional.centerStart,
                     child: Row(
                       children: [
                         if (isSelected)
@@ -273,7 +273,7 @@ class _FlutterFlowDropDownState<T> extends State<FlutterFlowDropDown<T>> {
                         const SizedBox(width: 16),
                         Expanded(
                           child: Text(
-                            optionLabels[item]!,
+                            optionLabels[item] ?? '',
                             style: widget.textStyle,
                           ),
                         ),
@@ -332,7 +332,7 @@ class _FlutterFlowDropDownState<T> extends State<FlutterFlowDropDown<T>> {
                           .where((v) => optionLabels.containsKey(v))
                           .map((v) => optionLabels[v])
                           .join(', ')
-                      : optionLabels[item]!,
+                      : (optionLabels[item] ?? ''),
                   style: widget.textStyle,
                   maxLines: 1,
                 )),

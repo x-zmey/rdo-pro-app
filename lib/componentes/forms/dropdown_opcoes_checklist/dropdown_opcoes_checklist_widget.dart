@@ -1,7 +1,7 @@
+import '/custom_code/actions/index.dart' as actions;
 import '/flutter_flow/flutter_flow_drop_down.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
 import '/flutter_flow/form_field_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -15,11 +15,13 @@ class DropdownOpcoesChecklistWidget extends StatefulWidget {
     required this.areaId,
     required this.itemId,
     required this.opcoes,
+    this.valorAtual,
   });
 
-  final int? areaId;
-  final int? itemId;
+  final dynamic areaId;
+  final dynamic itemId;
   final List<dynamic>? opcoes;
+  final String? valorAtual;
 
   @override
   State<DropdownOpcoesChecklistWidget> createState() =>
@@ -40,35 +42,41 @@ class _DropdownOpcoesChecklistWidgetState
   void initState() {
     super.initState();
     _model = createModel(context, () => DropdownOpcoesChecklistModel());
+    final inicial = (widget.valorAtual ?? '').trim();
+    if (inicial.isNotEmpty) {
+      _model.dropDownValue = inicial;
+    }
   }
 
   @override
   void dispose() {
     _model.maybeDispose();
-
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    context.watch<FFAppState>();
+    final options = (widget.opcoes ?? [])
+        .map((e) => getJsonField(e, r'''$['texto']''').toString())
+        .where((e) => e.trim().isNotEmpty)
+        .toList();
+
     return FlutterFlowDropDown<String>(
       controller: _model.dropDownValueController ??=
-          FormFieldController<String>(
-        _model.dropDownValue ??= getJsonField(
-          widget!.opcoes?.firstOrNull,
-          r'''$['texto']''',
-        ).toString(),
-      ),
-      options: widget!.opcoes!
-          .map((e) => getJsonField(
-                e,
-                r'''$['texto']''',
-              ))
-          .toList()
-          .map((e) => e.toString())
-          .toList(),
-      onChanged: (val) => safeSetState(() => _model.dropDownValue = val),
-      width: 200.0,
+          FormFieldController<String>(_model.dropDownValue),
+      options: options,
+      onChanged: (val) async {
+        safeSetState(() => _model.dropDownValue = val);
+        if (val == null) return;
+        await actions.salvarRespostaOpcao(
+          FFAppState().checklistAtualJson,
+          widget.areaId.toString(),
+          widget.itemId.toString(),
+          val,
+        );
+      },
+      width: double.infinity,
       height: 40.0,
       textStyle: FlutterFlowTheme.of(context).bodyMedium.override(
             font: GoogleFonts.inter(
@@ -76,8 +84,6 @@ class _DropdownOpcoesChecklistWidgetState
               fontStyle: FlutterFlowTheme.of(context).bodyMedium.fontStyle,
             ),
             letterSpacing: 0.0,
-            fontWeight: FlutterFlowTheme.of(context).bodyMedium.fontWeight,
-            fontStyle: FlutterFlowTheme.of(context).bodyMedium.fontStyle,
           ),
       hintText: 'Selecionar Opção',
       icon: Icon(
@@ -90,7 +96,7 @@ class _DropdownOpcoesChecklistWidgetState
       borderColor: Colors.transparent,
       borderWidth: 0.0,
       borderRadius: 8.0,
-      margin: EdgeInsetsDirectional.fromSTEB(12.0, 0.0, 12.0, 0.0),
+      margin: const EdgeInsetsDirectional.fromSTEB(12.0, 0.0, 12.0, 0.0),
       hidesUnderline: true,
       isOverButton: false,
       isSearchable: false,

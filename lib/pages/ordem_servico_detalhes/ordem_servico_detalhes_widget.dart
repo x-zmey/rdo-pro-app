@@ -1,5 +1,6 @@
 import '/auth/membership_access.dart';
 import '/backend/api_requests/api_calls.dart';
+import '/backend/api_requests/api_config.dart';
 import '/backend/sqlite/sqlite_manager.dart';
 import '/componentes/ui/rdo_estilo.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
@@ -188,7 +189,7 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
         return;
       }
       final uri = Uri.parse(
-        'https://api.rdopro.com.br/api/obras/ordens/$id/show',
+        '$kApiBaseUrl/api/obras/ordens/$id/show',
       );
       final res = await http.get(
         uri,
@@ -837,25 +838,64 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
     num custoTotal = 0;
     if (custos is List) {
       for (final c in custos) {
-        if (c is Map<String, dynamic>) {
-          custoTotal += num.tryParse('${c['valor_total'] ?? 0}') ?? 0;
+        if (c is Map) {
+          final map = Map<String, dynamic>.from(c);
+          final linha = num.tryParse('${map['valor_total'] ?? 0}') ?? 0;
+          if (linha > 0) {
+            custoTotal += linha;
+          } else {
+            final qtd = num.tryParse('${map['qtd_prevista'] ?? 0}') ?? 0;
+            final vu = num.tryParse('${map['valor_unitario'] ?? 0}') ?? 0;
+            custoTotal += qtd * vu;
+          }
         }
       }
     }
+    final valorCustosCampo =
+        num.tryParse('${_data?['valor_custos'] ?? 0}') ?? 0;
+    if (valorCustosCampo > 0) {
+      custoTotal = valorCustosCampo;
+    }
+
     final ts = _tarefas();
     num prog = 0, real = 0;
+    num orcamentoTarefas = 0;
+    num realizadoFinanceiro = 0;
     for (final t in ts) {
-      prog += num.tryParse('${t['qtd_programada'] ?? 0}') ?? 0;
-      real += num.tryParse('${t['qtd_realizada'] ?? 0}') ?? 0;
+      final qtdProg = num.tryParse('${t['qtd_programada'] ?? 0}') ?? 0;
+      final qtdReal = num.tryParse('${t['qtd_realizada'] ?? 0}') ?? 0;
+      final vu = num.tryParse('${t['valor_unitario'] ?? 0}') ?? 0;
+      prog += qtdProg;
+      real += qtdReal;
+      orcamentoTarefas += qtdProg * vu;
+      realizadoFinanceiro += qtdReal * vu;
     }
+    orcamentoTarefas = (orcamentoTarefas * 100).round() / 100;
+    realizadoFinanceiro = (realizadoFinanceiro * 100).round() / 100;
+
+    // Receita prevista = orçamento das tarefas (igual à web). Fallback: valor_total − BDI − impostos.
+    if (orcamentoTarefas <= 0) {
+      final vt = num.tryParse('${_data?['valor_total'] ?? 0}') ?? 0;
+      final vb = num.tryParse('${_data?['valor_bdi'] ?? 0}') ?? 0;
+      final vi = num.tryParse('${_data?['valor_impostos'] ?? 0}') ?? 0;
+      orcamentoTarefas = ((vt - vb - vi) * 100).round() / 100;
+      if (orcamentoTarefas < 0) orcamentoTarefas = 0;
+    }
+
     final bdiPct = num.tryParse('${_data?['percentual_bdi'] ?? 0}') ?? 0;
     final impPct = num.tryParse('${_data?['percentual_impostos'] ?? 0}') ?? 0;
-    final valorBdi = num.tryParse('${_data?['valor_bdi'] ?? 0}') ??
-        (custoTotal * bdiPct / 100);
-    final valorImp = num.tryParse('${_data?['valor_impostos'] ?? 0}') ??
-        (custoTotal * impPct / 100);
-    final valorTotal = num.tryParse('${_data?['valor_total'] ?? 0}') ??
-        (custoTotal + valorBdi + valorImp);
+    num valorBdi = num.tryParse('${_data?['valor_bdi'] ?? 0}') ?? 0;
+    num valorImp = num.tryParse('${_data?['valor_impostos'] ?? 0}') ?? 0;
+    if (valorBdi == 0 && bdiPct > 0 && orcamentoTarefas > 0) {
+      valorBdi = (orcamentoTarefas * bdiPct / 100 * 100).round() / 100;
+    }
+    if (valorImp == 0 && impPct > 0 && orcamentoTarefas > 0) {
+      valorImp = (orcamentoTarefas * impPct / 100 * 100).round() / 100;
+    }
+
+    final totalCustosComTributos =
+        ((custoTotal + valorBdi + valorImp) * 100).round() / 100;
+
     return {
       'custoTotal': custoTotal,
       'programadaTotal': prog,
@@ -863,7 +903,15 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
       'saldoTotal': prog - real,
       'valorBdi': valorBdi,
       'valorImpostos': valorImp,
-      'valorTotal': valorTotal,
+      // Receita prevista (orçamento das tarefas) — KPI do topo.
+      'receitaPrevista': orcamentoTarefas,
+      'realizadoFinanceiro': realizadoFinanceiro,
+      'saldoFinanceiro':
+          ((orcamentoTarefas - realizadoFinanceiro) * 100).round() / 100,
+      // Total da seção custos = diretos + BDI + impostos.
+      'totalCustosComTributos': totalCustosComTributos,
+      // Mantido por compatibilidade; não usar como receita prevista.
+      'valorTotal': orcamentoTarefas,
     };
   }
 
@@ -1110,8 +1158,8 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
                 value: '${_tarefas().length}',
               ),
               RdoKpiData(
-                label: 'Valor total',
-                value: _formatCurrency(tot['valorTotal']),
+                label: 'Receita prevista',
+                value: _formatCurrency(tot['receitaPrevista']),
                 flex: 2,
                 destaque: true,
               ),
@@ -1291,7 +1339,7 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Solicite a revogação desta ordem aprovada para reabrir o fluxo.',
+                  'Solicite a revogação desta ordem (em aprovação ou aprovada) para reabrir o fluxo.',
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     color: theme.secondaryText,
@@ -1781,8 +1829,8 @@ class _OrdemServicoDetalhesWidgetState extends State<OrdemServicoDetalhesWidget>
                         value: _formatCurrency(tot['valorImpostos']),
                       ),
                     RdoKpiData(
-                      label: 'Total',
-                      value: _formatCurrency(tot['valorTotal']),
+                      label: 'Total c/ tributos',
+                      value: _formatCurrency(tot['totalCustosComTributos']),
                       destaque: true,
                       flex: 2,
                     ),

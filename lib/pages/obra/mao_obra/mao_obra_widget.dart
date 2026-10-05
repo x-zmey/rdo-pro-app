@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '/auth/membership_access.dart';
+import '/backend/api_requests/api_config.dart';
 import '/backend/sqlite/situacao_soft_delete.dart';
 import '/backend/sqlite/sqlite_manager.dart' show SQLiteManager;
 import '/componentes/navegacao/barra_navegacao_principal.dart';
@@ -277,7 +278,7 @@ class _MaoObraWidgetState extends State<MaoObraWidget> {
     try {
       final response = await http.get(
         Uri.parse(
-          'https://api.rdopro.com.br/api/obras/$obraIdentifier/itens?tipo=mao_obra',
+          '$kApiBaseUrl/api/obras/$obraIdentifier/itens?tipo=mao_obra',
         ),
         headers: {
           'Authorization': 'Bearer ${_token()}',
@@ -338,7 +339,7 @@ class _MaoObraWidgetState extends State<MaoObraWidget> {
     if (!force && _profissionais.isNotEmpty) return null;
     try {
       final response = await http.get(
-        Uri.parse('https://api.rdopro.com.br/api/mao-obra-profissionais'),
+        Uri.parse('$kApiBaseUrl/api/mao-obra-profissionais'),
         headers: {
           'Authorization': 'Bearer ${_token()}',
           'Accept': 'application/json',
@@ -392,7 +393,7 @@ class _MaoObraWidgetState extends State<MaoObraWidget> {
   Future<void> _fetchFuncoesMaoObra() async {
     try {
       final response = await http.get(
-        Uri.parse('https://api.rdopro.com.br/api/funcoes-mao-obra'),
+        Uri.parse('$kApiBaseUrl/api/funcoes-mao-obra'),
         headers: {
           'Authorization': 'Bearer ${_token()}',
           'Accept': 'application/json',
@@ -1177,7 +1178,7 @@ class _MaoObraWidgetState extends State<MaoObraWidget> {
 
       final response = await http.post(
         Uri.parse(
-          'https://api.rdopro.com.br/api/obras/$obraIdentifier/itens/mao-obra',
+          '$kApiBaseUrl/api/obras/$obraIdentifier/itens/mao-obra',
         ),
         headers: {
           'Authorization': 'Bearer ${_token()}',
@@ -1282,7 +1283,7 @@ class _MaoObraWidgetState extends State<MaoObraWidget> {
     try {
       final response = await http.delete(
         Uri.parse(
-          'https://api.rdopro.com.br/api/obras/itens/$itemIdentifier',
+          '$kApiBaseUrl/api/obras/itens/$itemIdentifier',
         ),
         headers: {
           'Authorization': 'Bearer ${_token()}',

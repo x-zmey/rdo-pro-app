@@ -11,6 +11,8 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'index.dart'; // Imports other custom actions
 
 import 'package:http/http.dart' as http;
@@ -150,7 +152,7 @@ Future syncOrdensCustos() async {
         // FAZER UPLOAD
         final uploadResponse = await http.post(
           Uri.parse(
-              'https://api.rdopro.com.br/api/v1/sync/ordens/custos-upload'),
+              '$kApiBaseUrl/api/v1/sync/ordens/custos-upload'),
           headers: headers,
           body: json.encode({'dados': ordensCustosParaEnviar}),
         );
@@ -197,16 +199,17 @@ Future syncOrdensCustos() async {
       print('❌ Erro no upload: $e');
     }*/
 
-    // ===== 2. DOWNLOAD - Buscar atualizações =====
+    // ===== 2. DOWNLOAD - completo (evita watermark pular custos novos) =====
     try {
-      final lastSync = await _getUltimaSync('ordem_servico_custos');
-      print('📥 Buscando ordens custos desde: $lastSync');
+      print('📥 Buscando todos os custos de OS (tenant)...');
 
       final downloadResponse = await http.post(
         Uri.parse(
-            'https://api.rdopro.com.br/api/v1/sync/ordens-servico/custos/download'),
+            '$kApiBaseUrl/api/v1/sync/ordens-servico/custos/download'),
         headers: headers,
-        body: json.encode({'ultima_sync': lastSync}),
+        body: json.encode(<String, dynamic>{
+          'ultima_sync': null,
+        }),
       );
 
       if (downloadResponse.statusCode == 200) {
@@ -277,43 +280,44 @@ Future<void> _processarOrdemCusto(
     whereArgs: [uuid],
   );
 
+  final row = <String, dynamic>{
+    'ordem_servico_id': ordemCustoServer['ordem_servico_id'],
+    'ordem_servico_uuid': ordemCustoServer['ordem_servico_uuid'] ?? '',
+    'descricao': ordemCustoServer['descricao'],
+    'origem': (ordemCustoServer['origem'] ?? 'avulso').toString(),
+    'obra_item_id': ordemCustoServer['obra_item_id'],
+    'obra_item_uuid': (ordemCustoServer['obra_item_uuid'] ?? '').toString(),
+    'fixo': ordemCustoServer['fixo'] == true ||
+            ordemCustoServer['fixo'] == 1 ||
+            ordemCustoServer['fixo'] == '1'
+        ? 1
+        : 0,
+    'unidade': ordemCustoServer['unidade'],
+    'qtd_prevista': ordemCustoServer['qtd_prevista'],
+    'valor_unitario': ordemCustoServer['valor_unitario'],
+    'valor_total': ordemCustoServer['valor_total'],
+    'synced': 1,
+    'last_sync_date': serverTime,
+    'created_at': ordemCustoServer['created_at'],
+    'updated_at': ordemCustoServer['updated_at'],
+  };
+  if (ordemCustoServer['situacao'] != null) {
+    row['situacao'] = ordemCustoServer['situacao'];
+  }
+
   if (existe.isNotEmpty) {
-    // UPDATE
     await db.update(
       'ordem_servico_custos',
-      {
-        'ordem_servico_id': ordemCustoServer['ordem_servico_id'],
-        'ordem_servico_uuid': ordemCustoServer['ordem_servico_uuid'] ?? '',
-        'descricao': ordemCustoServer['descricao'],
-        'unidade': ordemCustoServer['unidade'],
-        'qtd_prevista': ordemCustoServer['qtd_prevista'],
-        'valor_unitario': ordemCustoServer['valor_unitario'],
-        'valor_total': ordemCustoServer['valor_total'],
-        'synced': 1,
-        'last_sync_date': serverTime,
-        'created_at': ordemCustoServer['created_at'],
-        'updated_at': ordemCustoServer['updated_at'],
-      },
+      row,
       where: 'uuid = ?',
       whereArgs: [uuid],
     );
   } else {
-    // INSERT
     await db.insert(
       'ordem_servico_custos',
       {
         'uuid': uuid,
-        'ordem_servico_id': ordemCustoServer['ordem_servico_id'],
-        'ordem_servico_uuid': ordemCustoServer['ordem_servico_uuid'] ?? '',
-        'descricao': ordemCustoServer['descricao'],
-        'unidade': ordemCustoServer['unidade'],
-        'qtd_prevista': ordemCustoServer['qtd_prevista'],
-        'valor_unitario': ordemCustoServer['valor_unitario'],
-        'valor_total': ordemCustoServer['valor_total'],
-        'synced': 1,
-        'last_sync_date': serverTime,
-        'created_at': ordemCustoServer['created_at'],
-        'updated_at': ordemCustoServer['updated_at'],
+        ...row,
       },
     );
   }

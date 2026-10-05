@@ -162,6 +162,9 @@ Future<String> inserirOrdemServicoNoRelatorio(
     await SQLiteManager.instance.touchRelatorioModificadoLocal(
       relatorioId: relatorioId,
     );
+    await SQLiteManager.instance.sincronizarCustosOsComUsoAtividades(
+      relatorioId: relatorioId,
+    );
 
     // Atualizar AppState com resultados
     try {

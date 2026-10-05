@@ -11,6 +11,8 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'index.dart'; // Imports other custom actions
 
 import 'package:http/http.dart' as http;
@@ -169,7 +171,7 @@ Future syncOrdensTarefas() async {
         // FAZER UPLOAD
         final uploadResponse = await http.post(
           Uri.parse(
-              'https://api.rdopro.com.br/api/v1/sync/ordens/tarefas-upload'),
+              '$kApiBaseUrl/api/v1/sync/ordens/tarefas-upload'),
           headers: headers,
           body: json.encode({'dados': ordensTarefasParaEnviar}),
         );
@@ -216,16 +218,17 @@ Future syncOrdensTarefas() async {
       print('❌ Erro no upload: $e');
     }*/
 
-    // ===== 2. DOWNLOAD - Buscar atualizações =====
+    // ===== 2. DOWNLOAD - completo (evita watermark pular OS/tarefas novas) =====
     try {
-      final lastSync = await _getUltimaSync('ordem_servico_tarefas');
-      print('📥 Buscando ordens tarefas desde: $lastSync');
+      print('📥 Buscando todas as ordens tarefas (tenant)...');
 
       final downloadResponse = await http.post(
         Uri.parse(
-            'https://api.rdopro.com.br/api/v1/sync/ordens-servico/tarefas/download'),
+            '$kApiBaseUrl/api/v1/sync/ordens-servico/tarefas/download'),
         headers: headers,
-        body: json.encode({'ultima_sync': lastSync}),
+        body: json.encode(<String, dynamic>{
+          'ultima_sync': null,
+        }),
       );
 
       if (downloadResponse.statusCode == 200) {

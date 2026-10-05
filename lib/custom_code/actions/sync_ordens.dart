@@ -10,9 +10,12 @@ import 'package:flutter/material.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'index.dart'; // Imports other custom actions
 
 import 'package:http/http.dart' as http;
+import 'package:sqflite/sqflite.dart';
 import 'dart:convert';
 import 'dart:math';
 
@@ -35,6 +38,103 @@ Future<void> _salvarMapeamento(
       print('❌ Erro ao salvar mapeamento: $e');
     }
   }
+}
+
+/// Preenche `obra_uuid` quando o sync antigo gravou só `obra_id` (server).
+Future<int> _backfillObraUuidLocal(Database db) async {
+  var total = 0;
+  try {
+    total += await db.rawUpdate('''
+UPDATE ordens_servico
+SET obra_uuid = (
+  SELECT m.uuid FROM sync_id_mapping AS m
+  WHERE m.tabela = 'obras' AND m.id_servidor = ordens_servico.obra_id
+  LIMIT 1
+)
+WHERE (obra_uuid IS NULL OR TRIM(obra_uuid) = '')
+  AND obra_id IS NOT NULL
+''');
+  } catch (_) {}
+  try {
+    total += await db.rawUpdate('''
+UPDATE ordens_servico
+SET obra_uuid = (
+  SELECT o.uuid FROM obras AS o
+  WHERE o.id = ordens_servico.obra_id
+  LIMIT 1
+)
+WHERE (obra_uuid IS NULL OR TRIM(obra_uuid) = '')
+  AND obra_id IS NOT NULL
+''');
+  } catch (_) {}
+  if (total > 0) {
+    print('🔧 Backfill obra_uuid em $total ordens_servico');
+  }
+  return total;
+}
+
+Future<int?> _serverIdObraPorUuid(String obraUuid) async {
+  final db = await SQLiteManager.instance.database;
+  final maps = await db.query(
+    'sync_id_mapping',
+    columns: ['id_servidor'],
+    where: 'tabela = ? AND uuid = ?',
+    whereArgs: ['obras', obraUuid],
+    limit: 1,
+  );
+  if (maps.isEmpty) return null;
+  final v = maps.first['id_servidor'];
+  if (v is int) return v;
+  if (v is num) return v.toInt();
+  return int.tryParse(v?.toString() ?? '');
+}
+
+List<Map<String, dynamic>> _extractOrdensList(dynamic body) {
+  if (body is List) {
+    return body
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+  if (body is Map) {
+    final ordens = body['ordens'];
+    if (ordens is Map && ordens['data'] is List) {
+      return (ordens['data'] as List)
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    if (ordens is List) {
+      return ordens
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    for (final key in ['dados', 'data', 'value']) {
+      final c = body[key];
+      if (c is List) {
+        return c
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+    }
+  }
+  return <Map<String, dynamic>>[];
+}
+
+int _totalPagesOrdens(dynamic body) {
+  if (body is! Map) return 1;
+  final tp = body['totalPages'];
+  if (tp is int) return tp < 1 ? 1 : tp;
+  if (tp is num) return tp.toInt().clamp(1, 9999);
+  final ordens = body['ordens'];
+  if (ordens is Map) {
+    final lp = ordens['last_page'];
+    if (lp is int) return lp < 1 ? 1 : lp;
+    if (lp is num) return lp.toInt().clamp(1, 9999);
+  }
+  return 1;
 }
 
 Future<int?> _getIdLocalPorIdServidor(String tabela, int idServidor) async {
@@ -160,7 +260,7 @@ Future syncOrdens() async {
 
         // FAZER UPLOAD
         final uploadResponse = await http.post(
-          Uri.parse('https://api.rdopro.com.br/api/v1/sync/ordens/upload'),
+          Uri.parse('$kApiBaseUrl/api/v1/sync/ordens/upload'),
           headers: headers,
           body: json.encode({'dados': ordensParaEnviar}),
         );
@@ -214,11 +314,12 @@ Future syncOrdens() async {
     // watermark local ficava “à frente”, havia skew de relógio ou o status mudou
     // sem refletir na janela incremental.
     try {
+      await _backfillObraUuidLocal(db);
       print('📥 Buscando todas as ordens de serviço (tenant)...');
 
       final downloadResponse = await http.post(
         Uri.parse(
-            'https://api.rdopro.com.br/api/v1/sync/ordens-servico/download'),
+            '$kApiBaseUrl/api/v1/sync/ordens-servico/download'),
         headers: headers,
         body: json.encode(<String, dynamic>{
           'ultima_sync': null,
@@ -232,9 +333,15 @@ Future syncOrdens() async {
         print('📥 Recebidas ${ordensDoServidor.length} ordens');
 
         for (var ordemServer in ordensDoServidor) {
-          await _processarOrdem(ordemServer, downloadResult['server_time']);
+          await _processarOrdem(
+            Map<String, dynamic>.from(ordemServer as Map),
+            downloadResult['server_time']?.toString() ??
+                DateTime.now().toUtc().toIso8601String(),
+          );
           downloadedCount++;
         }
+
+        await _backfillObraUuidLocal(db);
 
         // ATUALIZAR LAST_SYNC_DATE (resposta OK: mesmo lista vazia confirma estado no servidor)
         await db.update(
@@ -277,14 +384,25 @@ Future syncOrdens() async {
 // ===== FUNÇÃO DE PROCESSAMENTO DE ORDEM =====
 
 Future<void> _processarOrdem(
-    Map<String, dynamic> ordemServer, String serverTime) async {
+  Map<String, dynamic> ordemServer,
+  String serverTime, {
+  String? forceObraUuid,
+  bool touchLastSync = true,
+}) async {
   final db = await SQLiteManager.instance.database;
 
-  String uuid = ordemServer['uuid'] ?? _generateUuid();
+  String uuid = ordemServer['uuid']?.toString() ?? _generateUuid();
+  if (uuid.trim().isEmpty || uuid.toLowerCase() == 'null') {
+    uuid = _generateUuid();
+  }
 
   // SALVAR MAPEAMENTO (ID servidor → UUID)
-  if (ordemServer['id'] != null) {
-    await _salvarMapeamento('ordens_servico', ordemServer['id'] as int, uuid);
+  final sid = ordemServer['id'];
+  final sidInt = sid is int
+      ? sid
+      : (sid is num ? sid.toInt() : int.tryParse(sid?.toString() ?? ''));
+  if (sidInt != null) {
+    await _salvarMapeamento('ordens_servico', sidInt, uuid);
   }
 
   // VERIFICAR SE EXISTE
@@ -294,59 +412,139 @@ Future<void> _processarOrdem(
     whereArgs: [uuid],
   );
 
+  final obraUuid = _nonEmptyStr(forceObraUuid) ??
+      _nonEmptyStr(ordemServer['obra_uuid']) ??
+      (ordemServer['obra'] is Map
+          ? _nonEmptyStr((ordemServer['obra'] as Map)['uuid'])
+          : null);
+
+  final rowComum = <String, dynamic>{
+    'obra_uuid': obraUuid,
+    'user_uuid': _nonEmptyStr(ordemServer['user_uuid']),
+    'obra_id': ordemServer['obra_id'],
+    'user_id': ordemServer['user_id'],
+    'codigo': ordemServer['codigo'],
+    'nome': ordemServer['nome'],
+    'data_emissao': ordemServer['data_emissao'],
+    'data_inicio': ordemServer['data_inicio'],
+    // No SQLite (`nova.sql`) o campo é `data_fim`.
+    // Mantemos fallback para `data_final` caso o payload venha legado.
+    'data_fim': (ordemServer['data_fim'] ?? ordemServer['data_final']),
+    'situacao': ordemServer['situacao'],
+    'status_id': int.tryParse('${ordemServer['status_id'] ?? 1}') ?? 1,
+    'observacoes': ordemServer['observacoes'],
+    'created_by': _createdByLocal(ordemServer),
+    'synced': 1,
+    'created_at': ordemServer['created_at'],
+    'updated_at': ordemServer['updated_at'],
+  };
+  if (touchLastSync) {
+    rowComum['last_sync_date'] = serverTime;
+  }
+
   if (existe.isNotEmpty) {
-    // UPDATE
     await db.update(
       'ordens_servico',
-      {
-        'obra_uuid': _nonEmptyStr(ordemServer['obra_uuid']),
-        'user_uuid': _nonEmptyStr(ordemServer['user_uuid']),
-        'obra_id': ordemServer['obra_id'],
-        'user_id': ordemServer['user_id'],
-        'codigo': ordemServer['codigo'],
-        'nome': ordemServer['nome'],
-        'data_emissao': ordemServer['data_emissao'],
-        'data_inicio': ordemServer['data_inicio'],
-        // No SQLite (`nova.sql`) o campo é `data_fim`.
-        // Mantemos fallback para `data_final` caso o payload venha legado.
-        'data_fim': (ordemServer['data_fim'] ?? ordemServer['data_final']),
-        'situacao': ordemServer['situacao'],
-        'status_id': int.tryParse('${ordemServer['status_id'] ?? 1}') ?? 1,
-        'observacoes': ordemServer['observacoes'],
-        'created_by': _createdByLocal(ordemServer),
-        'synced': 1,
-        'last_sync_date': serverTime,
-        'created_at': ordemServer['created_at'],
-        'updated_at': ordemServer['updated_at'],
-      },
+      rowComum,
       where: 'uuid = ?',
       whereArgs: [uuid],
     );
   } else {
-    // INSERT
     await db.insert(
       'ordens_servico',
       {
         'uuid': uuid,
-        'obra_uuid': _nonEmptyStr(ordemServer['obra_uuid']),
-        'user_uuid': _nonEmptyStr(ordemServer['user_uuid']),
-        'obra_id': ordemServer['obra_id'],
-        'user_id': ordemServer['user_id'],
-        'codigo': ordemServer['codigo'],
-        'nome': ordemServer['nome'],
-        'data_emissao': ordemServer['data_emissao'],
-        'data_inicio': ordemServer['data_inicio'],
-        'data_fim': (ordemServer['data_fim'] ?? ordemServer['data_final']),
-        'situacao': ordemServer['situacao'],
-        'status_id': int.tryParse('${ordemServer['status_id'] ?? 1}') ?? 1,
-        'observacoes': ordemServer['observacoes'],
-        'created_by': _createdByLocal(ordemServer),
-        'synced': 1,
-        'last_sync_date': serverTime,
-        'created_at': ordemServer['created_at'],
-        'updated_at': ordemServer['updated_at'],
+        ...rowComum,
+        if (!touchLastSync) 'last_sync_date': serverTime,
       },
     );
+  }
+}
+
+/// Baixa `/obras/{uuid}/list-ordens` e grava no SQLite (mesma fonte da lista web).
+/// Usado ao abrir pickers de OS no RDO / tela da obra.
+Future<void> refreshOrdensPorObra({required String obraUuid}) async {
+  final uuid = obraUuid.trim();
+  if (uuid.isEmpty) return;
+
+  final token = await _getAuthToken();
+  if (token.isEmpty) return;
+
+  final online = await checkInternetConnection();
+  if (!online) return;
+
+  try {
+    final db = await SQLiteManager.instance.database;
+    await _backfillObraUuidLocal(db);
+
+    // Preferimos UUID (backend resolve); se falhar, tenta id servidor local.
+    final identificadores = <String>[uuid];
+    final sid = await _serverIdObraPorUuid(uuid);
+    if (sid != null && sid > 0) {
+      identificadores.add('$sid');
+    }
+
+    var total = 0;
+    var ok = false;
+    for (final ident in identificadores) {
+      var page = 1;
+      var lastPage = 1;
+      var gotAny = false;
+      while (page <= lastPage && page <= 50) {
+        final response = await http.get(
+          Uri.parse(
+            '$kApiBaseUrl/api/obras/$ident/list-ordens?itemsPerPage=200&page=$page',
+          ),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        );
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          if (page == 1) break;
+          print(
+              '⚠️ refreshOrdensPorObra HTTP ${response.statusCode}: ${response.body}');
+          break;
+        }
+        ok = true;
+        final dynamic body =
+            response.body.isNotEmpty ? json.decode(response.body) : null;
+        lastPage = _totalPagesOrdens(body);
+        final ordens = _extractOrdensList(body);
+        if (ordens.isEmpty && page == 1) {
+          gotAny = true; // lista vazia válida
+          break;
+        }
+        gotAny = true;
+        final now = DateTime.now().toUtc().toIso8601String();
+        for (final raw in ordens) {
+          final ordem = Map<String, dynamic>.from(raw);
+          ordem['obra_uuid'] = uuid;
+          await _processarOrdem(
+            ordem,
+            now,
+            forceObraUuid: uuid,
+            touchLastSync: false,
+          );
+          total++;
+        }
+        page++;
+      }
+      if (ok && gotAny) break;
+    }
+
+    if (!ok) {
+      // Fallback: sync completo do tenant (não depende de list-ordens).
+      await syncOrdens();
+      await _backfillObraUuidLocal(db);
+      print('⚠️ refreshOrdensPorObra: fallback syncOrdens()');
+      return;
+    }
+
+    await _backfillObraUuidLocal(db);
+    print('✅ refreshOrdensPorObra: $total ordens da obra $uuid');
+  } catch (e) {
+    print('⚠️ refreshOrdensPorObra: $e');
   }
 }
 

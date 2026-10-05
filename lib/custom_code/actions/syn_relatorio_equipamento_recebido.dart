@@ -11,6 +11,8 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'index.dart'; // Imports other custom actions
 
 import 'index.dart'; // Imports other custom actions
@@ -24,9 +26,9 @@ import 'sync_relatorio_download_merge_guard.dart';
 
 /// Trim evita newline final na URL (Laravel devolvia MethodNotAllowed com `%0A`).
 const String _kUrlUploadEquipamentoRecebido =
-    'https://api.rdopro.com.br/api/v1/sync/relatorios/equipamentos-recebidos/upload';
+    '$kApiBaseUrl/api/v1/sync/relatorios/equipamentos-recebidos/upload';
 const String _kUrlDownloadEquipamentoRecebido =
-    'https://api.rdopro.com.br/api/v1/sync/relatorios/equipamentos-recebidos/download';
+    '$kApiBaseUrl/api/v1/sync/relatorios/equipamentos-recebidos/download';
 
 Uri _uriEquipamentoRecebidoUpload() =>
     Uri.parse(_kUrlUploadEquipamentoRecebido.trim());

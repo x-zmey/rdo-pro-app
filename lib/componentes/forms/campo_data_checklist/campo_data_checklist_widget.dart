@@ -2,6 +2,7 @@ import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
 import '/custom_code/actions/index.dart' as actions;
+import 'dart:convert';
 import 'package:easy_debounce/easy_debounce.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -18,9 +19,9 @@ class CampoDataChecklistWidget extends StatefulWidget {
     required this.perguntaId,
   });
 
-  final int? index;
-  final int? areaId;
-  final int? perguntaId;
+  final dynamic index;
+  final dynamic areaId;
+  final dynamic perguntaId;
 
   @override
   State<CampoDataChecklistWidget> createState() =>
@@ -41,17 +42,54 @@ class _CampoDataChecklistWidgetState extends State<CampoDataChecklistWidget> {
     super.initState();
     _model = createModel(context, () => CampoDataChecklistModel());
 
-    _model.textController ??= TextEditingController();
+    _model.textController ??= TextEditingController(text: _valorSalvo());
     _model.textFieldFocusNode ??= FocusNode();
 
     _model.textFieldMask = MaskTextInputFormatter(mask: '##/##/####');
   }
 
+  String _valorSalvo() {
+    try {
+      final envelope = jsonDecode(FFAppState().checklistAtualJson);
+      if (envelope is! Map) return '';
+      final td = envelope['template_data'];
+      if (td is! Map) return '';
+      for (final area in td['areas'] as List? ?? []) {
+        if (area is! Map ||
+            area['id']?.toString() != widget.areaId.toString()) {
+          continue;
+        }
+        for (final item in area['items'] as List? ?? []) {
+          if (item is! Map ||
+              item['id']?.toString() != widget.perguntaId.toString()) {
+            continue;
+          }
+          return (item['respostaData'] ?? '').toString();
+        }
+      }
+    } catch (_) {}
+    return '';
+  }
+
   @override
   void dispose() {
+    EasyDebounce.cancel(_debounceKey);
+    _persistNow();
     _model.maybeDispose();
 
     super.dispose();
+  }
+
+  String get _debounceKey =>
+      'checklist_data_${widget.areaId}_${widget.perguntaId}';
+
+  Future<void> _persistNow() async {
+    await actions.salvarRespostaData(
+      FFAppState().checklistAtualJson,
+      widget.areaId.toString(),
+      widget.perguntaId.toString(),
+      _model.textController?.text ?? '',
+    );
   }
 
   @override
@@ -62,15 +100,10 @@ class _CampoDataChecklistWidgetState extends State<CampoDataChecklistWidget> {
       controller: _model.textController,
       focusNode: _model.textFieldFocusNode,
       onChanged: (_) => EasyDebounce.debounce(
-        '_model.textController',
-        Duration(milliseconds: 2000),
+        _debounceKey,
+        Duration(milliseconds: 800),
         () async {
-          await actions.salvarRespostaTexto(
-            FFAppState().checklistAtualJson,
-            widget!.areaId!.toString(),
-            widget!.perguntaId!.toString(),
-            _model.textController.text,
-          );
+          await _persistNow();
         },
       ),
       autofocus: false,

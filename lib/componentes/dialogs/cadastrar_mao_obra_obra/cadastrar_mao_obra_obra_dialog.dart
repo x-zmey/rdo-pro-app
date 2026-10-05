@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import '/backend/api_requests/api_config.dart';
 
 /// Abre cadastro de mão de obra vinculada à obra em dialog fullscreen.
 /// Retorna o UUID do [obra_itens] criado, ou null se cancelado.
@@ -204,7 +205,7 @@ class _CadastrarMaoObraObraDialogWidgetState
     try {
       final response = await http
           .get(
-            Uri.parse('https://api.rdopro.com.br/api/mao-obra-profissionais'),
+            Uri.parse('$kApiBaseUrl/api/mao-obra-profissionais'),
             headers: _apiHeaders(json: false),
           )
           .timeout(const Duration(seconds: 15));
@@ -250,7 +251,7 @@ class _CadastrarMaoObraObraDialogWidgetState
   Future<void> _fetchFuncoesMaoObra() async {
     try {
       final response = await http.get(
-        Uri.parse('https://api.rdopro.com.br/api/funcoes-mao-obra'),
+        Uri.parse('$kApiBaseUrl/api/funcoes-mao-obra'),
         headers: _apiHeaders(json: false),
       );
       if (response.statusCode < 200 || response.statusCode >= 300) return;
@@ -354,7 +355,7 @@ class _CadastrarMaoObraObraDialogWidgetState
 
       final response = await http.post(
         Uri.parse(
-          'https://api.rdopro.com.br/api/obras/$obraIdentifier/itens/mao-obra',
+          '$kApiBaseUrl/api/obras/$obraIdentifier/itens/mao-obra',
         ),
         headers: _apiHeaders(),
         body: jsonEncode(payload),
@@ -373,6 +374,10 @@ class _CadastrarMaoObraObraDialogWidgetState
 
       await actions.syncMaoObra();
       await actions.syncObrasItens();
+      await actions.refreshObraItensPorTipo(
+        obraUuid: widget.obraUuid.trim(),
+        tipo: 'mao_obra',
+      );
 
       if (!mounted) return;
       final itemUuid = _extractItemUuid(body);

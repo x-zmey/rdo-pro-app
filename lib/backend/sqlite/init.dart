@@ -49,9 +49,24 @@ Future<Database> initializeDatabaseFromDbFile(
   await normalizeRelatorioAtividadeFotosForUpload(database);
   await normalizeRelatorioEquipamentoRecebidoForUpload(database);
   await _ensureObraItensCargoFuncaoColumn(database);
+  await _ensureOrdemServicoCustosVinculoColumns(database);
+  await _ensureRelatorioCustosQtdManualColumn(database);
   await _ensureFuncoesMaoObraTable(database);
   await ensureEmpresaMultiTenantTables(database);
   return database;
+}
+
+/// Override manual do realizado na OS (igual ao MySQL `relatorio_custos.qtd_manual`).
+Future<void> _ensureRelatorioCustosQtdManualColumn(Database database) async {
+  try {
+    final info = await database.rawQuery('PRAGMA table_info(relatorio_custos)');
+    if (info.isEmpty) return;
+    final has = info.any((row) => row['name'] == 'qtd_manual');
+    if (has) return;
+    await database.execute(
+      'ALTER TABLE relatorio_custos ADD COLUMN qtd_manual INTEGER NOT NULL DEFAULT 0',
+    );
+  } catch (_) {}
 }
 
 Future<void> _ensureFuncoesMaoObraTable(Database database) async {
@@ -165,6 +180,92 @@ Future<void> _ensureObraItensCargoFuncaoColumn(Database database) async {
     await database.execute(
       'ALTER TABLE obra_itens ADD COLUMN cargo_funcao TEXT',
     );
+  } catch (_) {}
+}
+
+/// `origem`, `fixo` e vínculo com `obra_itens` em custos da OS (igual ao MySQL).
+Future<void> _ensureOrdemServicoCustosVinculoColumns(Database database) async {
+  try {
+    final info =
+        await database.rawQuery('PRAGMA table_info(ordem_servico_custos)');
+    if (info.isEmpty) return;
+    final names = info
+        .map((row) => row['name'] as String?)
+        .whereType<String>()
+        .toSet();
+
+    Future<void> add(String name, String def) async {
+      if (names.contains(name)) return;
+      await database.execute(
+        'ALTER TABLE ordem_servico_custos ADD COLUMN $name $def',
+      );
+      names.add(name);
+    }
+
+    await add('origem', 'TEXT');
+    await add('fixo', 'INTEGER NOT NULL DEFAULT 0');
+    await add('obra_item_id', 'INTEGER');
+    await add('obra_item_uuid', 'TEXT');
+    await _backfillOrdemServicoCustosVinculos(database);
+  } catch (_) {}
+}
+
+Future<void> _backfillOrdemServicoCustosVinculos(Database database) async {
+  try {
+    final custos = await database.rawQuery('''
+SELECT osc.id, osc.descricao, osc.origem, osc.obra_item_id,
+       os.obra_id, os.obra_uuid
+FROM ordem_servico_custos AS osc
+LEFT JOIN ordens_servico AS os
+  ON os.uuid = osc.ordem_servico_uuid
+  OR (osc.ordem_servico_id IS NOT NULL AND os.id = osc.ordem_servico_id)
+WHERE (osc.obra_item_id IS NULL OR osc.obra_item_id = 0)
+  AND TRIM(COALESCE(osc.descricao, '')) != ''
+''');
+
+    for (final row in custos) {
+      final desc = (row['descricao'] as String? ?? '').trim().toLowerCase();
+      if (desc.isEmpty) continue;
+      final obraId = row['obra_id'];
+      final obraUuid = (row['obra_uuid'] as String? ?? '').trim();
+
+      List<Map<String, Object?>> matches = const [];
+      if (obraId != null && obraId.toString() != '0') {
+        matches = await database.rawQuery(
+          '''
+SELECT id, uuid, tipo FROM obra_itens
+WHERE obra_id = ?
+  AND LOWER(TRIM(descricao)) = ?
+  AND tipo IN ('insumo', 'mao_obra', 'equipamento')
+  AND (situacao IS NULL OR CAST(situacao AS INTEGER) != -2)
+''',
+          [obraId, desc],
+        );
+      } else if (obraUuid.isNotEmpty) {
+        matches = await database.rawQuery(
+          '''
+SELECT id, uuid, tipo FROM obra_itens
+WHERE obra_uuid = ?
+  AND LOWER(TRIM(descricao)) = ?
+  AND tipo IN ('insumo', 'mao_obra', 'equipamento')
+  AND (situacao IS NULL OR CAST(situacao AS INTEGER) != -2)
+''',
+          [obraUuid, desc],
+        );
+      }
+      if (matches.length != 1) continue;
+      final m = matches.first;
+      await database.update(
+        'ordem_servico_custos',
+        {
+          'obra_item_id': m['id'],
+          'obra_item_uuid': m['uuid'],
+          'origem': m['tipo'],
+        },
+        where: 'id = ?',
+        whereArgs: [row['id']],
+      );
+    }
   } catch (_) {}
 }
 

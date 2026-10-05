@@ -11,6 +11,8 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
@@ -67,7 +69,7 @@ Future syncFuncoesMaoObra() async {
 
     final downloadResponse = await http.post(
       Uri.parse(
-          'https://api.rdopro.com.br/api/v1/sync/funcoes-mao-obra/download'),
+          '$kApiBaseUrl/api/v1/sync/funcoes-mao-obra/download'),
       headers: headers,
       body: json.encode({'ultima_sync': lastSync}),
     );

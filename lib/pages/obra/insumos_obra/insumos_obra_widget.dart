@@ -1,4 +1,5 @@
 import '/auth/membership_access.dart';
+import '/backend/api_requests/api_config.dart';
 import '/backend/sqlite/situacao_soft_delete.dart';
 import '/backend/sqlite/sqlite_manager.dart' show SQLiteManager;
 import '/componentes/navegacao/barra_navegacao_principal.dart';
@@ -213,7 +214,7 @@ class _InsumosObraWidgetState extends State<InsumosObraWidget> {
     try {
       final response = await http.get(
         Uri.parse(
-          'https://api.rdopro.com.br/api/obras/$obraIdentifier/itens?tipo=insumo',
+          '$kApiBaseUrl/api/obras/$obraIdentifier/itens?tipo=insumo',
         ),
         headers: {
           'Authorization': 'Bearer ${_token()}',
@@ -273,7 +274,7 @@ class _InsumosObraWidgetState extends State<InsumosObraWidget> {
     if (_insumosCatalogo.isNotEmpty) return;
     try {
       final response = await http.get(
-        Uri.parse('https://api.rdopro.com.br/api/insumos'),
+        Uri.parse('$kApiBaseUrl/api/insumos'),
         headers: {
           'Authorization': 'Bearer ${_token()}',
           'Accept': 'application/json',
@@ -879,7 +880,7 @@ class _InsumosObraWidgetState extends State<InsumosObraWidget> {
 
       final response = await http.post(
         Uri.parse(
-          'https://api.rdopro.com.br/api/obras/$obraIdentifier/itens/insumo',
+          '$kApiBaseUrl/api/obras/$obraIdentifier/itens/insumo',
         ),
         headers: {
           'Authorization': 'Bearer ${_token()}',
@@ -981,7 +982,7 @@ class _InsumosObraWidgetState extends State<InsumosObraWidget> {
     setState(() => _deletingIds.add(itemIdentifier));
     try {
       final response = await http.delete(
-        Uri.parse('https://api.rdopro.com.br/api/obras/itens/$itemIdentifier'),
+        Uri.parse('$kApiBaseUrl/api/obras/itens/$itemIdentifier'),
         headers: {
           'Authorization': 'Bearer ${_token()}',
           'Accept': 'application/json',

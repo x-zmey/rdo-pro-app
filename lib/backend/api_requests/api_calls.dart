@@ -5,8 +5,10 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '/flutter_flow/flutter_flow_util.dart';
+import 'api_config.dart';
 import 'api_manager.dart';
 
+export 'api_config.dart' show kApiBaseUrl, kApiHost, apiUrl, apiUri;
 export 'api_manager.dart' show ApiCallResponse;
 
 class LoginCall {
@@ -28,7 +30,7 @@ class LoginCall {
     final ffApiRequestBody = jsonEncode(bodyMap);
     return ApiManager.instance.makeApiCall(
       callName: 'login',
-      apiUrl: 'https://api.rdopro.com.br/api/auth/login',
+      apiUrl: '$kApiBaseUrl/api/auth/login',
       callType: ApiCallType.POST,
       headers: {},
       params: {},
@@ -253,7 +255,7 @@ class AuthMembershipsCall {
   static Future<ApiCallResponse> call({required String token}) async {
     return ApiManager.instance.makeApiCall(
       callName: 'authMemberships',
-      apiUrl: 'https://api.rdopro.com.br/api/auth/memberships',
+      apiUrl: '$kApiBaseUrl/api/auth/memberships',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -280,7 +282,7 @@ class AuthCheckTokenCall {
   static Future<ApiCallResponse> call({required String token}) async {
     return ApiManager.instance.makeApiCall(
       callName: 'authCheckToken',
-      apiUrl: 'https://api.rdopro.com.br/api/check-token',
+      apiUrl: '$kApiBaseUrl/api/check-token',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -307,7 +309,7 @@ class AuthSwitchTenantCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'authSwitchTenant',
-      apiUrl: 'https://api.rdopro.com.br/api/auth/switch-tenant',
+      apiUrl: '$kApiBaseUrl/api/auth/switch-tenant',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -333,7 +335,7 @@ class RefreshTokenCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'refreshToken',
-      apiUrl: 'https://api.rdopro.com.br/api/auth/refresh',
+      apiUrl: '$kApiBaseUrl/api/auth/refresh',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -406,7 +408,7 @@ class CadastrarObraCall {
     }
     return ApiManager.instance.makeApiCall(
       callName: 'CadastrarObra',
-      apiUrl: 'https://api.rdopro.com.br/api/obras',
+      apiUrl: '$kApiBaseUrl/api/obras',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -441,7 +443,7 @@ class ListarClientesApiCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'ListarClientes',
-      apiUrl: 'https://api.rdopro.com.br/api/clientes',
+      apiUrl: '$kApiBaseUrl/api/clientes',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -466,7 +468,7 @@ class ListarGrupoObrasApiCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'ListarGrupoObras',
-      apiUrl: 'https://api.rdopro.com.br/api/grupo-obras',
+      apiUrl: '$kApiBaseUrl/api/grupo-obras',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -494,7 +496,7 @@ class ObraDetalhesApiCall {
 
     return ApiManager.instance.makeApiCall(
       callName: 'ObraDetalhesApi',
-      apiUrl: 'https://api.rdopro.com.br/api/obras/api/$identificador',
+      apiUrl: '$kApiBaseUrl/api/obras/api/$identificador',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -517,7 +519,7 @@ class ListarSituacoesObrasCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'ListarSituacoesObras',
-      apiUrl: 'https://api.rdopro.com.br/api/obras/listar-situacoes',
+      apiUrl: '$kApiBaseUrl/api/obras/listar-situacoes',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -588,7 +590,7 @@ class AtualizarObraCall {
 
     return ApiManager.instance.makeApiCall(
       callName: 'AtualizarObra',
-      apiUrl: 'https://api.rdopro.com.br/api/obras/$identificador',
+      apiUrl: '$kApiBaseUrl/api/obras/$identificador',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -618,7 +620,7 @@ class ListarEtapasObraApiCall {
 
     return ApiManager.instance.makeApiCall(
       callName: 'ListarEtapasObra',
-      apiUrl: 'https://api.rdopro.com.br/api/obras/$identificador/list-etapas',
+      apiUrl: '$kApiBaseUrl/api/obras/$identificador/list-etapas',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -647,7 +649,7 @@ class ObraLocaisPorObraCall {
 
     return ApiManager.instance.makeApiCall(
       callName: 'ObraLocaisPorObra',
-      apiUrl: 'https://api.rdopro.com.br/api/obras/$identificador/locais',
+      apiUrl: '$kApiBaseUrl/api/obras/$identificador/locais',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -682,7 +684,7 @@ class AddObraEtapaCall {
     });
     return ApiManager.instance.makeApiCall(
       callName: 'AddObraEtapa',
-      apiUrl: 'https://api.rdopro.com.br/api/obras/$identificador/add-etapa',
+      apiUrl: '$kApiBaseUrl/api/obras/$identificador/add-etapa',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -715,7 +717,7 @@ class UltimoItemTarefaObraCall {
     return ApiManager.instance.makeApiCall(
       callName: 'UltimoItemTarefaObra',
       apiUrl:
-          'https://api.rdopro.com.br/api/obras/etapa/get-ultimo-item/$identificador/tarefa',
+          '$kApiBaseUrl/api/obras/etapa/get-ultimo-item/$identificador/tarefa',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -746,7 +748,7 @@ class UltimoItemEtapaPorTipoCall {
     return ApiManager.instance.makeApiCall(
       callName: 'UltimoItemEtapaPorTipo',
       apiUrl:
-          'https://api.rdopro.com.br/api/obras/etapa/get-ultimo-item/$identificador/$tipo',
+          '$kApiBaseUrl/api/obras/etapa/get-ultimo-item/$identificador/$tipo',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -776,7 +778,7 @@ class GetTarefasPaiEtapaCall {
     return ApiManager.instance.makeApiCall(
       callName: 'GetTarefasPaiEtapa',
       apiUrl:
-          'https://api.rdopro.com.br/api/obras/etapas/$identificador/tarefas-pai',
+          '$kApiBaseUrl/api/obras/etapas/$identificador/tarefas-pai',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -806,7 +808,7 @@ class UltimoItemComposicaoCall {
     return ApiManager.instance.makeApiCall(
       callName: 'UltimoItemComposicao',
       apiUrl:
-          'https://api.rdopro.com.br/api/obras/etapa/get-ultimo-item-composicao/$identificador',
+          '$kApiBaseUrl/api/obras/etapa/get-ultimo-item-composicao/$identificador',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -860,7 +862,7 @@ class AddObraTarefaCall {
     };
     return ApiManager.instance.makeApiCall(
       callName: 'AddObraTarefa',
-      apiUrl: 'https://api.rdopro.com.br/api/obras/$identificador/add-tarefa',
+      apiUrl: '$kApiBaseUrl/api/obras/$identificador/add-tarefa',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -897,7 +899,7 @@ class UpdateObraEtapaCall {
     });
     return ApiManager.instance.makeApiCall(
       callName: 'UpdateObraEtapa',
-      apiUrl: 'https://api.rdopro.com.br/api/obras/etapa/$identificador/update',
+      apiUrl: '$kApiBaseUrl/api/obras/etapa/$identificador/update',
       callType: ApiCallType.PUT,
       headers: {
         'Authorization': 'Bearer $token',
@@ -948,7 +950,7 @@ class UpdateObraTarefaCall {
     return ApiManager.instance.makeApiCall(
       callName: 'UpdateObraTarefa',
       apiUrl:
-          'https://api.rdopro.com.br/api/obras/tarefa/$identificador/update',
+          '$kApiBaseUrl/api/obras/tarefa/$identificador/update',
       callType: ApiCallType.PUT,
       headers: {
         'Authorization': 'Bearer $token',
@@ -981,7 +983,7 @@ class DeleteObraEtapaCall {
     return ApiManager.instance.makeApiCall(
       callName: 'DeleteObraEtapa',
       apiUrl:
-          'https://api.rdopro.com.br/api/obras/etapas/$identificador/destroy',
+          '$kApiBaseUrl/api/obras/etapas/$identificador/destroy',
       callType: ApiCallType.DELETE,
       headers: {
         'Authorization': 'Bearer $token',
@@ -1011,7 +1013,7 @@ class DeleteObraTarefaCall {
     return ApiManager.instance.makeApiCall(
       callName: 'DeleteObraTarefa',
       apiUrl:
-          'https://api.rdopro.com.br/api/obras/tarefas/$identificador/destroy',
+          '$kApiBaseUrl/api/obras/tarefas/$identificador/destroy',
       callType: ApiCallType.DELETE,
       headers: {
         'Authorization': 'Bearer $token',
@@ -1060,7 +1062,7 @@ class CadastrarClienteCall {
 }''';
     return ApiManager.instance.makeApiCall(
       callName: 'CadastrarCliente',
-      apiUrl: 'https://api.rdopro.com.br/api/clientes',
+      apiUrl: '$kApiBaseUrl/api/clientes',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1128,7 +1130,7 @@ class UpdateClienteCall {
 
     return ApiManager.instance.makeApiCall(
       callName: 'UpdateCliente',
-      apiUrl: 'https://api.rdopro.com.br/api/clientes/$identificador',
+      apiUrl: '$kApiBaseUrl/api/clientes/$identificador',
       callType: ApiCallType.PUT,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1161,7 +1163,7 @@ class ExcluirClienteCall {
 
     return ApiManager.instance.makeApiCall(
       callName: 'ExcluirCliente',
-      apiUrl: 'https://api.rdopro.com.br/api/clientes/$identificador/destroy',
+      apiUrl: '$kApiBaseUrl/api/clientes/$identificador/destroy',
       callType: ApiCallType.DELETE,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1192,7 +1194,7 @@ class ClienteDetalhesCall {
 
     return ApiManager.instance.makeApiCall(
       callName: 'ClienteDetalhes',
-      apiUrl: 'https://api.rdopro.com.br/api/clientes/$identificador/show',
+      apiUrl: '$kApiBaseUrl/api/clientes/$identificador/show',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -1216,7 +1218,7 @@ class ListarUsuariosApiCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'ListarUsuarios',
-      apiUrl: 'https://api.rdopro.com.br/api/usuarios',
+      apiUrl: '$kApiBaseUrl/api/usuarios',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1241,7 +1243,7 @@ class VerificarEmailUsuarioCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'VerificarEmailUsuario',
-      apiUrl: 'https://api.rdopro.com.br/api/usuarios/verificar-email',
+      apiUrl: '$kApiBaseUrl/api/usuarios/verificar-email',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1284,7 +1286,7 @@ class VincularUsuarioCall {
 }''';
     return ApiManager.instance.makeApiCall(
       callName: 'VincularUsuario',
-      apiUrl: 'https://api.rdopro.com.br/api/usuarios/vincular',
+      apiUrl: '$kApiBaseUrl/api/usuarios/vincular',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1348,7 +1350,7 @@ class CadastrarUsuarioCall {
 }''';
     return ApiManager.instance.makeApiCall(
       callName: 'CadastrarUsuario',
-      apiUrl: 'https://api.rdopro.com.br/api/usuarios/cadastrar-usuario',
+      apiUrl: '$kApiBaseUrl/api/usuarios/cadastrar-usuario',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1452,7 +1454,7 @@ class UpdateUsuarioCall {
 
     return ApiManager.instance.makeApiCall(
       callName: 'UpdateUsuario',
-      apiUrl: 'https://api.rdopro.com.br/api/usuarios/$identificador',
+      apiUrl: '$kApiBaseUrl/api/usuarios/$identificador',
       callType: ApiCallType.PUT,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1485,7 +1487,7 @@ class ExcluirUsuarioCall {
 
     return ApiManager.instance.makeApiCall(
       callName: 'ExcluirUsuario',
-      apiUrl: 'https://api.rdopro.com.br/api/usuarios/$identificador',
+      apiUrl: '$kApiBaseUrl/api/usuarios/$identificador',
       callType: ApiCallType.DELETE,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1517,7 +1519,7 @@ class GetUsuarioShowCall {
 
     return ApiManager.instance.makeApiCall(
       callName: 'GetUsuarioShow',
-      apiUrl: 'https://api.rdopro.com.br/api/usuarios/$identificador',
+      apiUrl: '$kApiBaseUrl/api/usuarios/$identificador',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1541,7 +1543,7 @@ class GetUsuarioObrasVinculadasCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'GetUsuarioObrasVinculadas',
-      apiUrl: 'https://api.rdopro.com.br/api/usuarios/$usuarioId/obras',
+      apiUrl: '$kApiBaseUrl/api/usuarios/$usuarioId/obras',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1565,7 +1567,7 @@ class ListarObrasResumoCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'ListarObrasResumo',
-      apiUrl: 'https://api.rdopro.com.br/api/obras/',
+      apiUrl: '$kApiBaseUrl/api/obras/',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1594,7 +1596,7 @@ class PutUsuarioObraTravadaCall {
     final body = '{"obra_travada": ${obraTravada ? 'true' : 'false'}}';
     return ApiManager.instance.makeApiCall(
       callName: 'PutUsuarioObraTravada',
-      apiUrl: 'https://api.rdopro.com.br/api/usuarios/$usuarioId/obra-travada',
+      apiUrl: '$kApiBaseUrl/api/usuarios/$usuarioId/obra-travada',
       callType: ApiCallType.PUT,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1625,7 +1627,7 @@ class PostUsuarioVincularObraCall {
         '{"obra_id": $obraId, "permissao": "${escapeStringForJson(permissao)}"}';
     return ApiManager.instance.makeApiCall(
       callName: 'PostUsuarioVincularObra',
-      apiUrl: 'https://api.rdopro.com.br/api/usuarios/$usuarioId/vincular-obra',
+      apiUrl: '$kApiBaseUrl/api/usuarios/$usuarioId/vincular-obra',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1654,7 +1656,7 @@ class DeleteUsuarioDesvincularObraCall {
     return ApiManager.instance.makeApiCall(
       callName: 'DeleteUsuarioDesvincularObra',
       apiUrl:
-          'https://api.rdopro.com.br/api/usuarios/$usuarioId/desvincular-obra/$obraId',
+          '$kApiBaseUrl/api/usuarios/$usuarioId/desvincular-obra/$obraId',
       callType: ApiCallType.DELETE,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1684,7 +1686,7 @@ class PutUsuarioAtualizarPermissaoObraCall {
     return ApiManager.instance.makeApiCall(
       callName: 'PutUsuarioAtualizarPermissaoObra',
       apiUrl:
-          'https://api.rdopro.com.br/api/usuarios/$usuarioId/atualizar-permissao',
+          '$kApiBaseUrl/api/usuarios/$usuarioId/atualizar-permissao',
       callType: ApiCallType.PUT,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1710,7 +1712,7 @@ class GetUsersPermissoesListaCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'GetUsersPermissoesLista',
-      apiUrl: 'https://api.rdopro.com.br/api/users/permissoes',
+      apiUrl: '$kApiBaseUrl/api/users/permissoes',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1734,7 +1736,7 @@ class GetUsersUsuarioPermissoesCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'GetUsersUsuarioPermissoes',
-      apiUrl: 'https://api.rdopro.com.br/api/users/$userId/permissoes',
+      apiUrl: '$kApiBaseUrl/api/users/$userId/permissoes',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1761,7 +1763,7 @@ class PutUsersSubstituirPermissoesCall {
     return ApiManager.instance.makeApiCall(
       callName: 'PutUsersSubstituirPermissoes',
       apiUrl:
-          'https://api.rdopro.com.br/api/users/$userId/permissoes/substituir',
+          '$kApiBaseUrl/api/users/$userId/permissoes/substituir',
       callType: ApiCallType.PUT,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1787,7 +1789,7 @@ class GetMeusDadosCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'GetMeusDados',
-      apiUrl: 'https://api.rdopro.com.br/api/users/me/dados',
+      apiUrl: '$kApiBaseUrl/api/users/me/dados',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1861,7 +1863,7 @@ class UpdateProfileUserCall {
 }''';
     return ApiManager.instance.makeApiCall(
       callName: 'UpdateProfileUser',
-      apiUrl: 'https://api.rdopro.com.br/api/profile/user',
+      apiUrl: '$kApiBaseUrl/api/profile/user',
       callType: ApiCallType.PUT,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1902,7 +1904,7 @@ class AtualizarSenhaCall {
 }''';
     return ApiManager.instance.makeApiCall(
       callName: 'AtualizarSenha',
-      apiUrl: 'https://api.rdopro.com.br/api/profile/atualizar-senha',
+      apiUrl: '$kApiBaseUrl/api/profile/atualizar-senha',
       callType: ApiCallType.PUT,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -1936,7 +1938,7 @@ class RelatorioExibirCall {
     final encoded = Uri.encodeComponent(camufladoId);
     return ApiManager.instance.makeApiCall(
       callName: 'RelatorioExibir',
-      apiUrl: 'https://api.rdopro.com.br/api/relatorios/exibir/$encoded',
+      apiUrl: '$kApiBaseUrl/api/relatorios/exibir/$encoded',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -1963,7 +1965,7 @@ class RelatorioExibirPorUuidCall {
     return ApiManager.instance.makeApiCall(
       callName: 'RelatorioExibirPorUuid',
       apiUrl:
-          'https://api.rdopro.com.br/api/relatorios/exibir-por-uuid/$encoded',
+          '$kApiBaseUrl/api/relatorios/exibir-por-uuid/$encoded',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -1991,7 +1993,7 @@ class RelatorioListObraCall {
     return ApiManager.instance.makeApiCall(
       callName: 'RelatorioListObra',
       apiUrl:
-          'https://api.rdopro.com.br/api/relatorios/obra/$obraId?page=$page&itemsPerPage=$itemsPerPage',
+          '$kApiBaseUrl/api/relatorios/obra/$obraId?page=$page&itemsPerPage=$itemsPerPage',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2017,7 +2019,7 @@ class RelatorioFluxoAssinaturasCall {
     return ApiManager.instance.makeApiCall(
       callName: 'RelatorioFluxoAssinaturas',
       apiUrl:
-          'https://api.rdopro.com.br/api/relatorios/$relatorioId/fluxo-assinaturas',
+          '$kApiBaseUrl/api/relatorios/$relatorioId/fluxo-assinaturas',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2043,7 +2045,7 @@ class RelatorioEnviarAprovacaoCall {
     return ApiManager.instance.makeApiCall(
       callName: 'RelatorioEnviarAprovacao',
       apiUrl:
-          'https://api.rdopro.com.br/api/relatorios/$relatorioId/enviar-aprovacao',
+          '$kApiBaseUrl/api/relatorios/$relatorioId/enviar-aprovacao',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2074,7 +2076,7 @@ class RelatorioReenviarAprovacaoCall {
     return ApiManager.instance.makeApiCall(
       callName: 'RelatorioReenviarAprovacao',
       apiUrl:
-          'https://api.rdopro.com.br/api/relatorios/$relatorioId/reenviar-aprovacao',
+          '$kApiBaseUrl/api/relatorios/$relatorioId/reenviar-aprovacao',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2103,7 +2105,7 @@ class AssinaturaRelatorioPodeProcessarCall {
     return ApiManager.instance.makeApiCall(
       callName: 'AssinaturaRelatorioPodeProcessar',
       apiUrl:
-          'https://api.rdopro.com.br/api/assinaturas/relatorio/$relatorioId/pode-processar',
+          '$kApiBaseUrl/api/assinaturas/relatorio/$relatorioId/pode-processar',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2129,7 +2131,7 @@ class AssinaturaRelatorioStatusCall {
     return ApiManager.instance.makeApiCall(
       callName: 'AssinaturaRelatorioStatus',
       apiUrl:
-          'https://api.rdopro.com.br/api/assinaturas/relatorio/$relatorioId/status',
+          '$kApiBaseUrl/api/assinaturas/relatorio/$relatorioId/status',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2155,7 +2157,7 @@ class AssinaturaRelatorioAprovarCall {
     return ApiManager.instance.makeApiCall(
       callName: 'AssinaturaRelatorioAprovar',
       apiUrl:
-          'https://api.rdopro.com.br/api/assinaturas/relatorio/$relatorioId/aprovar',
+          '$kApiBaseUrl/api/assinaturas/relatorio/$relatorioId/aprovar',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2186,7 +2188,7 @@ class AssinaturaRelatorioReprovarCall {
     return ApiManager.instance.makeApiCall(
       callName: 'AssinaturaRelatorioReprovar',
       apiUrl:
-          'https://api.rdopro.com.br/api/assinaturas/relatorio/$relatorioId/reprovar',
+          '$kApiBaseUrl/api/assinaturas/relatorio/$relatorioId/reprovar',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2215,7 +2217,7 @@ class OrdemServicoFluxoAssinaturasCall {
     return ApiManager.instance.makeApiCall(
       callName: 'OrdemServicoFluxoAssinaturas',
       apiUrl:
-          'https://api.rdopro.com.br/api/ordens-servico/$ordemId/fluxo-assinaturas',
+          '$kApiBaseUrl/api/ordens-servico/$ordemId/fluxo-assinaturas',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2241,7 +2243,7 @@ class OrdemServicoEnviarAprovacaoCall {
     return ApiManager.instance.makeApiCall(
       callName: 'OrdemServicoEnviarAprovacao',
       apiUrl:
-          'https://api.rdopro.com.br/api/ordens-servico/$ordemId/enviar-aprovacao',
+          '$kApiBaseUrl/api/ordens-servico/$ordemId/enviar-aprovacao',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2270,7 +2272,7 @@ class AssinaturaOrdemServicoPodeProcessarCall {
     return ApiManager.instance.makeApiCall(
       callName: 'AssinaturaOrdemServicoPodeProcessar',
       apiUrl:
-          'https://api.rdopro.com.br/api/assinaturas/ordem-servico/$ordemId/pode-processar',
+          '$kApiBaseUrl/api/assinaturas/ordem-servico/$ordemId/pode-processar',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2296,7 +2298,7 @@ class AssinaturaOrdemServicoStatusCall {
     return ApiManager.instance.makeApiCall(
       callName: 'AssinaturaOrdemServicoStatus',
       apiUrl:
-          'https://api.rdopro.com.br/api/assinaturas/ordem-servico/$ordemId/status',
+          '$kApiBaseUrl/api/assinaturas/ordem-servico/$ordemId/status',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2322,7 +2324,7 @@ class AssinaturaOrdemServicoAprovarCall {
     return ApiManager.instance.makeApiCall(
       callName: 'AssinaturaOrdemServicoAprovar',
       apiUrl:
-          'https://api.rdopro.com.br/api/assinaturas/ordem-servico/$ordemId/aprovar',
+          '$kApiBaseUrl/api/assinaturas/ordem-servico/$ordemId/aprovar',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2353,7 +2355,7 @@ class AssinaturaOrdemServicoReprovarCall {
     return ApiManager.instance.makeApiCall(
       callName: 'AssinaturaOrdemServicoReprovar',
       apiUrl:
-          'https://api.rdopro.com.br/api/assinaturas/ordem-servico/$ordemId/reprovar',
+          '$kApiBaseUrl/api/assinaturas/ordem-servico/$ordemId/reprovar',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2382,7 +2384,7 @@ class OrdemServicoAprovadoresCall {
     return ApiManager.instance.makeApiCall(
       callName: 'OrdemServicoAprovadores',
       apiUrl:
-          'https://api.rdopro.com.br/api/ordens-servico/$ordemId/aprovadores',
+          '$kApiBaseUrl/api/ordens-servico/$ordemId/aprovadores',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2410,7 +2412,7 @@ class OrdemServicoSolicitarRevogacaoCall {
     return ApiManager.instance.makeApiCall(
       callName: 'OrdemServicoSolicitarRevogacao',
       apiUrl:
-          'https://api.rdopro.com.br/api/ordens-servico/$ordemId/revogacoes',
+          '$kApiBaseUrl/api/ordens-servico/$ordemId/revogacoes',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2441,7 +2443,7 @@ class OsRevogacaoAprovarCall {
     return ApiManager.instance.makeApiCall(
       callName: 'OsRevogacaoAprovar',
       apiUrl:
-          'https://api.rdopro.com.br/api/os-revogacoes/$revogacaoUuid/aprovar',
+          '$kApiBaseUrl/api/os-revogacoes/$revogacaoUuid/aprovar',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2472,7 +2474,7 @@ class OsRevogacaoRejeitarCall {
     return ApiManager.instance.makeApiCall(
       callName: 'OsRevogacaoRejeitar',
       apiUrl:
-          'https://api.rdopro.com.br/api/os-revogacoes/$revogacaoUuid/rejeitar',
+          '$kApiBaseUrl/api/os-revogacoes/$revogacaoUuid/rejeitar',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2500,7 +2502,7 @@ class OrdemServicoExportarPdf {
     required String baseFileName,
   }) async {
     final uri = Uri.parse(
-      'https://api.rdopro.com.br/api/obras/ordens/$ordemId/exportar-pdf',
+      '$kApiBaseUrl/api/obras/ordens/$ordemId/exportar-pdf',
     );
     try {
       final res = await http.get(
@@ -2542,7 +2544,7 @@ class RelatorioExportarPdf {
   }) async {
     final encoded = Uri.encodeComponent(camufladoId);
     final uri = Uri.parse(
-      'https://api.rdopro.com.br/api/relatorios/exportar-pdf/$encoded',
+      '$kApiBaseUrl/api/relatorios/exportar-pdf/$encoded',
     );
     try {
       final res = await http.get(
@@ -2590,7 +2592,7 @@ class RelatorioSolicitarRevogacaoCall {
     return ApiManager.instance.makeApiCall(
       callName: 'RelatorioSolicitarRevogacao',
       apiUrl:
-          'https://api.rdopro.com.br/api/relatorios/$relatorioId/revogacoes',
+          '$kApiBaseUrl/api/relatorios/$relatorioId/revogacoes',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2621,7 +2623,7 @@ class RelatorioRevogacaoAprovarCall {
     return ApiManager.instance.makeApiCall(
       callName: 'RelatorioRevogacaoAprovar',
       apiUrl:
-          'https://api.rdopro.com.br/api/relatorios/revogacoes/$revogacaoUuid/aprovar',
+          '$kApiBaseUrl/api/relatorios/revogacoes/$revogacaoUuid/aprovar',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2652,7 +2654,7 @@ class RelatorioRevogacaoRejeitarCall {
     return ApiManager.instance.makeApiCall(
       callName: 'RelatorioRevogacaoRejeitar',
       apiUrl:
-          'https://api.rdopro.com.br/api/relatorios/revogacoes/$revogacaoUuid/rejeitar',
+          '$kApiBaseUrl/api/relatorios/revogacoes/$revogacaoUuid/rejeitar',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2685,7 +2687,7 @@ class CadastrarObraLocalCall {
 }''';
     return ApiManager.instance.makeApiCall(
       callName: 'CadastrarObraLocal',
-      apiUrl: 'https://api.rdopro.com.br/api/obras/0/locais',
+      apiUrl: '$kApiBaseUrl/api/obras/0/locais',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer ${token}',
@@ -2720,7 +2722,7 @@ class NotificacaoRegistrarDispositivoCall {
     final ffApiRequestBody = jsonEncode(body);
     return ApiManager.instance.makeApiCall(
       callName: 'NotificacaoRegistrarDispositivo',
-      apiUrl: 'https://api.rdopro.com.br/api/notificacoes/dispositivo',
+      apiUrl: '$kApiBaseUrl/api/notificacoes/dispositivo',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2766,7 +2768,7 @@ class NotificacoesListCall {
     if (module.isNotEmpty && module != 'all') {
       q['module'] = module;
     }
-    final uri = Uri.parse('https://api.rdopro.com.br/api/notificacoes')
+    final uri = Uri.parse('$kApiBaseUrl/api/notificacoes')
         .replace(queryParameters: q);
     return ApiManager.instance.makeApiCall(
       callName: 'NotificacoesList',
@@ -2795,7 +2797,7 @@ class NotificacaoMarcarLidaCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'NotificacaoMarcarLida',
-      apiUrl: 'https://api.rdopro.com.br/api/notificacoes/$id/read',
+      apiUrl: '$kApiBaseUrl/api/notificacoes/$id/read',
       callType: ApiCallType.PUT,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2818,7 +2820,7 @@ class NotificacoesMarcarTodasLidasCall {
   static Future<ApiCallResponse> call({required String token}) async {
     return ApiManager.instance.makeApiCall(
       callName: 'NotificacoesMarcarTodasLidas',
-      apiUrl: 'https://api.rdopro.com.br/api/notificacoes/mark-all-read',
+      apiUrl: '$kApiBaseUrl/api/notificacoes/mark-all-read',
       callType: ApiCallType.PUT,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2844,7 +2846,7 @@ class NotificacaoExcluirCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'NotificacaoExcluir',
-      apiUrl: 'https://api.rdopro.com.br/api/notificacoes/$id',
+      apiUrl: '$kApiBaseUrl/api/notificacoes/$id',
       callType: ApiCallType.DELETE,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2871,7 +2873,7 @@ class MedicaoShowCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'MedicaoShow',
-      apiUrl: 'https://api.rdopro.com.br/api/medicoes/$medicaoId',
+      apiUrl: '$kApiBaseUrl/api/medicoes/$medicaoId',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2897,7 +2899,7 @@ class MedicaoFluxoAssinaturasCall {
     return ApiManager.instance.makeApiCall(
       callName: 'MedicaoFluxoAssinaturas',
       apiUrl:
-          'https://api.rdopro.com.br/api/medicoes/$medicaoId/fluxo-assinaturas',
+          '$kApiBaseUrl/api/medicoes/$medicaoId/fluxo-assinaturas',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2923,7 +2925,7 @@ class MedicaoEnviarAprovacaoCall {
     return ApiManager.instance.makeApiCall(
       callName: 'MedicaoEnviarAprovacao',
       apiUrl:
-          'https://api.rdopro.com.br/api/medicoes/$medicaoId/enviar-aprovacao',
+          '$kApiBaseUrl/api/medicoes/$medicaoId/enviar-aprovacao',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2952,7 +2954,7 @@ class AssinaturaMedicaoPodeProcessarCall {
     return ApiManager.instance.makeApiCall(
       callName: 'AssinaturaMedicaoPodeProcessar',
       apiUrl:
-          'https://api.rdopro.com.br/api/assinaturas/medicao/$medicaoId/pode-processar',
+          '$kApiBaseUrl/api/assinaturas/medicao/$medicaoId/pode-processar',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -2978,7 +2980,7 @@ class AssinaturaMedicaoStatusCall {
     return ApiManager.instance.makeApiCall(
       callName: 'AssinaturaMedicaoStatus',
       apiUrl:
-          'https://api.rdopro.com.br/api/assinaturas/medicao/$medicaoId/status',
+          '$kApiBaseUrl/api/assinaturas/medicao/$medicaoId/status',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3004,7 +3006,7 @@ class AssinaturaMedicaoAprovarCall {
     return ApiManager.instance.makeApiCall(
       callName: 'AssinaturaMedicaoAprovar',
       apiUrl:
-          'https://api.rdopro.com.br/api/assinaturas/medicao/$medicaoId/aprovar',
+          '$kApiBaseUrl/api/assinaturas/medicao/$medicaoId/aprovar',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3035,7 +3037,7 @@ class AssinaturaMedicaoReprovarCall {
     return ApiManager.instance.makeApiCall(
       callName: 'AssinaturaMedicaoReprovar',
       apiUrl:
-          'https://api.rdopro.com.br/api/assinaturas/medicao/$medicaoId/reprovar',
+          '$kApiBaseUrl/api/assinaturas/medicao/$medicaoId/reprovar',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3063,7 +3065,7 @@ class MedicaoAprovadoresCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'MedicaoAprovadores',
-      apiUrl: 'https://api.rdopro.com.br/api/medicoes/$medicaoId/aprovadores',
+      apiUrl: '$kApiBaseUrl/api/medicoes/$medicaoId/aprovadores',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3090,7 +3092,7 @@ class MedicaoSolicitarRevogacaoCall {
     final body = json.encode({'motivo_revogacao': motivoRevogacao});
     return ApiManager.instance.makeApiCall(
       callName: 'MedicaoSolicitarRevogacao',
-      apiUrl: 'https://api.rdopro.com.br/api/medicoes/$medicaoId/revogacoes',
+      apiUrl: '$kApiBaseUrl/api/medicoes/$medicaoId/revogacoes',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3121,7 +3123,7 @@ class MedRevogacaoAprovarCall {
     return ApiManager.instance.makeApiCall(
       callName: 'MedRevogacaoAprovar',
       apiUrl:
-          'https://api.rdopro.com.br/api/med-revogacoes/$revogacaoUuid/aprovar',
+          '$kApiBaseUrl/api/med-revogacoes/$revogacaoUuid/aprovar',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3152,7 +3154,7 @@ class MedRevogacaoRejeitarCall {
     return ApiManager.instance.makeApiCall(
       callName: 'MedRevogacaoRejeitar',
       apiUrl:
-          'https://api.rdopro.com.br/api/med-revogacoes/$revogacaoUuid/rejeitar',
+          '$kApiBaseUrl/api/med-revogacoes/$revogacaoUuid/rejeitar',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3180,7 +3182,7 @@ class MedicaoExportarPdf {
     required String baseFileName,
   }) async {
     final uri = Uri.parse(
-      'https://api.rdopro.com.br/api/medicoes/$medicaoId/exportar-pdf',
+      '$kApiBaseUrl/api/medicoes/$medicaoId/exportar-pdf',
     );
     try {
       final res = await http.get(
@@ -3230,7 +3232,7 @@ class MedicoesListCall {
     if (mesReferencia != null && mesReferencia.isNotEmpty) {
       q['mes_referencia'] = mesReferencia;
     }
-    final uri = Uri.parse('https://api.rdopro.com.br/api/medicoes')
+    final uri = Uri.parse('$kApiBaseUrl/api/medicoes')
         .replace(queryParameters: q);
     return ApiManager.instance.makeApiCall(
       callName: 'MedicoesList',
@@ -3280,7 +3282,7 @@ class InsumosListCall {
     if (categoria.isNotEmpty) {
       q['categoria'] = categoria;
     }
-    final uri = Uri.parse('https://api.rdopro.com.br/api/insumos')
+    final uri = Uri.parse('$kApiBaseUrl/api/insumos')
         .replace(queryParameters: q);
     return ApiManager.instance.makeApiCall(
       callName: 'InsumosList',
@@ -3306,7 +3308,7 @@ class InsumosCategoriasCall {
   static Future<ApiCallResponse> call({required String token}) async {
     return ApiManager.instance.makeApiCall(
       callName: 'InsumosCategorias',
-      apiUrl: 'https://api.rdopro.com.br/api/insumos/categorias',
+      apiUrl: '$kApiBaseUrl/api/insumos/categorias',
       callType: ApiCallType.GET,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3337,7 +3339,7 @@ class InsumosExportarCall {
     if (categoria.isNotEmpty) {
       q['categoria'] = categoria;
     }
-    final base = Uri.parse('https://api.rdopro.com.br/api/insumos/exportar');
+    final base = Uri.parse('$kApiBaseUrl/api/insumos/exportar');
     final uri = q.isEmpty ? base : base.replace(queryParameters: q);
     return ApiManager.instance.makeApiCall(
       callName: 'InsumosExportar',
@@ -3366,7 +3368,7 @@ class InsumoCreateCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'InsumoCreate',
-      apiUrl: 'https://api.rdopro.com.br/api/insumos',
+      apiUrl: '$kApiBaseUrl/api/insumos',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3395,7 +3397,7 @@ class InsumoUpdateCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'InsumoUpdate',
-      apiUrl: 'https://api.rdopro.com.br/api/insumos/$id',
+      apiUrl: '$kApiBaseUrl/api/insumos/$id',
       callType: ApiCallType.PUT,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3423,7 +3425,7 @@ class InsumoDeleteCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'InsumoDelete',
-      apiUrl: 'https://api.rdopro.com.br/api/insumos/$id',
+      apiUrl: '$kApiBaseUrl/api/insumos/$id',
       callType: ApiCallType.DELETE,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3451,7 +3453,7 @@ class InsumoPatchSituacaoCall {
     final body = jsonEncode({'situacao': situacao});
     return ApiManager.instance.makeApiCall(
       callName: 'InsumoPatchSituacao',
-      apiUrl: 'https://api.rdopro.com.br/api/insumos/$id/situacao',
+      apiUrl: '$kApiBaseUrl/api/insumos/$id/situacao',
       callType: ApiCallType.PATCH,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3481,7 +3483,7 @@ class EquipamentoCreateCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'EquipamentoCreate',
-      apiUrl: 'https://api.rdopro.com.br/api/equipamentos',
+      apiUrl: '$kApiBaseUrl/api/equipamentos',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3510,7 +3512,7 @@ class EquipamentoUpdateCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'EquipamentoUpdate',
-      apiUrl: 'https://api.rdopro.com.br/api/equipamentos/$id',
+      apiUrl: '$kApiBaseUrl/api/equipamentos/$id',
       callType: ApiCallType.PUT,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3538,7 +3540,7 @@ class EquipamentoDeleteCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'EquipamentoDelete',
-      apiUrl: 'https://api.rdopro.com.br/api/equipamentos/$id',
+      apiUrl: '$kApiBaseUrl/api/equipamentos/$id',
       callType: ApiCallType.DELETE,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3566,7 +3568,7 @@ class EquipamentoPatchSituacaoCall {
     final body = jsonEncode({'situacao': situacao});
     return ApiManager.instance.makeApiCall(
       callName: 'EquipamentoPatchSituacao',
-      apiUrl: 'https://api.rdopro.com.br/api/equipamentos/$id/situacao',
+      apiUrl: '$kApiBaseUrl/api/equipamentos/$id/situacao',
       callType: ApiCallType.PATCH,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3596,7 +3598,7 @@ class MaoObraProfissionalCreateCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'MaoObraProfissionalCreate',
-      apiUrl: 'https://api.rdopro.com.br/api/mao-obra-profissionais',
+      apiUrl: '$kApiBaseUrl/api/mao-obra-profissionais',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3625,7 +3627,7 @@ class MaoObraProfissionalUpdateCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'MaoObraProfissionalUpdate',
-      apiUrl: 'https://api.rdopro.com.br/api/mao-obra-profissionais/$id',
+      apiUrl: '$kApiBaseUrl/api/mao-obra-profissionais/$id',
       callType: ApiCallType.PUT,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3653,7 +3655,7 @@ class MaoObraProfissionalDeleteCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'MaoObraProfissionalDelete',
-      apiUrl: 'https://api.rdopro.com.br/api/mao-obra-profissionais/$id',
+      apiUrl: '$kApiBaseUrl/api/mao-obra-profissionais/$id',
       callType: ApiCallType.DELETE,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3682,7 +3684,7 @@ class MaoObraProfissionalPatchSituacaoCall {
     return ApiManager.instance.makeApiCall(
       callName: 'MaoObraProfissionalPatchSituacao',
       apiUrl:
-          'https://api.rdopro.com.br/api/mao-obra-profissionais/$id/situacao',
+          '$kApiBaseUrl/api/mao-obra-profissionais/$id/situacao',
       callType: ApiCallType.PATCH,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3712,7 +3714,7 @@ class LocalCreateCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'LocalCreate',
-      apiUrl: 'https://api.rdopro.com.br/api/locais',
+      apiUrl: '$kApiBaseUrl/api/locais',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3741,7 +3743,7 @@ class LocalUpdateCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'LocalUpdate',
-      apiUrl: 'https://api.rdopro.com.br/api/locais/$id',
+      apiUrl: '$kApiBaseUrl/api/locais/$id',
       callType: ApiCallType.PUT,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3769,7 +3771,7 @@ class LocalDeleteCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'LocalDelete',
-      apiUrl: 'https://api.rdopro.com.br/api/locais/$id',
+      apiUrl: '$kApiBaseUrl/api/locais/$id',
       callType: ApiCallType.DELETE,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3797,7 +3799,7 @@ class FuncaoMaoObraCreateCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'FuncaoMaoObraCreate',
-      apiUrl: 'https://api.rdopro.com.br/api/funcoes-mao-obra',
+      apiUrl: '$kApiBaseUrl/api/funcoes-mao-obra',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3826,7 +3828,7 @@ class FuncaoMaoObraUpdateCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'FuncaoMaoObraUpdate',
-      apiUrl: 'https://api.rdopro.com.br/api/funcoes-mao-obra/$id',
+      apiUrl: '$kApiBaseUrl/api/funcoes-mao-obra/$id',
       callType: ApiCallType.PUT,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3854,7 +3856,7 @@ class FuncaoMaoObraDeleteCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'FuncaoMaoObraDelete',
-      apiUrl: 'https://api.rdopro.com.br/api/funcoes-mao-obra/$id',
+      apiUrl: '$kApiBaseUrl/api/funcoes-mao-obra/$id',
       callType: ApiCallType.DELETE,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3882,7 +3884,7 @@ class GrupoObrasCreateCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'GrupoObrasCreate',
-      apiUrl: 'https://api.rdopro.com.br/api/grupo-obras',
+      apiUrl: '$kApiBaseUrl/api/grupo-obras',
       callType: ApiCallType.POST,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3911,7 +3913,7 @@ class GrupoObrasUpdateCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'GrupoObrasUpdate',
-      apiUrl: 'https://api.rdopro.com.br/api/grupo-obras/$id',
+      apiUrl: '$kApiBaseUrl/api/grupo-obras/$id',
       callType: ApiCallType.PUT,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3939,7 +3941,7 @@ class GrupoObrasDeleteCall {
   }) async {
     return ApiManager.instance.makeApiCall(
       callName: 'GrupoObrasDelete',
-      apiUrl: 'https://api.rdopro.com.br/api/grupo-obras/$id',
+      apiUrl: '$kApiBaseUrl/api/grupo-obras/$id',
       callType: ApiCallType.DELETE,
       headers: {
         'Authorization': 'Bearer $token',
@@ -3962,7 +3964,7 @@ class AppVersionPublicCall {
   static Future<ApiCallResponse> call() async {
     return ApiManager.instance.makeApiCall(
       callName: 'AppVersionPublic',
-      apiUrl: 'https://api.rdopro.com.br/api/app/version',
+      apiUrl: '$kApiBaseUrl/api/app/version',
       callType: ApiCallType.GET,
       headers: {
         'Accept': 'application/json',

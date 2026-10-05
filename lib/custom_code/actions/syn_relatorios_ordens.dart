@@ -11,6 +11,8 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'index.dart'; // Imports other custom actions
 
 import 'package:http/http.dart' as http;
@@ -20,9 +22,9 @@ import 'dart:math';
 import 'sync_relatorio_download_merge_guard.dart';
 
 const String _kUrlUploadRelatorioOrdens =
-    'https://api.rdopro.com.br/api/v1/sync/relatorios/ordens/upload';
+    '$kApiBaseUrl/api/v1/sync/relatorios/ordens/upload';
 const String _kUrlDownloadRelatorioOrdens =
-    'https://api.rdopro.com.br/api/v1/sync/relatorios/ordens/download';
+    '$kApiBaseUrl/api/v1/sync/relatorios/ordens/download';
 
 Uri _uriRelatorioOrdensUpload() =>
     Uri.parse(_kUrlUploadRelatorioOrdens.trim());

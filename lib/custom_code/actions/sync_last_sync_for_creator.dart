@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '/backend/sqlite/sqlite_manager.dart';
@@ -912,4 +913,86 @@ Future<String> updatedAtWatermarkForCurrentCreator(String table) async {
     print('updatedAtWatermarkForCurrentCreator($table): $e');
   }
   return kSyncEpoch;
+}
+
+/// Prefixo das datas de full resync diário (calendário local).
+const String _kDailyFullResyncPrefix = 'daily_full_resync_';
+
+String _localDateStamp([DateTime? when]) {
+  final n = when ?? DateTime.now();
+  final y = n.year.toString().padLeft(4, '0');
+  final m = n.month.toString().padLeft(2, '0');
+  final d = n.day.toString().padLeft(2, '0');
+  return '$y-$m-$d';
+}
+
+/// True se ainda não houve full resync neste dia (hora local do aparelho).
+///
+/// Recupera registros que o watermark incremental deixou de fora
+/// (mesmo sintoma de “só voltou depois de desinstalar”), sem nova versão do app.
+Future<bool> shouldForceDailyFullResync(String scope) async {
+  final key = '$_kDailyFullResyncPrefix${scope.trim()}';
+  if (scope.trim().isEmpty) return true;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final last = (prefs.getString(key) ?? '').trim();
+    return last != _localDateStamp();
+  } catch (_) {
+    return true;
+  }
+}
+
+/// Marca o full resync do [scope] como feito hoje.
+Future<void> markDailyFullResyncDone(String scope) async {
+  final key = '$_kDailyFullResyncPrefix${scope.trim()}';
+  if (scope.trim().isEmpty) return;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(key, _localDateStamp());
+  } catch (_) {}
+}
+
+/// Escopos que participam do full resync diário / botão “Sincronização completa”.
+const List<String> kDailyFullResyncScopes = [
+  'obras',
+  'obra_itens',
+  'obra_etapas',
+  'obra_etapa_tarefas',
+  'checklists_templates',
+  'checklists_template_obras',
+  'checklists_preenchidos',
+];
+
+/// Preferências one-shot legadas — zerar força novo download completo.
+const List<String> _kLegacyOneShotFullResyncPrefs = [
+  'obra_itens_full_resync_v2',
+  'obras_full_resync_v2',
+  'obra_etapas_full_resync_v2',
+  'obra_etapa_tarefas_full_resync_v2',
+];
+
+/// Prepara o próximo sync para baixar tudo de novo (como reinstalar o app).
+/// Usado pelo botão “Sincronização completa” na tela de sincronização.
+Future<void> requestForcedFullResync() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    for (final scope in kDailyFullResyncScopes) {
+      await prefs.remove('$_kDailyFullResyncPrefix$scope');
+    }
+    for (final key in _kLegacyOneShotFullResyncPrefs) {
+      await prefs.setBool(key, false);
+    }
+    // Zera watermarks locais de checklist para o próximo download trazer tudo.
+    final db = await SQLiteManager.instance.database;
+    for (final table in [
+      'checklists_templates',
+      'checklists_template_obras',
+      'checklists_template_categorias',
+      'checklists_preenchidos',
+    ]) {
+      try {
+        await db.update(table, {'last_sync_date': null});
+      } catch (_) {}
+    }
+  } catch (_) {}
 }

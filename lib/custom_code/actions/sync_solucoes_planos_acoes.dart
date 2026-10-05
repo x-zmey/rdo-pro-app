@@ -11,6 +11,8 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 // Set your action name, define your arguments and return parameter,
 // and then add the boilerplate code using the green button on the right!
 
@@ -123,7 +125,7 @@ Future syncSolucoesPlanosAcoes() async {
         // FAZER UPLOAD
         final uploadResponse = await http.post(
           Uri.parse(
-              'https://api.rdopro.com.br/api/v1/sync/solucoes-planos-acoes/upload'),
+              '$kApiBaseUrl/api/v1/sync/solucoes-planos-acoes/upload'),
           headers: headers,
           body: json.encode({'dados': solucoesParaEnviar}),
         );
@@ -177,7 +179,7 @@ Future syncSolucoesPlanosAcoes() async {
 
       final downloadResponse = await http.post(
         Uri.parse(
-            'https://api.rdopro.com.br/api/v1/sync/solucoes-planos-acoes/download'),
+            '$kApiBaseUrl/api/v1/sync/solucoes-planos-acoes/download'),
         headers: headers,
         body: json.encode({'ultima_sync': lastSync}),
       );

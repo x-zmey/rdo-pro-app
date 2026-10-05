@@ -43,10 +43,18 @@ class _AddMateriaisRecebidosRelatorioModalCopyWidgetState
   late Future<List<CarregaItensObraRow>> _itensObraFuture;
   int _itensObraReloadToken = 0;
 
-  Future<List<CarregaItensObraRow>> _loadItensObra() {
+  Future<List<CarregaItensObraRow>> _loadItensObra() async {
+    final obraUuid = (widget.obraUuid ?? '').trim();
+    if (obraUuid.isEmpty) return <CarregaItensObraRow>[];
+    try {
+      await actions.refreshObraItensPorTipo(
+        obraUuid: obraUuid,
+        tipo: 'insumo',
+      );
+    } catch (_) {}
     return SQLiteManager.instance.carregaItensObra(
       tipo: 'insumo',
-      obraUuid: widget.obraUuid!,
+      obraUuid: obraUuid,
       obraId: 0,
     );
   }

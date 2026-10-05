@@ -387,7 +387,7 @@ LEFT JOIN modelo_relatorios AS mr
 $_sqlJoinsCriadorRelatorio
 WHERE r.obra_uuid = '${esc(obraUuid)}'
   AND (r.situacao IS NULL OR CAST(r.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
-ORDER BY COALESCE(NULLIF(trim(r.updated_at), ''), r.created_at) DESC, r.numero DESC, r.id DESC$limitOffset;
+ORDER BY CAST(COALESCE(r.numero, 0) AS INTEGER) DESC, r.id DESC$limitOffset;
 ''';
   return _readQuery(database, query, (d) => RelatoriosObraRow(d));
 }
@@ -404,7 +404,7 @@ class RelatoriosObraRow extends SqliteRow {
   String get obraUuid => data['obra_uuid'] as String;
   String? get modeloUuid => data['modelo_uuid'] as String?;
   String? get modeloNome => data['modelo_nome'] as String?;
-  int? get statusId => data['status_id'] as int?;
+  int? get statusId => _asIntColuna(data['status_id']);
   String? get statusNome => data['status_nome'] as String?;
   String? get criador => data['criador'] as String?;
   String? get criadorNome => data['criador_nome'] as String?;
@@ -468,7 +468,7 @@ class RelatoriosGeraisRow extends SqliteRow {
   int? get numero => data['numero'] as int?;
   String get uuid => data['uuid'] as String;
   String get obraUuid => data['obra_uuid'] as String;
-  int? get statusId => data['status_id'] as int?;
+  int? get statusId => _asIntColuna(data['status_id']);
   String? get statusNome => data['status_nome'] as String?;
   String? get criador => data['criador'] as String?;
   String? get criadorNome => data['criador_nome'] as String?;
@@ -515,7 +515,7 @@ class RelatorioDetalhesRow extends SqliteRow {
   String? get inicioIntervalo => data['inicio_intervalo'] as String?;
   String? get fimIntervalo => data['fim_intervalo'] as String?;
   String? get saidaTarde => data['saida_tarde'] as String?;
-  int get statusId => data['status_id'] as int;
+  int get statusId => _asIntColuna(data['status_id']) ?? 1;
   String? get uuid => data['uuid'] as String?;
   String get obraUuid => data['obra_uuid'] as String;
 }
@@ -1040,7 +1040,7 @@ FROM relatorios AS r
 ${_sqlJoinObraTenant(obraUuidExpr: "r.obra_uuid", ownerEscaped: _escSql(owner))}
 WHERE $obraFilter
   AND (r.situacao IS NULL OR CAST(r.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
-ORDER BY COALESCE(NULLIF(trim(r.updated_at), ''), r.created_at) DESC, r.numero DESC, r.id DESC
+ORDER BY CAST(COALESCE(r.numero, 0) AS INTEGER) DESC, r.id DESC
 LIMIT 7 OFFSET 0;
 ''';
   return _readQuery(database, query, (d) => UltimosRelatoriosObraRow(d));
@@ -1789,16 +1789,111 @@ Future<List<GetModelosChecklistRow>> performGetModelosChecklist(
   Database database, {
   int? obraId,
   String? accountOwnerUuid,
-}) {
-  final owner = _ownerOrEmpty(accountOwnerUuid);
-  if (owner.isEmpty) {
-    return Future.value(<GetModelosChecklistRow>[]);
+}) async {
+  // Não bloqueia a lista se o tenant uuid ainda não estiver no AppState —
+  // os modelos já vieram filtrados pelo sync autenticado.
+  final obraIds = <int>{};
+  final obraUuids = <String>{};
+  if (obraId != null && obraId > 0) {
+    obraIds.add(obraId);
+
+    final localById = await database.query(
+      'obras',
+      columns: ['id', 'uuid'],
+      where: 'id = ?',
+      whereArgs: [obraId],
+      limit: 1,
+    );
+    if (localById.isNotEmpty) {
+      final lid = _asIntColuna(localById.first['id']);
+      if (lid != null) obraIds.add(lid);
+      final u = (localById.first['uuid'] ?? '').toString().trim();
+      if (u.isNotEmpty) obraUuids.add(u);
+    }
+
+    final mapByServer = await database.query(
+      'sync_id_mapping',
+      columns: ['uuid'],
+      where: 'tabela = ? AND id_servidor = ?',
+      whereArgs: ['obras', obraId],
+      limit: 1,
+    );
+    if (mapByServer.isNotEmpty) {
+      final u = (mapByServer.first['uuid'] ?? '').toString().trim();
+      if (u.isNotEmpty) {
+        obraUuids.add(u);
+        final byUuid = await database.query(
+          'obras',
+          columns: ['id'],
+          where: 'uuid = ?',
+          whereArgs: [u],
+          limit: 1,
+        );
+        if (byUuid.isNotEmpty) {
+          final lid = _asIntColuna(byUuid.first['id']);
+          if (lid != null) obraIds.add(lid);
+        }
+      }
+    }
+
+    // Também: se obraId for id local, ache id_servidor mapeado.
+    if (localById.isNotEmpty) {
+      final u = (localById.first['uuid'] ?? '').toString().trim();
+      if (u.isNotEmpty) {
+        final mapByUuid = await database.query(
+          'sync_id_mapping',
+          columns: ['id_servidor'],
+          where: 'tabela = ? AND uuid = ?',
+          whereArgs: ['obras', u],
+          limit: 1,
+        );
+        if (mapByUuid.isNotEmpty) {
+          final sid = _asIntColuna(mapByUuid.first['id_servidor']);
+          if (sid != null) obraIds.add(sid);
+        }
+      }
+    }
   }
-  final obraFilter = (obraId != null && obraId > 0)
-      ? 'AND (cto.obra_id = ${obraId} OR ob_tenant.id = ${obraId})'
+
+  final idsCsv = obraIds.isEmpty ? '' : obraIds.join(',');
+  final uuidsCsv = obraUuids.isEmpty
+      ? ''
+      : obraUuids.map((u) => "'${_escSql(u)}'").join(',');
+
+  // Modelos vinculados à obra OU sem nenhum vínculo (todas as obras).
+  final obraClause = (obraId != null && obraId > 0)
+      ? '''
+AND (
+  NOT EXISTS (
+    SELECT 1 FROM checklists_template_obras cto0
+    WHERE cto0.checklist_template_id = ct.id
+  )
+  OR EXISTS (
+    SELECT 1 FROM checklists_template_obras cto
+    WHERE cto.checklist_template_id = ct.id
+      AND (
+        ${idsCsv.isEmpty ? '0' : 'cto.obra_id IN ($idsCsv)'}
+        OR ${uuidsCsv.isEmpty ? '0' : "COALESCE(cto.obra_uuid, '') IN ($uuidsCsv)"}
+        OR EXISTS (
+          SELECT 1 FROM obras o
+          WHERE (
+            o.id = cto.obra_id
+            OR (cto.obra_uuid IS NOT NULL AND TRIM(cto.obra_uuid) != '' AND o.uuid = cto.obra_uuid)
+          )
+          AND (
+            ${idsCsv.isEmpty ? '0' : 'o.id IN ($idsCsv)'}
+            OR ${uuidsCsv.isEmpty ? '0' : "o.uuid IN ($uuidsCsv)"}
+          )
+        )
+      )
+  )
+)
+'''
       : '';
+
+  // Sem filtro extra de tenant aqui: o download autenticado já limitou os dados.
   final query = '''
-SELECT 
+SELECT DISTINCT
     ct.id,
     ct.uuid,
     ct.nome,
@@ -1806,18 +1901,11 @@ SELECT
     ct.json_config,
     ct.versao,
     ct.status,
-    cto.obra_id
+    NULL AS obra_id
 FROM checklists_templates ct
-INNER JOIN checklists_template_obras cto ON ct.id = cto.checklist_template_id
-INNER JOIN obras AS ob_tenant
-  ON (
-    (cto.obra_uuid IS NOT NULL AND TRIM(cto.obra_uuid) != '' AND ob_tenant.uuid = cto.obra_uuid)
-    OR ob_tenant.id = cto.obra_id
-  )
-  AND ob_tenant.user_uuid = '${_escSql(owner)}'
-  AND (ob_tenant.situacao IS NULL OR CAST(ob_tenant.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
-WHERE 1 = 1
-$obraFilter
+WHERE LOWER(TRIM(COALESCE(ct.status, ''))) IN ('ativo', 'active', 'publicado')
+$obraClause
+ORDER BY ct.nome COLLATE NOCASE ASC
 ''';
   return _readQuery(database, query, (d) => GetModelosChecklistRow(d));
 }
@@ -1828,6 +1916,8 @@ class GetModelosChecklistRow extends SqliteRow {
   int get id => data['id'] as int;
   String get uuid => data['uuid'] as String;
   String get nome => data['nome'] as String;
+  String get descricao => data['descricao']?.toString() ?? '';
+  String get jsonConfig => data['json_config']?.toString() ?? '';
 }
 
 /// END GETMODELOSCHECKLIST
@@ -2017,9 +2107,32 @@ SELECT
   cosr.ordem_servico_custo_id,
   cosr.ordem_servico_custo_uuid,
   cosr.qtd_realizada,
+  COALESCE(cosr.qtd_manual, 0) AS qtd_manual,
   cos.descricao,
   cos.unidade,
-  cos.qtd_prevista
+  cos.qtd_prevista,
+  cos.origem,
+  cos.fixo,
+  cos.obra_item_id,
+  cos.obra_item_uuid,
+  (
+    SELECT COALESCE(SUM(rc2.qtd_realizada), 0)
+    FROM relatorio_custos AS rc2
+    WHERE ${sqlNaoExcluidoPorSituacao('rc2')}
+      AND (
+        (TRIM(COALESCE(cosr.ordem_servico_custo_uuid, '')) != ''
+          AND rc2.ordem_servico_custo_uuid = cosr.ordem_servico_custo_uuid)
+        OR (cosr.ordem_servico_custo_id IS NOT NULL
+          AND rc2.ordem_servico_custo_id = cosr.ordem_servico_custo_id)
+      )
+      AND (
+        (cosr.relatorio_id IS NOT NULL AND rc2.relatorio_id IS NOT NULL
+          AND rc2.relatorio_id != cosr.relatorio_id)
+        OR (TRIM(COALESCE(cosr.relatorio_uuid, '')) != ''
+          AND TRIM(COALESCE(rc2.relatorio_uuid, '')) != ''
+          AND LOWER(TRIM(rc2.relatorio_uuid)) != LOWER(TRIM(cosr.relatorio_uuid)))
+      )
+  ) AS qtd_acumulada
 FROM relatorio_custos AS cosr
 INNER JOIN relatorio_ordem_servico AS ros ON ros.uuid = cosr.relatorio_ordem_servico_uuid
 ${_sqlJoinRelatorioTenant(relatorioUuidExpr: "ros.relatorio_uuid", ownerEscaped: _escSql(owner))}
@@ -2027,7 +2140,8 @@ JOIN ordem_servico_custos AS cos
   ON cos.uuid = cosr.ordem_servico_custo_uuid
 WHERE cosr.relatorio_ordem_servico_uuid = '${_escSql(ordemRelatorioUuid)}'
   AND (cosr.situacao IS NULL OR CAST(cosr.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
-  AND (cos.situacao IS NULL OR CAST(cos.situacao AS INTEGER) != ${kSituacaoExcluidoLogico});
+  AND (cos.situacao IS NULL OR CAST(cos.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
+  AND (cos.fixo IS NULL OR CAST(cos.fixo AS INTEGER) != 1);
 ''';
   return _readQuery(database, query, (d) => GetCustosOrdensRelatoriosRow(d));
 }
@@ -2037,13 +2151,48 @@ class GetCustosOrdensRelatoriosRow extends SqliteRow {
 
   int get id => data['id'] as int;
   int? get ordemServicoCustoId => data['ordem_servico_custo_id'] as int?;
-  int? get qtdRealizada => data['qtd_realizada'] as int?;
+  int? get qtdRealizada {
+    final v = data['qtd_realizada'];
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.round();
+    return int.tryParse(v.toString().trim());
+  }
   String? get descricao => data['descricao'] as String?;
   String? get unidade => data['unidade'] as String?;
   double? get qtdPrevista => data['qtd_prevista'] as double?;
   String? get uuid => data['uuid'] as String?;
   String? get ordemServicoCustoUuid =>
       data['ordem_servico_custo_uuid'] as String?;
+  String get origem {
+    final v = (data['origem'] as String? ?? '').trim().toLowerCase();
+    return v.isEmpty ? 'avulso' : v;
+  }
+
+  bool get isFixo {
+    final v = data['fixo'];
+    return v == 1 || v == true || v == '1';
+  }
+
+  bool get isVinculadoAtividade =>
+      origem == 'insumo' || origem == 'mao_obra' || origem == 'equipamento';
+
+  bool get qtdManual {
+    final v = data['qtd_manual'];
+    return v == 1 || v == true || v == '1';
+  }
+
+  double get qtdRealizadaNum {
+    final v = data['qtd_realizada'];
+    if (v is num) return v.toDouble();
+    return double.tryParse('${v ?? ''}'.replaceAll(',', '.')) ?? 0;
+  }
+
+  double get qtdAcumuladaNum {
+    final v = data['qtd_acumulada'];
+    if (v is num) return v.toDouble();
+    return double.tryParse('${v ?? ''}'.replaceAll(',', '.')) ?? 0;
+  }
 }
 
 /// END GETCUSTOSORDENSRELATORIOS
@@ -2535,7 +2684,7 @@ class RelatorioDetalhesCopyRow extends SqliteRow {
   String? get inicioIntervalo => data['inicio_intervalo'] as String?;
   String? get fimIntervalo => data['fim_intervalo'] as String?;
   String? get saidaTarde => data['saida_tarde'] as String?;
-  int get statusId => data['status_id'] as int;
+  int get statusId => _asIntColuna(data['status_id']) ?? 1;
   String? get uuid => data['uuid'] as String?;
   String get obraUuid => data['obra_uuid'] as String;
 }
@@ -2566,7 +2715,7 @@ LEFT JOIN status_relatorios AS sr
 $_sqlJoinsCriadorRelatorio
 WHERE r.obra_uuid = '${esc(obraUuid)}'
   AND (r.situacao IS NULL OR CAST(r.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
-ORDER BY COALESCE(NULLIF(trim(r.updated_at), ''), r.created_at) DESC, r.numero DESC, r.id DESC
+ORDER BY CAST(COALESCE(r.numero, 0) AS INTEGER) DESC, r.id DESC
 LIMIT 10;
 ''';
   return _readQuery(database, query, (d) => RelatoriosObraUltimosRow(d));
@@ -2582,7 +2731,7 @@ class RelatoriosObraUltimosRow extends SqliteRow {
   int? get numero => data['numero'] as int?;
   String get uuid => data['uuid'] as String;
   String get obraUuid => data['obra_uuid'] as String;
-  int get statusId => data['status_id'] as int;
+  int get statusId => _asIntColuna(data['status_id']) ?? 1;
   String? get statusNome => data['status_nome'] as String?;
   String? get criador => data['criador'] as String?;
   String? get criadorNome => data['criador_nome'] as String?;
@@ -2677,3 +2826,90 @@ class SyncHistoryRecentRow extends SqliteRow {
 }
 
 /// END SYNCHISTORYRECENT
+
+/// BEGIN GETCHECKLISTSPREENCHIDOS
+Future<List<GetChecklistsPreenchidosRow>> performGetChecklistsPreenchidos(
+  Database database, {
+  int? obraId,
+  String? accountOwnerUuid,
+}) {
+  final owner = _ownerOrEmpty(accountOwnerUuid);
+  if (owner.isEmpty) {
+    return Future.value(<GetChecklistsPreenchidosRow>[]);
+  }
+  final obraFilter = (obraId != null && obraId > 0)
+      ? 'AND (cp.obra_id = ${obraId} OR ob_tenant.id = ${obraId})'
+      : '';
+  final query = '''
+SELECT
+  cp.id,
+  cp.uuid,
+  cp.checklist_template_id,
+  cp.obra_id,
+  cp.obra_uuid,
+  cp.usuario_id,
+  cp.json_respostas,
+  cp.nota_final,
+  cp.situacao,
+  cp.synced,
+  cp.created_at,
+  cp.updated_at,
+  COALESCE(ct.nome, 'Checklist') AS template_nome,
+  COALESCE(ct.descricao, '') AS template_descricao
+FROM checklists_preenchidos AS cp
+LEFT JOIN checklists_templates AS ct
+  ON ct.id = cp.checklist_template_id
+LEFT JOIN obras AS ob_tenant
+  ON (
+    (cp.obra_uuid IS NOT NULL AND TRIM(cp.obra_uuid) != '' AND ob_tenant.uuid = cp.obra_uuid)
+    OR ob_tenant.id = cp.obra_id
+  )
+WHERE (
+  ob_tenant.id IS NULL
+  OR (
+    ob_tenant.user_uuid = '${_escSql(owner)}'
+    AND (ob_tenant.situacao IS NULL OR CAST(ob_tenant.situacao AS INTEGER) != ${kSituacaoExcluidoLogico})
+  )
+)
+$obraFilter
+ORDER BY COALESCE(cp.updated_at, cp.created_at) DESC, cp.id DESC
+''';
+  return _readQuery(database, query, (d) => GetChecklistsPreenchidosRow(d));
+}
+
+class GetChecklistsPreenchidosRow extends SqliteRow {
+  GetChecklistsPreenchidosRow(Map<String, dynamic> data) : super(data);
+
+  int get id => _asIntColuna(data['id']) ?? 0;
+  String get uuid => (data['uuid'] ?? '').toString();
+  int? get checklistTemplateId => _asIntColuna(data['checklist_template_id']);
+  int? get obraId => _asIntColuna(data['obra_id']);
+  String? get obraUuid => data['obra_uuid']?.toString();
+  int? get usuarioId => _asIntColuna(data['usuario_id']);
+  String? get jsonRespostas => data['json_respostas']?.toString();
+  double? get notaFinal {
+    final v = data['nota_final'];
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString());
+  }
+
+  String get situacao {
+    final s = (data['situacao'] ?? 'preenchendo').toString();
+    return s == 'concluido' ? 'respondido' : s;
+  }
+
+  int get synced => _asIntColuna(data['synced']) ?? 0;
+  String? get createdAt => data['created_at']?.toString();
+  String? get updatedAt => data['updated_at']?.toString();
+  String get templateNome =>
+      (data['template_nome'] ?? 'Checklist').toString();
+  String get templateDescricao =>
+      (data['template_descricao'] ?? '').toString();
+
+  bool get isRascunho =>
+      situacao == 'preenchendo' || situacao == 'em_andamento';
+  bool get isRespondido => situacao == 'respondido';
+}
+
+/// END GETCHECKLISTSPREENCHIDOS

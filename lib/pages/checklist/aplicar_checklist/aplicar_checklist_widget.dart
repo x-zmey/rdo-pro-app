@@ -3,6 +3,7 @@ import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
+import 'dart:convert';
 import 'dart:ui';
 import '/custom_code/actions/index.dart' as actions;
 import '/index.dart';
@@ -34,11 +35,52 @@ class _AplicarChecklistWidgetState extends State<AplicarChecklistWidget> {
   late AplicarChecklistModel _model;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
+  Future<List<GetModelosChecklistRow>>? _modelosFuture;
 
   @override
   void initState() {
     super.initState();
     _model = createModel(context, () => AplicarChecklistModel());
+    _modelosFuture = _carregarModelos(forceSync: true);
+  }
+
+  Future<List<GetModelosChecklistRow>> _carregarModelos({
+    bool forceSync = false,
+  }) async {
+    if (forceSync) {
+      try {
+        await actions.syncChecklistTemplates();
+      } catch (e) {
+        debugPrint('syncChecklistTemplates: $e');
+      }
+    }
+    return SQLiteManager.instance.getModelosChecklist(
+      obraId: widget.obraId,
+    );
+  }
+
+  void _recarregar({bool forceSync = false}) {
+    setState(() {
+      _modelosFuture = _carregarModelos(forceSync: forceSync);
+    });
+  }
+
+  int _contarItensModelo(GetModelosChecklistRow row) {
+    try {
+      final raw = row.jsonConfig.trim();
+      if (raw.isEmpty) return 0;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return 0;
+      var total = 0;
+      for (final area in decoded['areas'] as List? ?? []) {
+        if (area is Map) {
+          total += (area['items'] as List? ?? []).length;
+        }
+      }
+      return total;
+    } catch (_) {
+      return 0;
+    }
   }
 
   @override
@@ -73,9 +115,7 @@ class _AplicarChecklistWidgetState extends State<AplicarChecklistWidget> {
               color: FlutterFlowTheme.of(context).primaryText,
               size: 30.0,
             ),
-            onPressed: () {
-              print('IconButton pressed ...');
-            },
+            onPressed: () => context.safePop(),
           ),
           title: Text(
             'Aplicar Checklist',
@@ -93,7 +133,20 @@ class _AplicarChecklistWidgetState extends State<AplicarChecklistWidget> {
                       FlutterFlowTheme.of(context).headlineMedium.fontStyle,
                 ),
           ),
-          actions: [],
+          actions: [
+            FlutterFlowIconButton(
+              borderColor: Colors.transparent,
+              borderRadius: 30.0,
+              borderWidth: 1.0,
+              buttonSize: 48.0,
+              icon: Icon(
+                Icons.sync,
+                color: FlutterFlowTheme.of(context).primaryText,
+                size: 24.0,
+              ),
+              onPressed: () => _recarregar(forceSync: true),
+            ),
+          ],
           centerTitle: false,
           elevation: 0.0,
         ),
@@ -165,9 +218,7 @@ class _AplicarChecklistWidgetState extends State<AplicarChecklistWidget> {
                             ),
                           ),
                           FutureBuilder<List<GetModelosChecklistRow>>(
-                            future: SQLiteManager.instance.getModelosChecklist(
-                              obraId: widget!.obraId!,
-                            ),
+                            future: _modelosFuture,
                             builder: (context, snapshot) {
                               // Customize what your widget looks like when it's loading.
                               if (!snapshot.hasData) {
@@ -179,6 +230,23 @@ class _AplicarChecklistWidgetState extends State<AplicarChecklistWidget> {
                               }
                               final listViewGetModelosChecklistRowList =
                                   snapshot.data!;
+
+                              if (listViewGetModelosChecklistRowList.isEmpty) {
+                                return Padding(
+                                  padding: const EdgeInsets.all(16.0),
+                                  child: Text(
+                                    'Nenhum modelo disponível para esta obra.\nConfirme no web se o modelo está Ativo e vinculado à obra, depois toque em sincronizar.',
+                                    textAlign: TextAlign.center,
+                                    style: FlutterFlowTheme.of(context)
+                                        .bodyMedium
+                                        .override(
+                                          font: GoogleFonts.inter(),
+                                          color: FlutterFlowTheme.of(context)
+                                              .secondaryText,
+                                        ),
+                                  ),
+                                );
+                              }
 
                               return ListView.separated(
                                 padding: EdgeInsets.zero,
@@ -193,6 +261,18 @@ class _AplicarChecklistWidgetState extends State<AplicarChecklistWidget> {
                                   final listViewGetModelosChecklistRow =
                                       listViewGetModelosChecklistRowList[
                                           listViewIndex];
+                                  final selecionado = _model.modeloSelected ==
+                                      listViewGetModelosChecklistRow.id;
+                                  final qtdItens = _contarItensModelo(
+                                      listViewGetModelosChecklistRow);
+                                  final descricaoModelo =
+                                      listViewGetModelosChecklistRow.descricao
+                                              .trim()
+                                              .isEmpty
+                                          ? 'Modelo de checklist'
+                                          : listViewGetModelosChecklistRow
+                                              .descricao
+                                              .trim();
                                   return Padding(
                                     padding: EdgeInsets.all(4.0),
                                     child: InkWell(
@@ -213,9 +293,12 @@ class _AplicarChecklistWidgetState extends State<AplicarChecklistWidget> {
                                           borderRadius:
                                               BorderRadius.circular(12.0),
                                           border: Border.all(
-                                            color: FlutterFlowTheme.of(context)
-                                                .primary,
-                                            width: 2.0,
+                                            color: selecionado
+                                                ? FlutterFlowTheme.of(context)
+                                                    .primary
+                                                : FlutterFlowTheme.of(context)
+                                                    .alternate,
+                                            width: selecionado ? 2.0 : 1.0,
                                           ),
                                         ),
                                         child: Padding(
@@ -235,7 +318,8 @@ class _AplicarChecklistWidgetState extends State<AplicarChecklistWidget> {
                                                       CrossAxisAlignment.start,
                                                   children: [
                                                     Text(
-                                                      '${listViewGetModelosChecklistRow.id.toString()}${listViewGetModelosChecklistRow.nome}',
+                                                      listViewGetModelosChecklistRow
+                                                          .nome,
                                                       style: FlutterFlowTheme
                                                               .of(context)
                                                           .bodyMedium
@@ -271,7 +355,7 @@ class _AplicarChecklistWidgetState extends State<AplicarChecklistWidget> {
                                                                   0.0,
                                                                   0.0),
                                                       child: Text(
-                                                        'Verificação de equipamentos de proteção e normas de segurança',
+                                                        descricaoModelo,
                                                         style:
                                                             FlutterFlowTheme.of(
                                                                     context)
@@ -318,8 +402,12 @@ class _AplicarChecklistWidgetState extends State<AplicarChecklistWidget> {
                                                             MainAxisSize.max,
                                                         children: [
                                                           Container(
-                                                            width: 60.0,
                                                             height: 24.0,
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                              horizontal: 8.0,
+                                                            ),
                                                             decoration:
                                                                 BoxDecoration(
                                                               color: FlutterFlowTheme
@@ -334,105 +422,56 @@ class _AplicarChecklistWidgetState extends State<AplicarChecklistWidget> {
                                                               alignment:
                                                                   AlignmentDirectional(
                                                                       0.0, 0.0),
-                                                              child: Padding(
-                                                                padding:
-                                                                    EdgeInsets
-                                                                        .all(
-                                                                            2.0),
-                                                                child: Text(
-                                                                  '25 itens',
-                                                                  style: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .bodySmall
-                                                                      .override(
-                                                                        font: GoogleFonts
-                                                                            .inter(
-                                                                          fontWeight:
-                                                                              FontWeight.w500,
-                                                                          fontStyle: FlutterFlowTheme.of(context)
-                                                                              .bodySmall
-                                                                              .fontStyle,
-                                                                        ),
-                                                                        color: Colors
-                                                                            .white,
-                                                                        fontSize:
-                                                                            12.0,
-                                                                        letterSpacing:
-                                                                            0.0,
+                                                              child: Text(
+                                                                qtdItens == 1
+                                                                    ? '1 item'
+                                                                    : '$qtdItens itens',
+                                                                style: FlutterFlowTheme.of(
+                                                                        context)
+                                                                    .bodySmall
+                                                                    .override(
+                                                                      font: GoogleFonts
+                                                                          .inter(
                                                                         fontWeight:
                                                                             FontWeight.w500,
                                                                         fontStyle: FlutterFlowTheme.of(context)
                                                                             .bodySmall
                                                                             .fontStyle,
                                                                       ),
-                                                                ),
+                                                                      color: Colors
+                                                                          .white,
+                                                                      fontSize:
+                                                                          12.0,
+                                                                      letterSpacing:
+                                                                          0.0,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .w500,
+                                                                      fontStyle: FlutterFlowTheme.of(
+                                                                              context)
+                                                                          .bodySmall
+                                                                          .fontStyle,
+                                                                    ),
                                                               ),
                                                             ),
                                                           ),
-                                                          Container(
-                                                            width: 80.0,
-                                                            height: 24.0,
-                                                            decoration:
-                                                                BoxDecoration(
-                                                              color: FlutterFlowTheme
-                                                                      .of(context)
-                                                                  .info,
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .circular(
-                                                                          12.0),
-                                                            ),
-                                                            child: Align(
-                                                              alignment:
-                                                                  AlignmentDirectional(
-                                                                      0.0, 0.0),
-                                                              child: Padding(
-                                                                padding:
-                                                                    EdgeInsets
-                                                                        .all(
-                                                                            8.0),
-                                                                child: Text(
-                                                                  'Obrigatório',
-                                                                  style: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .bodySmall
-                                                                      .override(
-                                                                        font: GoogleFonts
-                                                                            .inter(
-                                                                          fontWeight:
-                                                                              FontWeight.w500,
-                                                                          fontStyle: FlutterFlowTheme.of(context)
-                                                                              .bodySmall
-                                                                              .fontStyle,
-                                                                        ),
-                                                                        color: Colors
-                                                                            .white,
-                                                                        fontSize:
-                                                                            12.0,
-                                                                        letterSpacing:
-                                                                            0.0,
-                                                                        fontWeight:
-                                                                            FontWeight.w500,
-                                                                        fontStyle: FlutterFlowTheme.of(context)
-                                                                            .bodySmall
-                                                                            .fontStyle,
-                                                                      ),
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ].divide(SizedBox(
-                                                            width: 8.0)),
+                                                        ],
                                                       ),
                                                     ),
                                                   ],
                                                 ),
                                               ),
                                               Icon(
-                                                Icons.check_circle,
-                                                color:
-                                                    FlutterFlowTheme.of(context)
-                                                        .primary,
+                                                selecionado
+                                                    ? Icons.check_circle
+                                                    : Icons.radio_button_unchecked,
+                                                color: selecionado
+                                                    ? FlutterFlowTheme.of(
+                                                            context)
+                                                        .primary
+                                                    : FlutterFlowTheme.of(
+                                                            context)
+                                                        .secondaryText,
                                                 size: 24.0,
                                               ),
                                             ],
@@ -461,21 +500,49 @@ class _AplicarChecklistWidgetState extends State<AplicarChecklistWidget> {
                   ),
                   child: FFButtonWidget(
                     onPressed: () async {
+                      if (_model.modeloSelected == null ||
+                          widget.obraId == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Selecione um modelo de checklist'),
+                          ),
+                        );
+                        return;
+                      }
                       _model.resultChecklistIniciado =
                           await actions.iniciarNovoChecklist(
                         _model.modeloSelected!,
-                        widget!.obraId!,
+                        widget.obraId!,
                         FFAppState().UserID,
                       );
-                      FFAppState().checklistAtualJson =
-                          _model.resultChecklistIniciado!;
+                      final raw = _model.resultChecklistIniciado ?? '';
+                      dynamic decoded;
+                      try {
+                        decoded = jsonDecode(raw);
+                      } catch (_) {
+                        decoded = null;
+                      }
+                      if (decoded is Map && decoded['erro'] == true) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              decoded['mensagem']?.toString() ??
+                                  'Erro ao aplicar checklist',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      FFAppState().update(() {
+                        FFAppState().checklistAtualJson = raw;
+                      });
                       safeSetState(() {});
 
+                      if (!mounted) return;
                       context.pushNamed(ChecklistRespondendoWidget.routeName);
-
-                      safeSetState(() {});
                     },
-                    text: '${_model.modeloSelected?.toString()}Aplicar',
+                    text: 'Aplicar',
                     options: FFButtonOptions(
                       width: double.infinity,
                       height: 52.0,

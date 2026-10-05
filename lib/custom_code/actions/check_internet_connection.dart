@@ -11,12 +11,14 @@ import 'package:flutter/material.dart';
 
 import 'dart:io';
 
+import '/backend/api_requests/api_config.dart';
+
 // Set your action name, define your arguments and return parameter,
 // and then add the boilerplate code using the green button on the right!
 
 Future<bool> checkInternetConnection() async {
   try {
-    final result = await InternetAddress.lookup('api.rdopro.com.br');
+    final result = await InternetAddress.lookup(kApiHost);
     if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
       return true;
     }

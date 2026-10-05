@@ -11,6 +11,8 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'index.dart'; // Imports other custom actions
 
 import 'package:http/http.dart' as http;
@@ -20,9 +22,9 @@ import 'dart:math';
 import 'sync_relatorio_download_merge_guard.dart';
 
 const String _kUrlUploadRelatorioComentarios =
-    'https://api.rdopro.com.br/api/v1/sync/relatorios/comentarios/upload';
+    '$kApiBaseUrl/api/v1/sync/relatorios/comentarios/upload';
 const String _kUrlDownloadRelatorioComentarios =
-    'https://api.rdopro.com.br/api/v1/sync/relatorios/comentarios/download';
+    '$kApiBaseUrl/api/v1/sync/relatorios/comentarios/download';
 
 Uri _uriRelatorioComentariosUpload() =>
     Uri.parse(_kUrlUploadRelatorioComentarios.trim());

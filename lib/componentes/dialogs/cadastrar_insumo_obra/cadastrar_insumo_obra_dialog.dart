@@ -9,6 +9,7 @@ import '/flutter_flow/flutter_flow_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import '/backend/api_requests/api_config.dart';
 
 /// Abre cadastro de insumo vinculado à obra em dialog fullscreen.
 /// Retorna o UUID do [obra_itens] criado, ou null se cancelado.
@@ -193,7 +194,7 @@ class _CadastrarInsumoObraDialogWidgetState
   Future<void> _fetchInsumosCatalogo() async {
     try {
       final response = await http.get(
-        Uri.parse('https://api.rdopro.com.br/api/insumos'),
+        Uri.parse('$kApiBaseUrl/api/insumos'),
         headers: _apiHeaders(json: false),
       );
       if (response.statusCode < 200 || response.statusCode >= 300) return;
@@ -265,7 +266,7 @@ class _CadastrarInsumoObraDialogWidgetState
 
       final response = await http.post(
         Uri.parse(
-          'https://api.rdopro.com.br/api/obras/$obraIdentifier/itens/insumo',
+          '$kApiBaseUrl/api/obras/$obraIdentifier/itens/insumo',
         ),
         headers: _apiHeaders(),
         body: jsonEncode(payload),
@@ -284,6 +285,10 @@ class _CadastrarInsumoObraDialogWidgetState
 
       await actions.syncInsumos();
       await actions.syncObrasItens();
+      await actions.refreshObraItensPorTipo(
+        obraUuid: widget.obraUuid.trim(),
+        tipo: 'insumo',
+      );
 
       if (!mounted) return;
       Navigator.pop(context, _extractItemUuid(body));

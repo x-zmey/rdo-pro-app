@@ -1627,7 +1627,7 @@ class _MedicaoDetalhesWidgetState extends State<MedicaoDetalhesWidget>
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Solicite a revogação desta medição aprovada para reabrir o fluxo.',
+                  'Solicite a revogação desta medição (em aprovação ou aprovada) para reabrir o fluxo.',
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     color: theme.secondaryText,

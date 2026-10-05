@@ -1,6 +1,7 @@
 import '/backend/sqlite/sqlite_manager.dart';
 import '/componentes/navegacao/barra_navegacao_principal.dart';
 import '/componentes/ui/rdo_estilo.dart';
+import '/custom_code/actions/index.dart' as actions;
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
@@ -57,9 +58,12 @@ class _SincronizacoesWidgetState extends State<SincronizacoesWidget> {
     await _historyFuture;
   }
 
-  void _iniciarSincronizacao() {
+  void _iniciarSincronizacao({bool forceFullSync = false}) {
     context.pushNamed(
       SincronizandoWidget.routeName,
+      queryParameters: {
+        'forceFullSync': serializeParam(forceFullSync, ParamType.bool),
+      }.withoutNulls,
       extra: <String, dynamic>{
         kTransitionInfoKey: const TransitionInfo(
           hasTransition: true,
@@ -67,6 +71,45 @@ class _SincronizacoesWidgetState extends State<SincronizacoesWidget> {
         ),
       },
     );
+  }
+
+  Future<void> _iniciarSincronizacaoCompleta() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final theme = FlutterFlowTheme.of(ctx);
+        return AlertDialog(
+          title: Text(
+            'Sincronização completa?',
+            style: GoogleFonts.interTight(fontWeight: FontWeight.w700),
+          ),
+          content: Text(
+            'Vai baixar de novo obras, mão de obra, etapas, tarefas e demais '
+            'cadastros. Os relatórios criados no app e ainda não enviados '
+            'continuam sendo sincronizados (upload) antes do download. '
+            'Pode demorar mais que a sincronização normal.',
+            style: GoogleFonts.inter(
+              fontSize: 13.5,
+              color: theme.secondaryText,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Continuar'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmar != true || !mounted) return;
+    await actions.requestForcedFullResync();
+    if (!mounted) return;
+    _iniciarSincronizacao(forceFullSync: true);
   }
 
   ({bool success, bool error, Color color, IconData icon, String label})
@@ -283,7 +326,7 @@ class _SincronizacoesWidgetState extends State<SincronizacoesWidget> {
                     ),
                     const SizedBox(height: 10),
                     FilledButton.icon(
-                      onPressed: _iniciarSincronizacao,
+                      onPressed: () => _iniciarSincronizacao(),
                       icon: const Icon(Icons.sync_rounded, size: 18),
                       label: Text(
                         'Iniciar sincronização',
@@ -299,6 +342,40 @@ class _SincronizacoesWidgetState extends State<SincronizacoesWidget> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: _iniciarSincronizacaoCompleta,
+                      icon: Icon(
+                        Icons.cloud_download_outlined,
+                        size: 18,
+                        color: theme.primary,
+                      ),
+                      label: Text(
+                        'Sincronização completa',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: theme.primary,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: theme.primary,
+                        minimumSize: const Size(double.infinity, 42),
+                        side: BorderSide(color: theme.primary),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'A completa força o download dos cadastros. Relatórios '
+                      'pendentes no aparelho continuam sendo enviados.',
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        color: theme.secondaryText,
                       ),
                     ),
                   ],

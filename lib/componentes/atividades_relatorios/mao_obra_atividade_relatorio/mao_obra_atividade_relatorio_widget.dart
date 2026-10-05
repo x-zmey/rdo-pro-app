@@ -292,10 +292,7 @@ class _MaoObraAtividadeRelatorioWidgetState
                                               QtdFieldMaoObraRealizadoAtividadeRelatorioWidget(
                                             key: Key('Key9fm_${row.id}'),
                                             uuid: row.uuid!,
-                                            valor: valueOrDefault<int>(
-                                              row.qtdRealizada?.round(),
-                                              0,
-                                            ),
+                                            valor: row.qtdRealizada ?? 0,
                                           ),
                                         ),
                                       ],

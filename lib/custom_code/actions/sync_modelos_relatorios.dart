@@ -12,6 +12,8 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'index.dart'; // Imports other custom actions
 
 import 'package:http/http.dart' as http;
@@ -187,7 +189,7 @@ Future syncModelosRelatorios() async {
         // FAZER UPLOAD
         final uploadResponse = await http.post(
           Uri.parse(
-              'https://api.rdopro.com.br/api/v1/sync/modelos-relatorios/upload'),
+              '$kApiBaseUrl/api/v1/sync/modelos-relatorios/upload'),
           headers: headers,
           body: json.encode({'dados': modelosParaEnviar}),
         );
@@ -241,7 +243,7 @@ Future syncModelosRelatorios() async {
 
       final downloadResponse = await http.post(
         Uri.parse(
-            'https://api.rdopro.com.br/api/v1/sync/modelos-relatorios/download'),
+            '$kApiBaseUrl/api/v1/sync/modelos-relatorios/download'),
         headers: headers,
         body: json.encode({'ultima_sync': lastSync}),
       );

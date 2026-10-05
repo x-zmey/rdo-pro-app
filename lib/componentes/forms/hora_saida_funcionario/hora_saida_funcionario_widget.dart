@@ -1,6 +1,7 @@
 import '/backend/sqlite/sqlite_manager.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
+import '/flutter_flow/mao_obra_presenca_horas.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
 import 'package:easy_debounce/easy_debounce.dart';
 import 'package:flutter/material.dart';
@@ -77,7 +78,9 @@ class _HoraSaidaFuncionarioWidgetState
               intervaloInicio:
                   _model.maoObraDetalhes?.firstOrNull?.intervaloInicio,
               intervaloFim: _model.maoObraDetalhes?.firstOrNull?.intervaloFim,
-              horasTrabalhadas: '',
+              horasTrabalhadas: horasTrabalhadasParaPersistir(
+                _model.maoObraDetalhes?.firstOrNull?.statusPresenca),
+
               motivoAusencia:
                   _model.maoObraDetalhes?.firstOrNull?.motivoAusencia,
               motivoSaidaCedo: (_model.maoObraDetalhes?.firstOrNull

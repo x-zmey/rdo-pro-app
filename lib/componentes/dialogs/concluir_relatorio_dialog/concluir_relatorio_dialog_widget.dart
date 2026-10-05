@@ -1,3 +1,4 @@
+import '/backend/api_requests/api_calls.dart';
 import '/backend/sqlite/sqlite_manager.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -174,8 +175,45 @@ class _ConcluirRelatorioDialogWidgetState
                     ),
                     FFButtonWidget(
                       onPressed: () async {
+                        final relatorioId = widget.relatorioId;
+                        if (relatorioId == null) return;
+
+                        final token = FFAppState().UserToken.trim();
+                        if (token.isEmpty) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Sessão inválida. Faça login novamente.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+
+                        final response = await RelatorioEnviarAprovacaoCall.call(
+                          token: token,
+                          relatorioId: relatorioId,
+                        );
+
+                        if (!response.succeeded) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                getJsonField(
+                                      response.jsonBody,
+                                      r'''$.error''',
+                                    )?.toString() ??
+                                    'Erro ao enviar para aprovação.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+
                         await SQLiteManager.instance.alterarStatusRelatorio(
-                          id: widget!.relatorioId!.toString(),
+                          id: relatorioId.toString(),
                           status: 2,
                         );
                         _model.updatePage(() {});
@@ -184,7 +222,7 @@ class _ConcluirRelatorioDialogWidgetState
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                              'Relatório Concluído!',
+                              'Relatório enviado para aprovação!',
                               style: TextStyle(
                                 color: FlutterFlowTheme.of(context)
                                     .primaryBackground,
@@ -203,11 +241,11 @@ class _ConcluirRelatorioDialogWidgetState
                           DetalhesObraWidget.routeName,
                           queryParameters: {
                             'obraId': serializeParam(
-                              widget!.obraId,
+                              widget.obraId,
                               ParamType.int,
                             ),
                             'obraUuid': serializeParam(
-                              widget!.obraUuid,
+                              widget.obraUuid,
                               ParamType.String,
                             ),
                           }.withoutNulls,

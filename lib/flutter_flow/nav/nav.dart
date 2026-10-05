@@ -341,7 +341,13 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
         FFRoute(
           name: SincronizandoWidget.routeName,
           path: SincronizandoWidget.routePath,
-          builder: (context, params) => SincronizandoWidget(),
+          builder: (context, params) => SincronizandoWidget(
+            forceFullSync: params.getParam(
+                  'forceFullSync',
+                  ParamType.bool,
+                ) ??
+                false,
+          ),
         ),
         FFRoute(
           name: CadastrarObraWidget.routeName,

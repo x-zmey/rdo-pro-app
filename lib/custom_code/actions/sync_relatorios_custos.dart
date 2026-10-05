@@ -11,6 +11,8 @@ import 'sync_last_sync_for_creator.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/backend/api_requests/api_config.dart';
+
 import 'index.dart'; // Imports other custom actions
 
 import 'package:http/http.dart' as http;
@@ -20,9 +22,9 @@ import 'dart:math';
 import 'sync_relatorio_download_merge_guard.dart';
 
 const String _kUrlUploadRelatorioCustos =
-    'https://api.rdopro.com.br/api/v1/sync/relatorios/ordens-custos/upload';
+    '$kApiBaseUrl/api/v1/sync/relatorios/ordens-custos/upload';
 const String _kUrlDownloadRelatorioCustos =
-    'https://api.rdopro.com.br/api/v1/sync/relatorios/ordens-custos/download';
+    '$kApiBaseUrl/api/v1/sync/relatorios/ordens-custos/download';
 
 Uri _uriRelatorioCustosUpload() =>
     Uri.parse(_kUrlUploadRelatorioCustos.trim());
@@ -171,6 +173,11 @@ Future syncRelatoriosCustos() async {
             'ordem_servico_custo_uuid':
                 _nonEmptyStr(linha['ordem_servico_custo_uuid']),
             'qtd_realizada': linha['qtd_realizada'],
+            'qtd_manual': linha['qtd_manual'] == true ||
+                    linha['qtd_manual'] == 1 ||
+                    linha['qtd_manual'] == '1'
+                ? 1
+                : 0,
             'valor_unitario_real': linha['valor_unitario_real'],
             'valor_total_real': linha['valor_total_real'],
             'observacao': linha['observacao'],
@@ -349,6 +356,11 @@ Future<void> _processarOrdemTarefa(
         'ordem_servico_custo_uuid':
             _nonEmptyStr(relatorioCustoServer['ordem_servico_custo_uuid']),
         'qtd_realizada': relatorioCustoServer['qtd_realizada'],
+        'qtd_manual': relatorioCustoServer['qtd_manual'] == true ||
+                relatorioCustoServer['qtd_manual'] == 1 ||
+                relatorioCustoServer['qtd_manual'] == '1'
+            ? 1
+            : 0,
         'valor_unitario_real': relatorioCustoServer['valor_unitario_real'],
         'valor_total_real': relatorioCustoServer['valor_total_real'],
         'observacao': relatorioCustoServer['observacao'],
@@ -375,6 +387,11 @@ Future<void> _processarOrdemTarefa(
       'ordem_servico_custo_uuid':
           _nonEmptyStr(relatorioCustoServer['ordem_servico_custo_uuid']),
       'qtd_realizada': relatorioCustoServer['qtd_realizada'],
+      'qtd_manual': relatorioCustoServer['qtd_manual'] == true ||
+              relatorioCustoServer['qtd_manual'] == 1 ||
+              relatorioCustoServer['qtd_manual'] == '1'
+          ? 1
+          : 0,
       'valor_unitario_real': relatorioCustoServer['valor_unitario_real'],
       'valor_total_real': relatorioCustoServer['valor_total_real'],
       'observacao': relatorioCustoServer['observacao'],
