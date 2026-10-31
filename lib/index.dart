@@ -23,6 +23,10 @@ export '/pages/checklist/aplicar_checklist/aplicar_checklist_widget.dart'
     show AplicarChecklistWidget;
 export '/pages/checklist/checklist_respondendo/checklist_respondendo_widget.dart'
     show ChecklistRespondendoWidget;
+export '/pages/checklist/planos_acao/planos_acao_lista_widget.dart'
+    show PlanosAcaoListaWidget;
+export '/pages/checklist/planos_acao/plano_acao_detalhe_widget.dart'
+    show PlanoAcaoDetalheWidget;
 export '/pages/sistema/menu/menu_widget.dart' show MenuWidget;
 export '/pages/sistema/notificacoes/notificacoes_widget.dart'
     show NotificacoesWidget;
@@ -40,8 +44,6 @@ export '/pages/cadastros/cadastrar_cliente/cadastrar_cliente_widget.dart'
 export '/pages/cadastros/clientes/clientes_widget.dart' show ClientesWidget;
 export '/pages/cadastros/clientes/cliente_detalhes_widget.dart'
     show ClienteDetalhesWidget;
-export '/pages/checklist/checklist_respondendo_copy/checklist_respondendo_copy_widget.dart'
-    show ChecklistRespondendoCopyWidget;
 export '/pages/obra/detalhes_obra/detalhes_obra_widget.dart'
     show DetalhesObraWidget;
 export '/pages/obra/comentarios_obra_novo/comentarios_obra_novo_widget.dart'

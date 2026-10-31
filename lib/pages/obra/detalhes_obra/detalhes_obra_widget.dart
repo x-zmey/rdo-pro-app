@@ -1288,6 +1288,31 @@ class _DetalhesObraWidgetState extends State<DetalhesObraWidget>
                                           );
                                         },
                                       ),
+                                      _buildAtalhoCelula(
+                                        context,
+                                        icon: Icons.assignment_late_outlined,
+                                        label: 'Planos de ação',
+                                        onTap: () {
+                                          context.pushNamed(
+                                            PlanosAcaoListaWidget.routeName,
+                                            queryParameters: {
+                                              'obraId': serializeParam(
+                                                idServidor,
+                                                ParamType.int,
+                                              ),
+                                            }.withoutNulls,
+                                            extra: <String, dynamic>{
+                                              '__transition_info__':
+                                                  const TransitionInfo(
+                                                hasTransition: true,
+                                                transitionType:
+                                                    PageTransitionType
+                                                        .bottomToTop,
+                                              ),
+                                            },
+                                          );
+                                        },
+                                      ),
                                     ],
                                   ),
                                 );

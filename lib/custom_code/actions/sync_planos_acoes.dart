@@ -19,6 +19,7 @@ import '/backend/api_requests/api_config.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math';
+import 'checklist_anexo_upload.dart';
 import 'sync_uuid_upsert.dart';
 
 // ===== FUNÇÕES UTILITÁRIAS =====
@@ -176,6 +177,30 @@ Future syncPlanosAcoes() async {
               anexos = json.decode(anexos);
             } catch (e) {
               anexos = [];
+            }
+          }
+          if (anexos is List) {
+            try {
+              final uploaded = await uploadListaAnexosLocais(
+                anexos: anexos
+                    .whereType<Map>()
+                    .map((e) => Map<String, dynamic>.from(e))
+                    .toList(),
+                token: token,
+                destino: 'planos-acoes',
+              );
+              anexos = uploaded;
+              await db.update(
+                'planos_acoes',
+                {
+                  'anexos': json.encode(uploaded),
+                  'updated_at': DateTime.now().toIso8601String(),
+                },
+                where: 'id = ?',
+                whereArgs: [plano['id']],
+              );
+            } catch (e) {
+              print('⚠️ Falha ao subir anexos do plano ${plano['uuid']}: $e');
             }
           }
 

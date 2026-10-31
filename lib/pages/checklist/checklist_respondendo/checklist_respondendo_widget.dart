@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '/backend/api_requests/api_calls.dart';
+import '/backend/sqlite/sqlite_manager.dart';
 import '/componentes/forms/avaliativo_emojis_checklist/avaliativo_emojis_checklist_widget.dart';
 import '/componentes/forms/avaliativo_sim_nao_checklist/avaliativo_sim_nao_checklist_widget.dart';
 import '/componentes/forms/campo_cadastro_checklist/campo_cadastro_checklist_widget.dart';
@@ -17,6 +19,7 @@ import '/flutter_flow/flutter_flow_widgets.dart';
 import '/flutter_flow/custom_functions.dart' as functions;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
 import 'checklist_respondendo_model.dart';
 export 'checklist_respondendo_model.dart';
@@ -219,7 +222,8 @@ class _ChecklistRespondendoWidgetState
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   onPressed: () async {
-                    final path = await actions.pickAndSaveFileLocal();
+                    final path =
+                        await actions.pickChecklistAnexoLocal(context: ctx);
                     if (path == null || path.isEmpty) return;
                     setLocal(() {
                       anexosPlano = [
@@ -228,8 +232,8 @@ class _ChecklistRespondendoWidgetState
                       ];
                     });
                   },
-                  icon: const Icon(Icons.attach_file, size: 18),
-                  label: const Text('Anexar arquivo'),
+                  icon: const Icon(Icons.photo_camera_outlined, size: 18),
+                  label: const Text('Anexar foto ou arquivo'),
                 ),
                 if (anexosPlano.isNotEmpty) ...[
                   const SizedBox(height: 8),
@@ -365,7 +369,8 @@ class _ChecklistRespondendoWidgetState
                   if (!_somenteLeitura)
                     OutlinedButton.icon(
                       onPressed: () async {
-                        final path = await actions.pickAndSaveFileLocal();
+                        final path =
+                            await actions.pickChecklistAnexoLocal(context: ctx);
                         if (path == null || path.isEmpty) return;
                         setLocal(() {
                           anexos = [
@@ -374,8 +379,8 @@ class _ChecklistRespondendoWidgetState
                           ];
                         });
                       },
-                      icon: const Icon(Icons.add),
-                      label: const Text('Adicionar arquivo'),
+                      icon: const Icon(Icons.photo_camera_outlined),
+                      label: const Text('Adicionar foto ou arquivo'),
                     ),
                 ],
               ),
@@ -416,6 +421,142 @@ class _ChecklistRespondendoWidgetState
     }
   }
 
+  bool _templateExigeComentarioGeral() {
+    try {
+      final envelope = json.decode(FFAppState().checklistAtualJson);
+      if (envelope is! Map) return false;
+      final template = envelope['template_data'] ?? envelope['json_respostas'];
+      if (template is! Map) return false;
+      final cfg = template['configuracoes'] ?? template['config'];
+      if (cfg is! Map) return false;
+      final preench = cfg['preenchimentos'] ?? cfg;
+      if (preench is! Map) return false;
+      final v = preench['comentarioGeral'] ?? preench['comentario_geral'];
+      return v == true || v == 1 || v == '1' || v == 'true';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<String?> _pedirComentarioGeral({required bool obrigatorio}) async {
+    final controller = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: !obrigatorio,
+      builder: (ctx) => AlertDialog(
+        title: Text(obrigatorio
+            ? 'Comentário geral (obrigatório)'
+            : 'Comentário geral'),
+        content: TextField(
+          controller: controller,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            hintText: 'Observações finais do checklist',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          if (!obrigatorio)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Pular'),
+            ),
+          TextButton(
+            onPressed: () {
+              if (obrigatorio && controller.text.trim().isEmpty) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(
+                    content: Text('Informe o comentário geral para finalizar.'),
+                  ),
+                );
+                return;
+              }
+              Navigator.pop(ctx, true);
+            },
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    );
+    final text = controller.text.trim();
+    controller.dispose();
+    if (ok != true) return null;
+    if (obrigatorio && text.isEmpty) return null;
+    return text;
+  }
+
+  Future<int?> _idServidorChecklistAtual() async {
+    try {
+      final envelope = json.decode(FFAppState().checklistAtualJson);
+      if (envelope is! Map) return null;
+      final uuid = (envelope['uuid'] ?? '').toString().trim();
+      if (uuid.isEmpty) return null;
+      final db = await SQLiteManager.instance.database;
+      final rows = await db.query(
+        'sync_id_mapping',
+        columns: ['id_servidor'],
+        where: 'tabela = ? AND uuid = ?',
+        whereArgs: ['checklists_preenchidos', uuid],
+        limit: 1,
+      );
+      if (rows.isEmpty) return null;
+      final id = rows.first['id_servidor'];
+      if (id is int) return id;
+      return int.tryParse(id?.toString() ?? '');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _exportarPdf() async {
+    final token = FFAppState().UserToken.trim();
+    if (token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Faça login para exportar o PDF.')),
+      );
+      return;
+    }
+    final serverId = await _idServidorChecklistAtual();
+    if (serverId == null || serverId < 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Sincronize o checklist antes de gerar o PDF.',
+          ),
+        ),
+      );
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Gerando PDF...')),
+    );
+    final path = await ChecklistExportarPdf.downloadToTemp(
+      token: token,
+      checklistId: serverId,
+      baseFileName: 'checklist-$serverId',
+    );
+    if (!mounted) return;
+    if (path == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível gerar o PDF.')),
+      );
+      return;
+    }
+    final opened = await OpenFilex.open(path);
+    if (!mounted) return;
+    if (opened.type != ResultType.done) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            opened.message.isNotEmpty
+                ? 'PDF: ${opened.message}'
+                : 'Não foi possível abrir o PDF.',
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _finalizar() async {
     if (_somenteLeitura || _finalizando) return;
     final prog = _progresso();
@@ -433,11 +574,17 @@ class _ChecklistRespondendoWidgetState
       return;
     }
 
+    final exigeComentario = _templateExigeComentarioGeral();
+    final comentario = await _pedirComentarioGeral(obrigatorio: exigeComentario);
+    if (exigeComentario && (comentario == null || comentario.isEmpty)) {
+      return;
+    }
+
     setState(() => _finalizando = true);
     try {
       final result = await actions.finalizarChecklist(
         FFAppState().checklistAtualJson,
-        '',
+        comentario ?? '',
         '',
       );
       final decoded = json.decode(result);
@@ -675,6 +822,18 @@ class _ChecklistRespondendoWidgetState
                                 ),
                           ),
                         ),
+                        if (_somenteLeitura)
+                          FlutterFlowIconButton(
+                            borderRadius: 20.0,
+                            buttonSize: 40.0,
+                            fillColor: const Color(0x33FFFFFF),
+                            icon: const Icon(
+                              Icons.picture_as_pdf_outlined,
+                              color: Colors.white,
+                              size: 20.0,
+                            ),
+                            onPressed: _exportarPdf,
+                          ),
                         FlutterFlowIconButton(
                           borderRadius: 20.0,
                           buttonSize: 40.0,

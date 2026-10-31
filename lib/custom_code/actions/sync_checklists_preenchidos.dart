@@ -16,6 +16,7 @@ import '/backend/api_requests/api_config.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math';
+import 'checklist_anexo_upload.dart';
 import 'sync_uuid_upsert.dart';
 
 // ===== FUNÇÕES UTILITÁRIAS =====
@@ -203,6 +204,27 @@ Future syncChecklistsPreenchidos() async {
             }
           } else if (jsonRespostas == null) {
             jsonRespostas = {};
+          }
+
+          // Upload de anexos locais → S3 e reescreve URLs no JSON
+          if (jsonRespostas is Map) {
+            try {
+              jsonRespostas = await rewriteChecklistRespostasAnexos(
+                respostas: Map<String, dynamic>.from(jsonRespostas),
+                token: token,
+              );
+              await db.update(
+                'checklists_preenchidos',
+                {
+                  'json_respostas': json.encode(jsonRespostas),
+                  'updated_at': DateTime.now().toIso8601String(),
+                },
+                where: 'id = ?',
+                whereArgs: [checklist['id']],
+              );
+            } catch (e) {
+              print('⚠️ Falha ao subir anexos do checklist ${checklist['uuid']}: $e');
+            }
           }
 
           final templateUuid =

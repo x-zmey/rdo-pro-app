@@ -19,6 +19,7 @@ import '/backend/api_requests/api_config.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math';
+import 'checklist_anexo_upload.dart';
 
 // ===== FUNÇÕES UTILITÁRIAS =====
 
@@ -104,22 +105,112 @@ Future syncSolucoesPlanosAcoes() async {
           whereArgs: [0],
         );
 
-        // PREPARAR DADOS PARA ENVIO
-        final solucoesParaEnviar = solucoesComUuid.map((solucao) {
-          return {
+        // PREPARAR DADOS PARA ENVIO (resolve plano_acao_id do servidor + anexos)
+        final solucoesParaEnviar = <Map<String, dynamic>>[];
+        for (final solucao in solucoesComUuid) {
+          dynamic anexos = solucao['anexos'];
+          if (anexos is String) {
+            try {
+              anexos = json.decode(anexos);
+            } catch (_) {
+              anexos = [];
+            }
+          }
+          if (anexos is List && anexos.isNotEmpty) {
+            try {
+              anexos = await uploadListaAnexosLocais(
+                anexos: anexos
+                    .whereType<Map>()
+                    .map((e) => Map<String, dynamic>.from(e))
+                    .toList(),
+                token: token,
+                destino: 'planos-acoes/solucoes',
+              );
+              await db.update(
+                'solucoes_planos_acoes',
+                {
+                  'anexos': json.encode(anexos),
+                  'updated_at': DateTime.now().toIso8601String(),
+                },
+                where: 'id = ?',
+                whereArgs: [solucao['id']],
+              );
+            } catch (e) {
+              print('⚠️ Falha ao subir anexos da solução ${solucao['uuid']}: $e');
+            }
+          }
+
+          int? planoServerId;
+          final planoUuid = (solucao['plano_acao_uuid'] ?? '').toString().trim();
+          if (planoUuid.isNotEmpty) {
+            final map = await db.query(
+              'sync_id_mapping',
+              columns: ['id_servidor'],
+              where: 'tabela = ? AND uuid = ?',
+              whereArgs: ['planos_acoes', planoUuid],
+              limit: 1,
+            );
+            if (map.isNotEmpty) {
+              final sid = map.first['id_servidor'];
+              planoServerId = sid is int ? sid : int.tryParse('$sid');
+            }
+          }
+          if (planoServerId == null) {
+            final localPlanoId = solucao['plano_acao_id'];
+            final lid = localPlanoId is int
+                ? localPlanoId
+                : int.tryParse('$localPlanoId');
+            if (lid != null) {
+              final planoRows = await db.query(
+                'planos_acoes',
+                columns: ['uuid'],
+                where: 'id = ?',
+                whereArgs: [lid],
+                limit: 1,
+              );
+              final pu = planoRows.isNotEmpty
+                  ? (planoRows.first['uuid'] ?? '').toString().trim()
+                  : '';
+              if (pu.isNotEmpty) {
+                final map = await db.query(
+                  'sync_id_mapping',
+                  columns: ['id_servidor'],
+                  where: 'tabela = ? AND uuid = ?',
+                  whereArgs: ['planos_acoes', pu],
+                  limit: 1,
+                );
+                if (map.isNotEmpty) {
+                  final sid = map.first['id_servidor'];
+                  planoServerId = sid is int ? sid : int.tryParse('$sid');
+                }
+              }
+            }
+          }
+          if (planoServerId == null) {
+            print(
+              '⚠️ Solução ${solucao['uuid']} sem plano no servidor — pulando',
+            );
+            continue;
+          }
+
+          solucoesParaEnviar.add({
             'uuid': solucao['uuid'],
-            'plano_acao_id': solucao['plano_acao_id'],
+            'plano_acao_id': planoServerId,
             'titulo': solucao['titulo'],
             'descricao': solucao['descricao'],
             'custo': solucao['custo'],
             'quantidade': solucao['quantidade'],
             'status': solucao['status'],
+            'anexos': anexos ?? [],
             'created_by': solucao['created_by'],
             'created_at': solucao['created_at'],
             'updated_at': solucao['updated_at'],
-          };
-        }).toList();
+          });
+        }
 
+        if (solucoesParaEnviar.isEmpty) {
+          print('ℹ️ Nenhuma solução com plano no servidor para enviar');
+        } else {
         print('📤 Enviando ${solucoesParaEnviar.length} soluções...');
 
         // FAZER UPLOAD
@@ -132,20 +223,28 @@ Future syncSolucoesPlanosAcoes() async {
 
         if (uploadResponse.statusCode == 200) {
           final uploadResult = json.decode(uploadResponse.body);
+          final sincronizados = uploadResult['sincronizados'] ??
+              uploadResult['data'] ??
+              solucoesParaEnviar;
 
-          // MARCAR SOLUÇÕES COMO SINCRONIZADAS
-          for (var solucao in uploadResult['sincronizados']) {
-            await db.update(
-              'solucoes_planos_acoes',
-              {
-                'synced': 1,
-                'last_sync_date': DateTime.now().toIso8601String(),
-                'sync_try_count': 0,
-              },
-              where: 'uuid = ?',
-              whereArgs: [solucao['uuid']],
-            );
-            uploadedCount++;
+          if (sincronizados is List) {
+            for (var solucao in sincronizados) {
+              final uuid = solucao is Map
+                  ? (solucao['uuid'] ?? '').toString()
+                  : '';
+              if (uuid.isEmpty) continue;
+              await db.update(
+                'solucoes_planos_acoes',
+                {
+                  'synced': 1,
+                  'last_sync_date': DateTime.now().toIso8601String(),
+                  'sync_try_count': 0,
+                },
+                where: 'uuid = ?',
+                whereArgs: [uuid],
+              );
+              uploadedCount++;
+            }
           }
           print('✅ Upload concluído: $uploadedCount soluções');
         } else if (uploadResponse.statusCode == 401) {
@@ -164,6 +263,7 @@ Future syncSolucoesPlanosAcoes() async {
             );
           }
           print('❌ Erro no upload: ${uploadResponse.statusCode}');
+        }
         }
       } else {
         print('ℹ️ Nenhuma solução para enviar');
@@ -257,44 +357,40 @@ Future<void> _processarSolucaoPlanoAcao(
   final custo = solucaoServer['custo'] ?? 0.0;
   final status = solucaoServer['status'] ?? 'Pendente';
 
+  dynamic anexos = solucaoServer['anexos'];
+  if (anexos != null && anexos is! String) {
+    anexos = json.encode(anexos);
+  }
+
+  final payload = {
+    'plano_acao_id': solucaoServer['plano_acao_id'],
+    'titulo': solucaoServer['titulo'],
+    'descricao': solucaoServer['descricao'],
+    'custo': custo,
+    'quantidade': quantidade,
+    'status': status,
+    'anexos': anexos,
+    'created_by': solucaoServer['created_by'],
+    'synced': 1,
+    'last_sync_date': serverTime,
+    'created_at': solucaoServer['created_at'],
+    'updated_at': solucaoServer['updated_at'],
+  };
+
   if (existe.isNotEmpty) {
-    // UPDATE
     await db.update(
       'solucoes_planos_acoes',
-      {
-        'plano_acao_id': solucaoServer['plano_acao_id'],
-        'titulo': solucaoServer['titulo'],
-        'descricao': solucaoServer['descricao'],
-        'custo': custo,
-        'quantidade': quantidade,
-        'status': status,
-        'created_by': solucaoServer['created_by'],
-        'synced': 1,
-        'last_sync_date': serverTime,
-        'created_at': solucaoServer['created_at'],
-        'updated_at': solucaoServer['updated_at'],
-      },
+      payload,
       where: 'uuid = ?',
       whereArgs: [uuid],
     );
     print('🔄 Solução atualizada: ${solucaoServer['titulo']}');
   } else {
-    // INSERT
     await db.insert(
       'solucoes_planos_acoes',
       {
         'uuid': uuid,
-        'plano_acao_id': solucaoServer['plano_acao_id'],
-        'titulo': solucaoServer['titulo'],
-        'descricao': solucaoServer['descricao'],
-        'custo': custo,
-        'quantidade': quantidade,
-        'status': status,
-        'created_by': solucaoServer['created_by'],
-        'synced': 1,
-        'last_sync_date': serverTime,
-        'created_at': solucaoServer['created_at'],
-        'updated_at': solucaoServer['updated_at'],
+        ...payload,
       },
     );
     print('✅ Nova solução inserida: ${solucaoServer['titulo']}');

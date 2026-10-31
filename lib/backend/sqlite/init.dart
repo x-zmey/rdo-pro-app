@@ -52,9 +52,25 @@ Future<Database> initializeDatabaseFromDbFile(
   await _ensureOrdemServicoCustosVinculoColumns(database);
   await _ensureRelatorioCustosQtdManualColumn(database);
   await _ensureFuncoesMaoObraTable(database);
+  await _ensureSolucoesPlanosAnexosColumn(database);
   await ensureEmpresaMultiTenantTables(database);
   await ensureSyncUuidUniqueIndexes(database);
   return database;
+}
+
+Future<void> _ensureSolucoesPlanosAnexosColumn(Database database) async {
+  try {
+    final info = await database.rawQuery('PRAGMA table_info(solucoes_planos_acoes)');
+    if (info.isEmpty) return;
+    final has = info.any((r) => r['name'] == 'anexos');
+    if (has) return;
+    await database.execute(
+      'ALTER TABLE solucoes_planos_acoes ADD COLUMN anexos TEXT',
+    );
+  } catch (e) {
+    // ignore: avoid_print
+    print('⚠️ _ensureSolucoesPlanosAnexosColumn: $e');
+  }
 }
 
 /// Remove duplicatas por UUID (case-insensitive) e cria índice UNIQUE nas tabelas de sync.

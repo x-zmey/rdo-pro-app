@@ -1,4 +1,10 @@
 export 'pick_and_save_file_local.dart' show pickAndSaveFileLocal;
+export 'checklist_anexo_upload.dart'
+    show
+        uploadChecklistAnexoLocal,
+        uploadListaAnexosLocais,
+        rewriteChecklistRespostasAnexos,
+        pickChecklistAnexoLocal;
 export 'add_fotos_atividade.dart' show addFotosAtividade;
 export 'soft_delete_foto_atividade.dart' show softDeleteFotoAtividade;
 export 'check_internet_connection.dart' show checkInternetConnection;

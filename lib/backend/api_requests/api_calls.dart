@@ -3214,6 +3214,46 @@ class MedicaoExportarPdf {
   }
 }
 
+/// Baixa PDF do checklist preenchido para arquivo temporário.
+class ChecklistExportarPdf {
+  static Future<String?> downloadToTemp({
+    required String token,
+    required int checklistId,
+    required String baseFileName,
+  }) async {
+    final uri = Uri.parse(
+      '$kApiBaseUrl/api/checklists-preenchidos/$checklistId/exportar-pdf',
+    );
+    try {
+      final res = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/pdf',
+        },
+      );
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        return null;
+      }
+      final bytes = res.bodyBytes;
+      if (bytes.length < 5 ||
+          !(bytes[0] == 0x25 &&
+              bytes[1] == 0x50 &&
+              bytes[2] == 0x44 &&
+              bytes[3] == 0x46)) {
+        return null;
+      }
+      final dir = await getTemporaryDirectory();
+      final safe = baseFileName.replaceAll(RegExp(r'[^\w\-\.]'), '_');
+      final path = '${dir.path}/$safe.pdf';
+      await File(path).writeAsBytes(bytes);
+      return path;
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
 class MedicoesListCall {
   static Future<ApiCallResponse> call({
     required String token,

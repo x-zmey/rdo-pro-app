@@ -309,6 +309,30 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           builder: (context, params) => ChecklistRespondendoWidget(),
         ),
         FFRoute(
+          name: PlanosAcaoListaWidget.routeName,
+          path: PlanosAcaoListaWidget.routePath,
+          builder: (context, params) => PlanosAcaoListaWidget(
+            obraId: params.getParam(
+              'obraId',
+              ParamType.int,
+            ),
+          ),
+        ),
+        FFRoute(
+          name: PlanoAcaoDetalheWidget.routeName,
+          path: PlanoAcaoDetalheWidget.routePath,
+          builder: (context, params) => PlanoAcaoDetalheWidget(
+            planoId: params.getParam(
+              'planoId',
+              ParamType.int,
+            ),
+            planoUuid: params.getParam(
+              'planoUuid',
+              ParamType.String,
+            ),
+          ),
+        ),
+        FFRoute(
           name: MenuWidget.routeName,
           path: MenuWidget.routePath,
           builder: (context, params) => MenuWidget(),
@@ -382,11 +406,6 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
               ParamType.String,
             ),
           ),
-        ),
-        FFRoute(
-          name: ChecklistRespondendoCopyWidget.routeName,
-          path: ChecklistRespondendoCopyWidget.routePath,
-          builder: (context, params) => ChecklistRespondendoCopyWidget(),
         ),
         FFRoute(
           name: DetalhesObraWidget.routeName,

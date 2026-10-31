@@ -32,6 +32,8 @@ class _ChecklistsWidgetState extends State<ChecklistsWidget> {
   late ChecklistsModel _model;
   final scaffoldKey = GlobalKey<ScaffoldState>();
   Future<List<GetChecklistsPreenchidosRow>>? _listaFuture;
+  String _filtro = 'todos'; // todos | preenchendo | respondido
+  final _buscaCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -95,8 +97,22 @@ class _ChecklistsWidgetState extends State<ChecklistsWidget> {
     return 'Rascunho · preenchendo';
   }
 
+  List<GetChecklistsPreenchidosRow> _filtrar(
+    List<GetChecklistsPreenchidosRow> all,
+  ) {
+    final q = _buscaCtrl.text.trim().toLowerCase();
+    return all.where((row) {
+      if (_filtro == 'preenchendo' && !row.isRascunho) return false;
+      if (_filtro == 'respondido' && !row.isRespondido) return false;
+      if (q.isEmpty) return true;
+      return row.templateNome.toLowerCase().contains(q) ||
+          row.uuid.toLowerCase().contains(q);
+    }).toList();
+  }
+
   @override
   void dispose() {
+    _buscaCtrl.dispose();
     _model.dispose();
     super.dispose();
   }
@@ -207,7 +223,40 @@ class _ChecklistsWidgetState extends State<ChecklistsWidget> {
                     borderRadius: BorderRadius.circular(12.0),
                   ),
                 ),
-                const SizedBox(height: 20.0),
+                const SizedBox(height: 10.0),
+                FFButtonWidget(
+                  onPressed: () async {
+                    await context.pushNamed(
+                      PlanosAcaoListaWidget.routeName,
+                      queryParameters: {
+                        'obraId': serializeParam(
+                          widget.obraId,
+                          ParamType.int,
+                        ),
+                      }.withoutNulls,
+                    );
+                  },
+                  text: 'Planos de ação',
+                  icon: const Icon(Icons.assignment_late_outlined, size: 18.0),
+                  options: FFButtonOptions(
+                    width: double.infinity,
+                    height: 44.0,
+                    color: FlutterFlowTheme.of(context).secondaryBackground,
+                    textStyle: FlutterFlowTheme.of(context).titleSmall.override(
+                          font: GoogleFonts.interTight(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          color: FlutterFlowTheme.of(context).primaryText,
+                          fontWeight: FontWeight.w600,
+                        ),
+                    elevation: 0,
+                    borderSide: BorderSide(
+                      color: FlutterFlowTheme.of(context).alternate,
+                    ),
+                    borderRadius: BorderRadius.circular(12.0),
+                  ),
+                ),
+                const SizedBox(height: 16.0),
                 Text(
                   'Checklists Aplicados',
                   style: FlutterFlowTheme.of(context).titleMedium.override(
@@ -239,6 +288,41 @@ class _ChecklistsWidgetState extends State<ChecklistsWidget> {
                         letterSpacing: 0.0,
                       ),
                 ),
+                const SizedBox(height: 8.0),
+                TextField(
+                  controller: _buscaCtrl,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: 'Buscar modelo...',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    isDense: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8.0),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final e in [
+                        ('todos', 'Todos'),
+                        ('preenchendo', 'Rascunhos'),
+                        ('respondido', 'Respondidos'),
+                      ])
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text(e.$2),
+                            selected: _filtro == e.$1,
+                            onSelected: (_) =>
+                                setState(() => _filtro = e.$1),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 12.0),
                 Expanded(
                   child: FutureBuilder<List<GetChecklistsPreenchidosRow>>(
@@ -255,7 +339,7 @@ class _ChecklistsWidgetState extends State<ChecklistsWidget> {
                           ),
                         );
                       }
-                      final items = snapshot.data ?? [];
+                      final items = _filtrar(snapshot.data ?? []);
                       if (items.isEmpty) {
                         return Center(
                           child: Text(
