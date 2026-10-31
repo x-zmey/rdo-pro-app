@@ -4,6 +4,7 @@ import '/componentes/navegacao/barra_navegacao_principal.dart';
 import '/componentes/permission/permission_gate.dart';
 import '/componentes/relatorios/relatorio_list_item_widget.dart';
 import '/componentes/ui/rdo_estilo.dart';
+import '/custom_code/actions/check_internet_connection.dart';
 import '/custom_code/actions/ensure_obras_fotos_locais.dart';
 import '/custom_code/actions/obra_foto_url.dart';
 import '/custom_code/actions/sync_push_runner.dart';
@@ -1299,6 +1300,57 @@ class _DetalhesObraWidgetState extends State<DetalhesObraWidget>
                                               'obraId': serializeParam(
                                                 idServidor,
                                                 ParamType.int,
+                                              ),
+                                            }.withoutNulls,
+                                            extra: <String, dynamic>{
+                                              '__transition_info__':
+                                                  const TransitionInfo(
+                                                hasTransition: true,
+                                                transitionType:
+                                                    PageTransitionType
+                                                        .bottomToTop,
+                                              ),
+                                            },
+                                          );
+                                        },
+                                      ),
+                                      _buildAtalhoCelula(
+                                        context,
+                                        icon: Icons.auto_awesome,
+                                        label: 'RDO com IA',
+                                        permission: 'generate_rdo',
+                                        onTap: () async {
+                                          final online =
+                                              await checkInternetConnection();
+                                          if (!context.mounted) return;
+                                          if (!online) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  'É necessário estar online para criar relatório com IA.',
+                                                ),
+                                              ),
+                                            );
+                                            return;
+                                          }
+                                          context.pushNamed(
+                                            CriarRdoComIaWidget.routeName,
+                                            queryParameters: {
+                                              'obraId': serializeParam(
+                                                idServidor,
+                                                ParamType.int,
+                                              ),
+                                              'obraNome': serializeParam(
+                                                valueOrDefault<String>(
+                                                  obra?.nome,
+                                                  'Obra',
+                                                ),
+                                                ParamType.String,
+                                              ),
+                                              'obraUuid': serializeParam(
+                                                widget.obraUuid,
+                                                ParamType.String,
                                               ),
                                             }.withoutNulls,
                                             extra: <String, dynamic>{

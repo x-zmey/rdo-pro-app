@@ -319,6 +319,24 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           ),
         ),
         FFRoute(
+          name: CriarRdoComIaWidget.routeName,
+          path: CriarRdoComIaWidget.routePath,
+          builder: (context, params) => CriarRdoComIaWidget(
+            obraId: params.getParam(
+              'obraId',
+              ParamType.int,
+            ),
+            obraNome: params.getParam(
+              'obraNome',
+              ParamType.String,
+            ),
+            obraUuid: params.getParam(
+              'obraUuid',
+              ParamType.String,
+            ),
+          ),
+        ),
+        FFRoute(
           name: PlanoAcaoDetalheWidget.routeName,
           path: PlanoAcaoDetalheWidget.routePath,
           builder: (context, params) => PlanoAcaoDetalheWidget(

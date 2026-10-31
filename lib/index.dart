@@ -60,6 +60,8 @@ export '/pages/obra/ordens_servico_obra/ordens_servico_obra_widget.dart'
     show OrdensServicoObraWidget;
 export '/pages/obra/relatorios_obra/relatorios_obra_widget.dart'
     show RelatoriosObraWidget;
+export '/pages/relatorios/criar_rdo_com_ia/criar_rdo_com_ia_widget.dart'
+    show CriarRdoComIaWidget;
 export '/pages/relatorios/relatorios_geral/relatorios_geral_widget.dart'
     show RelatoriosGeraisWidget;
 export '/pages/relatorios/cadastrar_relatorio_geral/cadastrar_relatorio_geral_widget.dart'

@@ -81,3 +81,8 @@ export 'incrise_relatorio_numero.dart'
     show incriseRelatorioNumero, nextRelatorioNumeroForObra;
 export 'copiar_dados_relatorio_anterior.dart' show copiarDadosRelatorioAnterior;
 export 'sync_obra_locais.dart' show syncObraLocais;
+export 'criar_rdo_ia_chat_stream.dart'
+    show
+        CriarRdoIaChatClient,
+        CriarRdoIaChatResult,
+        CriarRdoIaChatException;

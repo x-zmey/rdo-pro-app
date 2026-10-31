@@ -2581,8 +2581,30 @@ class GetUsuariosRow extends SqliteRow {
   GetUsuariosRow(Map<String, dynamic> data) : super(data);
 
   int? get id => data['id'] as int?;
+  int? get idServer {
+    final v = data['id_server'] ?? data['id_servidor'];
+    if (v is int) return v;
+    return int.tryParse(v?.toString() ?? '');
+  }
+
+  /// ID preferido para APIs/sync (servidor); cai no id local se ainda não mapeado.
+  int? get idParaApi {
+    final server = idServer;
+    if (server != null && server > 0) return server;
+    return id;
+  }
+
   String? get uuid => data['uuid'] as String?;
   String? get nome => data['nome'] as String?;
+  String? get sobrenome => data['sobrenome'] as String?;
+  String get nomeCompleto {
+    final n = (nome ?? '').trim();
+    final s = (sobrenome ?? '').trim();
+    if (n.isEmpty) return s;
+    if (s.isEmpty) return n;
+    return '$n $s';
+  }
+
   String? get email => data['email'] as String?;
   String? get type => data['type'] as String?;
   String? get cargo => data['cargo'] as String?;

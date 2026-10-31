@@ -149,158 +149,623 @@ class _ChecklistRespondendoWidgetState
     controller.dispose();
   }
 
+  String _formatPrazoLabel(DateTime? d) {
+    if (d == null) return 'Definir prazo';
+    final dd = d.day.toString().padLeft(2, '0');
+    final mm = d.month.toString().padLeft(2, '0');
+    return '$dd/$mm/${d.year}';
+  }
+
+  String _prazoIso(DateTime? d) {
+    if (d == null) return '';
+    final mm = d.month.toString().padLeft(2, '0');
+    final dd = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$mm-$dd';
+  }
+
+  DateTime? _parsePrazo(String? raw) {
+    final s = (raw ?? '').trim();
+    if (s.isEmpty) return null;
+    final iso = DateTime.tryParse(s);
+    if (iso != null) return DateTime(iso.year, iso.month, iso.day);
+    final m = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(s);
+    if (m != null) {
+      return DateTime(
+        int.parse(m.group(3)!),
+        int.parse(m.group(2)!),
+        int.parse(m.group(1)!),
+      );
+    }
+    return null;
+  }
+
+  Future<List<GetUsuariosRow>> _carregarUsuariosPlano() async {
+    try {
+      return await SQLiteManager.instance.getUsuarios(
+        userUuid: FFAppState().creatorUuid.trim().isEmpty
+            ? FFAppState().UserUuid
+            : FFAppState().creatorUuid,
+        tenantUserId: FFAppState().UserID > 0 ? FFAppState().UserID : null,
+      );
+    } catch (_) {
+      return [];
+    }
+  }
+
   Future<void> _mostrarPlanoAcao(
     dynamic areaId,
     dynamic itemId,
-    Map? planoAtual,
-  ) async {
+    Map? planoAtual, {
+    String? areaNome,
+    String? pergunta,
+  }) async {
+    final theme = FlutterFlowTheme.of(context);
+    final editando = (planoAtual?['descricao'] ?? '').toString().trim().isNotEmpty;
     final descCtrl = TextEditingController(
       text: (planoAtual?['descricao'] ?? '').toString(),
     );
-    final prazoCtrl = TextEditingController(
-      text: (planoAtual?['prazo'] ?? '').toString(),
-    );
-    final respCtrl = TextEditingController(
-      text: (planoAtual?['responsavel_nome'] ??
-              planoAtual?['responsavel'] ??
-              '')
-          .toString(),
-    );
-    var prioridade = (planoAtual?['prioridade'] ?? 'media').toString();
+    final usuarios = await _carregarUsuariosPlano();
+    var prioridade = (planoAtual?['prioridade'] ?? 'media').toString().toLowerCase();
+    if (!['baixa', 'media', 'alta'].contains(prioridade)) prioridade = 'media';
     var anexosPlano = checklistListaAnexos(planoAtual?['anexos']);
+    var prazo = _parsePrazo(planoAtual?['prazo']?.toString());
+    int? responsavelId = planoAtual?['responsavel_id'] is int
+        ? planoAtual!['responsavel_id'] as int
+        : int.tryParse('${planoAtual?['responsavel_id'] ?? ''}');
+    var responsavelNome = (planoAtual?['responsavel_nome'] ??
+            planoAtual?['responsavel'] ??
+            '')
+        .toString()
+        .trim();
+    // Se só temos nome, tenta casar com lista local
+    if (responsavelId == null && responsavelNome.isNotEmpty) {
+      for (final u in usuarios) {
+        final nomeAlt = u.nomeCompleto.toLowerCase();
+        if (nomeAlt == responsavelNome.toLowerCase() ||
+            (u.nome ?? '').trim().toLowerCase() ==
+                responsavelNome.toLowerCase()) {
+          responsavelId = u.idParaApi;
+          break;
+        }
+      }
+    }
+    final respLivreCtrl = TextEditingController(text: responsavelNome);
+    String? erro;
 
-    final ok = await showDialog<bool>(
+    final result = await showModalBottomSheet<String>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Plano de ação'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  controller: descCtrl,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Descrição *',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: respCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Responsável',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: prazoCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Prazo (AAAA-MM-DD)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: ['baixa', 'media', 'alta'].contains(prioridade)
-                      ? prioridade
-                      : 'media',
-                  decoration: const InputDecoration(
-                    labelText: 'Prioridade',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'baixa', child: Text('Baixa')),
-                    DropdownMenuItem(value: 'media', child: Text('Média')),
-                    DropdownMenuItem(value: 'alta', child: Text('Alta')),
-                  ],
-                  onChanged: (v) => setLocal(() => prioridade = v ?? 'media'),
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final path =
-                        await actions.pickChecklistAnexoLocal(context: ctx);
-                    if (path == null || path.isEmpty) return;
-                    setLocal(() {
-                      anexosPlano = [
-                        ...anexosPlano,
-                        checklistAnexoFromLocalPath(path),
-                      ];
-                    });
-                  },
-                  icon: const Icon(Icons.photo_camera_outlined, size: 18),
-                  label: const Text('Anexar foto ou arquivo'),
-                ),
-                if (anexosPlano.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  ...List.generate(anexosPlano.length, (i) {
-                    final a = anexosPlano[i];
-                    return ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.insert_drive_file, size: 20),
-                      title: Text(
-                        checklistNomeAnexo(a),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        onPressed: () => setLocal(() {
-                          anexosPlano = [...anexosPlano]..removeAt(i);
-                        }),
-                      ),
-                    );
-                  }),
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () {
-                if (descCtrl.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(
-                      content: Text('Informe a descrição do plano de ação.'),
-                    ),
-                  );
-                  return;
-                }
-                Navigator.pop(ctx, true);
-              },
-              child: const Text('Salvar'),
-            ),
-          ],
-        ),
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: theme.secondaryBackground,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            final bottomInset = MediaQuery.viewInsetsOf(ctx).bottom;
+            Widget prioridadeChip(String value, String label, Color color) {
+              final selected = prioridade == value;
+              return ChoiceChip(
+                label: Text(label),
+                selected: selected,
+                selectedColor: color.withValues(alpha: 0.22),
+                labelStyle: TextStyle(
+                  color: selected ? color : theme.primaryText,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 13,
+                ),
+                side: BorderSide(
+                  color: selected ? color : theme.alternate,
+                ),
+                onSelected: (_) => setLocal(() => prioridade = value),
+              );
+            }
+
+            Widget anexoTile(Map<String, dynamic> a, int i) {
+              final path = checklistPathAnexo(a);
+              final isImage = path.toLowerCase().endsWith('.jpg') ||
+                  path.toLowerCase().endsWith('.jpeg') ||
+                  path.toLowerCase().endsWith('.png') ||
+                  path.toLowerCase().endsWith('.webp');
+              final localExists =
+                  path.isNotEmpty && !path.startsWith('http') && File(path).existsSync();
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  border: Border.all(color: theme.alternate),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: isImage && localExists
+                          ? Image.file(File(path), fit: BoxFit.cover)
+                          : ColoredBox(
+                              color: theme.primaryBackground,
+                              child: Icon(
+                                isImage
+                                    ? Icons.image_outlined
+                                    : Icons.insert_drive_file_outlined,
+                                color: theme.secondaryText,
+                              ),
+                            ),
+                    ),
+                  ),
+                  title: Text(
+                    checklistNomeAnexo(a),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.bodyMedium.override(
+                      font: GoogleFonts.inter(fontWeight: FontWeight.w500),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  trailing: IconButton(
+                    icon: Icon(Icons.close, color: theme.error),
+                    onPressed: () => setLocal(() {
+                      anexosPlano = [...anexosPlano]..removeAt(i);
+                    }),
+                  ),
+                ),
+              );
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(bottom: bottomInset),
+              child: SizedBox(
+                height: MediaQuery.sizeOf(ctx).height * 0.92,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 8),
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: theme.alternate,
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
+                      child: Row(
+                        children: [
+                          Icon(Icons.assignment_outlined,
+                              color: theme.warning),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              editando
+                                  ? 'Editar plano de ação'
+                                  : 'Novo plano de ação',
+                              style: theme.titleMedium.override(
+                                font: GoogleFonts.interTight(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(ctx, 'cancel'),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if ((areaNome ?? '').trim().isNotEmpty ||
+                                (pergunta ?? '').trim().isNotEmpty)
+                              Container(
+                                width: double.infinity,
+                                margin: const EdgeInsets.only(bottom: 14),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: theme.primaryBackground,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: theme.alternate),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if ((areaNome ?? '').trim().isNotEmpty)
+                                      Text(
+                                        areaNome!,
+                                        style: theme.bodySmall.override(
+                                          font: GoogleFonts.inter(),
+                                          color: theme.secondaryText,
+                                        ),
+                                      ),
+                                    if ((pergunta ?? '').trim().isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        pergunta!,
+                                        style: theme.bodyMedium.override(
+                                          font: GoogleFonts.inter(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            Text(
+                              'O que precisa ser feito *',
+                              style: theme.labelLarge.override(
+                                font: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: descCtrl,
+                              maxLines: 4,
+                              minLines: 3,
+                              textInputAction: TextInputAction.newline,
+                              decoration: InputDecoration(
+                                hintText:
+                                    'Descreva a ação, o contexto e o resultado esperado',
+                                filled: true,
+                                fillColor: theme.primaryBackground,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              onChanged: (_) {
+                                if (erro != null) setLocal(() => erro = null);
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Responsável *',
+                              style: theme.labelLarge.override(
+                                font: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            if (usuarios.isNotEmpty)
+                              DropdownButtonFormField<int>(
+                                value: usuarios.any(
+                                        (u) => u.idParaApi == responsavelId)
+                                    ? responsavelId
+                                    : null,
+                                isExpanded: true,
+                                decoration: InputDecoration(
+                                  hintText: 'Selecione quem vai resolver',
+                                  filled: true,
+                                  fillColor: theme.primaryBackground,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                                items: [
+                                  for (final u in usuarios)
+                                    if (u.idParaApi != null &&
+                                        u.nomeCompleto.isNotEmpty)
+                                      DropdownMenuItem<int>(
+                                        value: u.idParaApi,
+                                        child: Text(
+                                          () {
+                                            final nome = u.nomeCompleto;
+                                            final sub =
+                                                (u.cargo ?? u.email ?? '')
+                                                    .trim();
+                                            return sub.isEmpty
+                                                ? nome
+                                                : '$nome · $sub';
+                                          }(),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                ],
+                                onChanged: (id) => setLocal(() {
+                                  responsavelId = id;
+                                  GetUsuariosRow? found;
+                                  for (final e in usuarios) {
+                                    if (e.idParaApi == id) {
+                                      found = e;
+                                      break;
+                                    }
+                                  }
+                                  responsavelNome =
+                                      found?.nomeCompleto ?? '';
+                                  erro = null;
+                                }),
+                              )
+                            else
+                              TextField(
+                                controller: respLivreCtrl,
+                                onChanged: (v) {
+                                  responsavelNome = v.trim();
+                                  responsavelId = null;
+                                  if (erro != null) setLocal(() => erro = null);
+                                },
+                                decoration: InputDecoration(
+                                  hintText: 'Nome do responsável',
+                                  filled: true,
+                                  fillColor: theme.primaryBackground,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Prazo',
+                              style: theme.labelLarge.override(
+                                font: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                alignment: Alignment.centerLeft,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 14,
+                                ),
+                                backgroundColor: theme.primaryBackground,
+                                side: BorderSide(color: theme.alternate),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              onPressed: () async {
+                                final now = DateTime.now();
+                                final picked = await showDatePicker(
+                                  context: ctx,
+                                  initialDate: prazo ?? now,
+                                  firstDate: DateTime(now.year - 1),
+                                  lastDate: DateTime(now.year + 5),
+                                  locale: const Locale('pt', 'BR'),
+                                );
+                                if (picked != null) {
+                                  setLocal(() => prazo = picked);
+                                }
+                              },
+                              icon: Icon(Icons.event_outlined,
+                                  color: theme.primary),
+                              label: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      _formatPrazoLabel(prazo),
+                                      style: theme.bodyMedium,
+                                    ),
+                                  ),
+                                  if (prazo != null)
+                                    GestureDetector(
+                                      onTap: () =>
+                                          setLocal(() => prazo = null),
+                                      child: Icon(Icons.clear,
+                                          size: 18, color: theme.secondaryText),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Prioridade',
+                              style: theme.labelLarge.override(
+                                font: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                prioridadeChip(
+                                    'baixa', 'Baixa', const Color(0xFF2E7D32)),
+                                prioridadeChip(
+                                    'media', 'Média', const Color(0xFFF9A825)),
+                                prioridadeChip(
+                                    'alta', 'Alta', const Color(0xFFC62828)),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Evidências / anexos',
+                              style: theme.labelLarge.override(
+                                font: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              onPressed: () async {
+                                final path = await actions
+                                    .pickChecklistAnexoLocal(context: ctx);
+                                if (path == null || path.isEmpty) return;
+                                setLocal(() {
+                                  anexosPlano = [
+                                    ...anexosPlano,
+                                    checklistAnexoFromLocalPath(path),
+                                  ];
+                                });
+                              },
+                              icon: const Icon(Icons.photo_camera_outlined),
+                              label: const Text('Adicionar foto ou arquivo'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 14,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                            if (anexosPlano.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              ...List.generate(
+                                anexosPlano.length,
+                                (i) => anexoTile(anexosPlano[i], i),
+                              ),
+                            ],
+                            if (erro != null) ...[
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: theme.error.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: theme.error.withValues(alpha: 0.35),
+                                  ),
+                                ),
+                                child: Text(
+                                  erro!,
+                                  style: theme.bodySmall.override(
+                                    font: GoogleFonts.inter(),
+                                    color: theme.error,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (editando) ...[
+                              const SizedBox(height: 8),
+                              TextButton.icon(
+                                onPressed: () =>
+                                    Navigator.pop(ctx, 'remover'),
+                                icon: Icon(Icons.delete_outline,
+                                    color: theme.error),
+                                label: Text(
+                                  'Remover plano de ação',
+                                  style: TextStyle(color: theme.error),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    SafeArea(
+                      top: false,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () =>
+                                    Navigator.pop(ctx, 'cancel'),
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(48),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                                child: const Text('Cancelar'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 2,
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  final desc = descCtrl.text.trim();
+                                  if (desc.isEmpty) {
+                                    setLocal(() => erro =
+                                        'Descreva a ação que precisa ser feita.');
+                                    return;
+                                  }
+                                  if (usuarios.isNotEmpty &&
+                                      responsavelId == null) {
+                                    setLocal(() => erro =
+                                        'Selecione o responsável por resolver o plano.');
+                                    return;
+                                  }
+                                  if (usuarios.isEmpty &&
+                                      responsavelNome.trim().isEmpty) {
+                                    setLocal(() => erro =
+                                        'Informe o responsável por resolver o plano.');
+                                    return;
+                                  }
+                                  Navigator.pop(ctx, 'salvar');
+                                },
+                                icon: const Icon(Icons.check_rounded),
+                                label: Text(editando ? 'Salvar plano' : 'Criar plano'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: theme.primary,
+                                  foregroundColor: Colors.white,
+                                  minimumSize: const Size.fromHeight(48),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
 
-    if (ok == true) {
+    if (result == 'salvar') {
+      final nomeFinal = usuarios.isNotEmpty
+          ? responsavelNome
+          : respLivreCtrl.text.trim();
       await actions.salvarPlanoAcaoItemChecklist(
         FFAppState().checklistAtualJson,
         areaId.toString(),
         itemId.toString(),
         descCtrl.text,
-        prazoCtrl.text,
+        _prazoIso(prazo),
         prioridade,
-        null,
-        respCtrl.text,
+        responsavelId,
+        nomeFinal,
         anexos: anexosPlano,
+      );
+      if (mounted) safeSetState(() {});
+    } else if (result == 'remover') {
+      await actions.salvarPlanoAcaoItemChecklist(
+        FFAppState().checklistAtualJson,
+        areaId.toString(),
+        itemId.toString(),
+        '',
+        '',
+        'media',
+        null,
+        '',
+        anexos: const [],
       );
       if (mounted) safeSetState(() {});
     }
     descCtrl.dispose();
-    prazoCtrl.dispose();
-    respCtrl.dispose();
+    respLivreCtrl.dispose();
   }
 
   Future<void> _mostrarAnexos({
@@ -1253,6 +1718,14 @@ class _ChecklistRespondendoWidgetState
                                                           areaId,
                                                           itemId,
                                                           plano,
+                                                          areaNome: getJsonField(
+                                                            areasItem,
+                                                            r"$['name']",
+                                                          )?.toString(),
+                                                          pergunta: getJsonField(
+                                                            perguntaItem,
+                                                            r"$['description']",
+                                                          )?.toString(),
                                                         ),
                                                 text: exigePlano
                                                     ? 'Plano de Ação *'
